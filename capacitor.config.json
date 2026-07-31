@@ -1,0 +1,8 @@
+{
+  "appId": "app.splitit.mobile",
+  "appName": "SplitIT",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https"
+  }
+}
