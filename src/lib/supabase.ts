@@ -28,6 +28,8 @@ export interface UserProfile {
 export interface AuthResult {
   data: UserProfile | null;
   error: string | null;
+  /** Регистрация создана, но Supabase ещё не выдал сессию до подтверждения email. */
+  requiresEmailConfirmation?: boolean;
 }
 
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
@@ -285,6 +287,7 @@ export function saveLocalSession(user: UserProfile): string | null {
   if (error) return error;
   registerUserProfile(user);
   notifyRealtimeSync();
+  window.dispatchEvent(new Event('splitit_profile_changed'));
   return null;
 }
 
@@ -293,7 +296,11 @@ export function getLocalSession(): UserProfile | null {
 }
 
 export function clearLocalSession() {
-  if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_SESSION_KEY);
+  if (typeof window !== 'undefined') {
+    const hadSession = localStorage.getItem(LOCAL_SESSION_KEY) !== null;
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    if (hadSession) window.dispatchEvent(new Event('splitit_profile_changed'));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +346,14 @@ export async function signUpUser(
       ...profileFromEmail(normEmail, fullName, avatarUrl),
       id: data.user.id,
     };
+    // При включённом Confirm email Supabase возвращает user без session. Раньше
+    // это сохранялось как полноценный локальный вход, после чего любой запрос к
+    // RLS падал: в интерфейсе пользователь есть, в JWT его ещё нет.
+    if (!data.session) {
+      clearLocalSession();
+      return { data: profile, error: null, requiresEmailConfirmation: true };
+    }
+
     const saveError = saveLocalSession(profile);
     return saveError ? { data: null, error: saveError } : { data: profile, error: null };
   }
@@ -427,16 +442,52 @@ export async function resetPassword(email: string): Promise<ResetResult> {
 }
 
 export async function signOutUser() {
-  clearLocalSession();
   if (supabase) {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) console.warn('[SplitIT] Supabase signOut вернул ошибку', error.message);
   }
+  clearLocalSession();
   notifyRealtimeSync();
 }
 
 export async function getActiveSession(): Promise<UserProfile | null> {
-  return getLocalSession();
+  if (!supabase) return getLocalSession();
+
+  // В сетевом режиме источником истины служит Supabase Auth, а не произвольная
+  // JSON-строка в localStorage. Это также очищает протухшую локальную сессию.
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    clearLocalSession();
+    return null;
+  }
+
+  const cached = getLocalSession();
+  const sameUser = cached?.id === data.user.id ? cached : null;
+  const { data: remoteProfile } = await supabase
+    .from('profiles')
+    .select('full_name, avatar_url, phone, default_currency')
+    .eq('id', data.user.id)
+    .maybeSingle();
+  const profile: UserProfile = {
+    id: data.user.id,
+    email: data.user.email ?? sameUser?.email ?? '',
+    full_name:
+      remoteProfile?.full_name ||
+      data.user.user_metadata?.full_name ||
+      sameUser?.full_name ||
+      data.user.email?.split('@')[0] ||
+      'Пользователь',
+    avatar_url: remoteProfile?.avatar_url || data.user.user_metadata?.avatar_url || sameUser?.avatar_url || '👤',
+    phone: remoteProfile?.phone || sameUser?.phone,
+    preferred_currency: remoteProfile?.default_currency || sameUser?.preferred_currency || 'RUB',
+    created_at: sameUser?.created_at || data.user.created_at,
+  };
+
+  if (!sameUser || JSON.stringify(sameUser) !== JSON.stringify(profile)) {
+    const saveError = saveLocalSession(profile);
+    if (saveError) console.warn('[SplitIT] Не удалось обновить локальный кэш сессии', saveError);
+  }
+  return profile;
 }
 
 function translateAuthError(message: string): string {

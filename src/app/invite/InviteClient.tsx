@@ -83,7 +83,7 @@ export default function InviteClient() {
               Войдите или зарегистрируйтесь, чтобы присоединиться. Ссылка останется рабочей.
             </p>
             <Link
-              href={`${routes.auth()}?mode=login`}
+              href={`${routes.auth()}?mode=login&next=${encodeURIComponent(routes.invite(code ?? ''))}`}
               className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700"
             >
               Войти в аккаунт

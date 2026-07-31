@@ -105,6 +105,49 @@ describe('Изоляция групп', () => {
   });
 });
 
+describe('Атомарные RPC-контракты', () => {
+  test('создание группы сразу добавляет вызывающего владельцем', async () => {
+    const createdId = await asUser(db, CAROL, async () => {
+      const result = await db.query(
+        `SELECT public.create_group_with_owner('Группа Кэрол', 'trip', 'RUB')::text AS id`,
+      );
+      return result.rows[0].id;
+    });
+
+    const membership = await db.query(
+      `SELECT role FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [createdId, CAROL],
+    );
+    assert.equal(membership.rows[0]?.role, 'owner');
+  });
+
+  test('ошибка в долях не оставляет частично созданный расход', async () => {
+    const before = await db.query(
+      `SELECT count(*)::int AS n FROM public.expenses WHERE group_id = $1`,
+      [aliceGroup],
+    );
+
+    const result = await asUser(db, ALICE, () =>
+      attempt(
+        db,
+        `SELECT public.add_expense_with_splits(
+           $1, 'Некорректный расход', 300, 'RUB', 300, 'food', $2,
+           '[{"user_id":"33333333-3333-3333-3333-333333333333","amount_owed":300}]'::jsonb,
+           NOW()
+         )`,
+        [aliceGroup, ALICE],
+      ),
+    );
+
+    assert.equal(result.ok, false, 'RPC приняла участника вне группы');
+    const after = await db.query(
+      `SELECT count(*)::int AS n FROM public.expenses WHERE group_id = $1`,
+      [aliceGroup],
+    );
+    assert.equal(after.rows[0].n, before.rows[0].n, 'после ошибки остался частичный расход');
+  });
+});
+
 describe('Изоляция расходов', () => {
   test('посторонний не видит чужие расходы', async () => {
     const rows = await asUser(db, BOB, async () => {
@@ -200,6 +243,20 @@ describe('Приглашения', () => {
 
     assert.equal(seen.groups.length, 1, 'после вступления группа не видна');
     assert.equal(seen.expenses.length, 1, 'после вступления расходы не видны');
+  });
+
+  test('использованный код не пускает второго получателя', async () => {
+    const res = await asUser(db, CAROL, () =>
+      attempt(db, `SELECT public.redeem_group_invite('SECRET-CODE')`),
+    );
+    assert.equal(res.ok, false, 'одноразовый код сработал для второго пользователя');
+    assert.match(res.error, /недействительно|использовано|истекло/);
+
+    const membership = await db.query(
+      `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [aliceGroup, CAROL],
+    );
+    assert.equal(membership.rows[0].n, 0, 'второй пользователь попал в группу по использованному коду');
   });
 
   test('после вступления видны профили участников группы', async () => {

@@ -79,6 +79,7 @@ export default function HomePage() {
   }, [refreshGroups]);
 
   const handleDemoLogin = () => {
+    if (isMultiUser()) return;
     const demoUser: UserProfile = {
       id: 'demo-user-' + Date.now(),
       email: 'demo@splitit.app',
@@ -136,7 +137,9 @@ export default function HomePage() {
               Делите чеки и расходы без путаницы и долгов
             </h1>
             <p className="text-xs text-blue-100/90 max-w-xs mx-auto leading-relaxed">
-              Удобный сервис для совместных поездок, ресторанов и компаний. Синхронизация между несколькими устройствами в реальном времени.
+              {isMultiUser()
+                ? 'Удобный сервис для совместных поездок, ресторанов и компаний. Синхронизация между несколькими устройствами в реальном времени.'
+                : 'Удобный сервис для совместных поездок, ресторанов и компаний. Сейчас данные хранятся локально на этом устройстве.'}
             </p>
           </div>
 
@@ -158,13 +161,15 @@ export default function HomePage() {
               <span>Войти в свой профиль</span>
             </Link>
 
-            <button
-              onClick={handleDemoLogin}
-              className="w-full py-2.5 text-xs text-blue-200 font-semibold hover:text-white flex items-center justify-center gap-1 transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Попробовать быстрый демо-вход</span>
-            </button>
+            {!isMultiUser() && (
+              <button
+                onClick={handleDemoLogin}
+                className="w-full py-2.5 text-xs text-blue-200 font-semibold hover:text-white flex items-center justify-center gap-1 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Попробовать быстрый демо-вход</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -184,7 +189,9 @@ export default function HomePage() {
                   Синхронизация в реальном времени
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Заходите с 2х или более устройств под своим аккаунтом — любые добавления и редактирования обновляются мгновенно.
+                  {isMultiUser()
+                    ? 'Заходите с двух или более устройств под своим аккаунтом — изменения приходят через Supabase Realtime.'
+                    : 'Локальный режим синхронизирует соседние вкладки. Для нескольких устройств подключите Supabase.'}
                 </p>
               </div>
             </div>

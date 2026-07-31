@@ -34,6 +34,20 @@ const RAW_UPDATE_MANIFEST_URL = process.env.NEXT_PUBLIC_UPDATE_MANIFEST_URL ?? '
 export const UPDATE_MANIFEST_URL = looksUnset(RAW_UPDATE_MANIFEST_URL) ? '' : RAW_UPDATE_MANIFEST_URL.trim();
 
 /**
+ * Публичный web-адрес для ссылок, которые покидают приложение. В Capacitor
+ * `window.location.origin` указывает на локальный WebView и непригоден для
+ * приглашений, поэтому production URL задаётся отдельно.
+ */
+const RAW_APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const normalizedAppUrl = RAW_APP_URL.trim().replace(/\/+$/, '');
+export const APP_URL =
+  looksUnset(RAW_APP_URL) ||
+  !/^https:\/\/[^\s]+$/i.test(normalizedAppUrl) ||
+  /^https:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(normalizedAppUrl)
+    ? ''
+    : normalizedAppUrl;
+
+/**
  * Человекочитаемое описание проблемы конфигурации, либо null.
  * Показывается в интерфейсе — молчаливая деградация запрещена.
  */

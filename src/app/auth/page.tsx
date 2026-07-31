@@ -48,6 +48,10 @@ function AuthForm() {
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp;
       if (tg.initDataUnsafe?.user) {
+        if (!getConfigProblem()) {
+          setErrorMessage('Вход через Telegram для общего пространства пока не настроен. Используйте email и пароль.');
+          return;
+        }
         const tgUser = tg.initDataUnsafe.user;
         const profile: UserProfile = {
           id: 'tg-' + tgUser.id,
@@ -89,14 +93,24 @@ function AuthForm() {
     // угодно под любым email.
     if (mode === 'register') {
       const selectedAvatar = customAvatarPreview || avatarUrl;
-      const { data, error } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
+      const { data, error, requiresEmailConfirmation } = await signUpUser(
+        email,
+        password,
+        fullName || 'Пользователь',
+        selectedAvatar,
+      );
       setLoading(false);
       if (error || !data) {
         setErrorMessage(error ?? 'Не удалось зарегистрировать аккаунт');
         return;
       }
+      if (requiresEmailConfirmation) {
+        setStatusMessage(`Аккаунт ${data.full_name} создан. Подтвердите email, затем войдите.`);
+        setMode('login');
+        return;
+      }
       setStatusMessage(`Аккаунт ${data.full_name} успешно зарегистрирован!`);
-      setTimeout(() => router.push(routes.home()), 800);
+      setTimeout(() => router.push(getSafeReturnPath(searchParams.get('next'))), 800);
     } else if (mode === 'login') {
       const { data, error } = await signInUser(email, password);
       setLoading(false);
@@ -105,7 +119,7 @@ function AuthForm() {
         return;
       }
       setStatusMessage(`С возвращением, ${data.full_name}!`);
-      setTimeout(() => router.push(routes.home()), 800);
+      setTimeout(() => router.push(getSafeReturnPath(searchParams.get('next'))), 800);
     } else if (mode === 'reset') {
       const res = await resetPassword(email);
       setLoading(false);
@@ -118,6 +132,10 @@ function AuthForm() {
   };
 
   const handleGuestLogin = () => {
+    if (!configProblem) {
+      setErrorMessage('Демо-вход доступен только в локальном режиме. Для общего пространства войдите через Supabase.');
+      return;
+    }
     setLoading(true);
     setErrorMessage(null);
     const guestUser: UserProfile = {
@@ -321,20 +339,27 @@ function AuthForm() {
           <ArrowRight className="w-4 h-4" />
         </button>
 
-        {/* Guest Demo Login Button */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="w-full h-10 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>Быстрый демо-вход</span>
-          </button>
-        </div>
+        {/* Локальный демо-профиль нельзя смешивать с настоящей Supabase-сессией. */}
+        {configProblem && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={handleGuestLogin}
+              className="w-full h-10 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>Быстрый демо-вход</span>
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );
+}
+
+function getSafeReturnPath(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return routes.home();
+  return value;
 }
 
 /**

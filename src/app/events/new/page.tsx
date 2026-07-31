@@ -20,6 +20,7 @@ export default function NewEventPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [savedFriends, setSavedFriends] = useState<any[]>([]);
+  const multiUser = isMultiUser();
 
   useEffect(() => {
     getActiveSession().then((u) => {
@@ -30,8 +31,8 @@ export default function NewEventPage() {
       }
     });
 
-    setSavedFriends(getSavedFriends());
-  }, []);
+    if (!multiUser) setSavedFriends(getSavedFriends());
+  }, [multiUser]);
 
   const categories = [
     { id: 'trip', label: 'Поездка / Путешествие', icon: Plane, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60' },
@@ -71,7 +72,7 @@ export default function NewEventPage() {
       name: name.trim() || 'Новое событие',
       category,
       currency,
-      memberNames: members,
+      memberNames: multiUser ? undefined : members,
     });
 
     setIsCreating(false);
@@ -160,8 +161,10 @@ export default function NewEventPage() {
           </select>
         </div>
 
-        {/* Members Management */}
-        <div className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
+        {/* В сетевом режиме участники — реальные auth.users и входят только по
+            приглашению. Локальный список имён нельзя показывать как сохранённый. */}
+        {!multiUser && (
+          <div className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
             Участники события ({members.length})
           </label>
@@ -240,7 +243,8 @@ export default function NewEventPage() {
               </span>
             ))}
           </div>
-        </div>
+          </div>
+        )}
 
         {/* Action Button */}
         {createError && (
@@ -253,11 +257,11 @@ export default function NewEventPage() {
           </div>
         )}
 
-        {isMultiUser() && (
-          <p className="text-[11px] text-slate-500 mb-3">
+        {multiUser && (
+          <div className="stitch-card p-4 bg-blue-50 border-blue-200 text-[11px] text-blue-900 mb-3">
             Событие общее: участники присоединяются по ссылке-приглашению, которую вы отправите
             после создания.
-          </p>
+          </div>
         )}
 
         <button

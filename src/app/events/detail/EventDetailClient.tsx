@@ -40,7 +40,7 @@ import {
   Users,
   AlertTriangle,
 } from 'lucide-react';
-import { routes, absoluteInviteLink } from '@/lib/routes';
+import { routes, absoluteInviteLink, hasPublicInviteOrigin } from '@/lib/routes';
 import { getConfigProblem } from '@/lib/env';
 
 /**
@@ -185,6 +185,10 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
    */
   const ensureInviteLink = async (): Promise<string | null> => {
     if (inviteLink) return inviteLink;
+    if (!hasPublicInviteOrigin()) {
+      setInviteError('Не задан публичный HTTPS-адрес приложения (NEXT_PUBLIC_APP_URL), поэтому внешнюю ссылку создать нельзя.');
+      return null;
+    }
 
     const { data: code, error } = await createInvite(group.id);
     if (error || !code) {
@@ -192,6 +196,10 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       return null;
     }
     const link = absoluteInviteLink(code);
+    if (!link) {
+      setInviteError('Не задан публичный HTTPS-адрес приложения (NEXT_PUBLIC_APP_URL), поэтому внешнюю ссылку создать нельзя.');
+      return null;
+    }
     setInviteLink(link);
     return link;
   };

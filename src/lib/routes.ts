@@ -1,3 +1,5 @@
+import { APP_URL } from './env';
+
 /**
  * Единая точка формирования ссылок (инвариант И-2).
  *
@@ -59,7 +61,19 @@ export const routes = {
 };
 
 /** Абсолютная ссылка-приглашение для отправки во внешние мессенджеры. */
-export function absoluteInviteLink(code: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return `${origin}${routes.invite(code)}`;
+function publicAppOrigin(): string {
+  const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const publicRuntimeOrigin = /^https:\/\/(?!localhost(?::|$)|127\.0\.0\.1(?::|$))[^\s]+$/i.test(runtimeOrigin)
+    ? runtimeOrigin
+    : '';
+  return APP_URL || publicRuntimeOrigin;
+}
+
+export function hasPublicInviteOrigin(): boolean {
+  return publicAppOrigin() !== '';
+}
+
+export function absoluteInviteLink(code: string): string | null {
+  const origin = publicAppOrigin();
+  return origin ? `${origin}${routes.invite(code)}` : null;
 }

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CURRENCIES } from '@/lib/currency';
-import { getActiveSession, saveLocalSession, signOutUser, UserProfile } from '@/lib/supabase';
+import { getActiveSession, signOutUser, UserProfile } from '@/lib/supabase';
+import { saveProfile } from '@/lib/store';
 import { checkForAppUpdates, getCurrentInstalledVersion, UpdateCheckResult } from '@/lib/app-updater';
 import { requestNotificationPermission, sendInAppNotification } from '@/lib/notifications';
 import { useRouter } from 'next/navigation';
@@ -27,14 +28,8 @@ import {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile>({
-    id: 'user-me',
-    email: 'user@example.com',
-    full_name: 'Пользователь',
-    avatar_url: '👤',
-    phone: '',
-    preferred_currency: 'RUB',
-  });
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
 
   const [defaultCurrency, setDefaultCurrency] = useState('RUB');
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -43,6 +38,7 @@ export default function ProfilePage() {
   const [savedMessage, setSavedMessage] = useState(false);
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // App updater state
   const [currentVersion, setCurrentVersion] = useState<string>('v2.3.0');
@@ -60,6 +56,7 @@ export default function ProfilePage() {
           setCustomAvatar(u.avatar_url);
         }
       }
+      setSessionLoaded(true);
     });
 
     if (typeof document !== 'undefined') {
@@ -80,17 +77,23 @@ export default function ProfilePage() {
       return;
     }
     setCustomAvatar(dataUrl);
-    setUser((prev) => ({ ...prev, avatar_url: dataUrl }));
+    setUser((prev) => (prev ? { ...prev, avatar_url: dataUrl } : prev));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+    setSaveError(null);
     const updated: UserProfile = {
       ...user,
       preferred_currency: defaultCurrency,
       avatar_url: customAvatar || user.avatar_url || '👤',
     };
-    saveLocalSession(updated);
+    const { error } = await saveProfile(updated);
+    if (error) {
+      setSaveError(error);
+      return;
+    }
     setUser(updated);
     setSavedMessage(true);
     setTimeout(() => setSavedMessage(false), 2500);
@@ -132,6 +135,22 @@ export default function ProfilePage() {
     }
   };
 
+  if (!sessionLoaded) {
+    return <div className="p-8 text-center text-xs font-bold text-slate-500">Загрузка профиля…</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto p-6 text-center space-y-4 stitch-card bg-white">
+        <h1 className="text-lg font-extrabold text-slate-900">Профиль недоступен</h1>
+        <p className="text-sm text-slate-500">Войдите в аккаунт, чтобы открыть и изменить профиль.</p>
+        <Link href="/auth?mode=login" className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold">
+          Войти
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
       {/* Header */}
@@ -164,6 +183,12 @@ export default function ProfilePage() {
           className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-bold"
         >
           {avatarError}
+        </div>
+      )}
+
+      {saveError && (
+        <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+          {saveError}
         </div>
       )}
 

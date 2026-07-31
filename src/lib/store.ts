@@ -20,7 +20,8 @@
 import { isSupabaseConfigured } from './env';
 import * as remote from './remote-store';
 import type { Group, RemoteResult } from './remote-store';
-import { getSavedGroups, saveGroups, getLocalSession } from './supabase';
+import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from './supabase';
+import type { UserProfile } from './supabase';
 
 export type { Group, GroupMember, GroupExpense, GroupSettlement } from './remote-store';
 
@@ -69,7 +70,7 @@ export async function createGroup(input: {
   currency: string;
   memberNames?: string[];
 }): Promise<RemoteResult<Group>> {
-  const session = getLocalSession();
+  const session = await getActiveSession();
   if (!session) return { data: null, error: 'Войдите в аккаунт, чтобы создать событие' };
 
   if (isMultiUser()) {
@@ -80,7 +81,6 @@ export async function createGroup(input: {
       name: input.name,
       category: input.category,
       currency: input.currency,
-      ownerId: session.id,
     });
   }
 
@@ -269,7 +269,7 @@ export async function createInvite(groupId: string): Promise<RemoteResult<string
     };
   }
 
-  const session = getLocalSession();
+  const session = await getActiveSession();
   if (!session) return { data: null, error: 'Войдите в аккаунт' };
   return remote.createInvite(groupId, session.id);
 }
@@ -279,6 +279,20 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
     return { data: null, error: 'Приглашения работают только с подключённым бэкендом.' };
   }
   return remote.redeemInvite(code);
+}
+
+// ---------------------------------------------------------------------------
+// Профиль
+// ---------------------------------------------------------------------------
+
+export async function saveProfile(profile: UserProfile): Promise<RemoteResult<true>> {
+  if (isMultiUser()) {
+    const result = await remote.upsertProfile(profile);
+    if (result.error) return result;
+  }
+
+  const localError = saveLocalSession(profile);
+  return localError ? { data: null, error: localError } : ok(true);
 }
 
 // ---------------------------------------------------------------------------

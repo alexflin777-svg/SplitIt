@@ -73,6 +73,39 @@ test.describe('Авторизация (инвариант И-1)', () => {
     expect(session).not.toBeNull();
     expect(JSON.parse(session!).id).toMatch(/^guest-/);
   });
+
+  test('нижняя кнопка выхода действительно завершает сессию', async ({ page }) => {
+    await page.goto('/auth');
+    await page.getByRole('button', { name: /Быстрый демо-вход/ }).click();
+    await expect(page).toHaveURL(/\/$|\/index/);
+
+    await page.getByRole('button', { name: 'Выйти' }).click();
+    await expect(page).toHaveURL(/\/auth\?mode=login/);
+    expect(await readSession(page)).toBeNull();
+    await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible();
+  });
+
+  test('после входа возвращает на безопасный внутренний маршрут', async ({ page }) => {
+    await page.goto('/auth?mode=register&next=%2Fprofile');
+    await page.getByPlaceholder('Иван Иванов').fill('Пользователь возврата');
+    await page.getByPlaceholder('name@example.com').fill('return-path@example.com');
+    await page.getByPlaceholder('••••••••').fill('Strong-password-123');
+    await page.getByRole('button', { name: /Зарегистрироваться/ }).click();
+
+    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page.getByRole('heading', { name: 'Профиль и Настройки' })).toBeVisible();
+  });
+
+  test('внешний return path отклоняется', async ({ page }) => {
+    await page.goto('/auth?mode=register&next=%2F%2Fevil.example');
+    await page.getByPlaceholder('Иван Иванов').fill('Безопасный пользователь');
+    await page.getByPlaceholder('name@example.com').fill('safe-return@example.com');
+    await page.getByPlaceholder('••••••••').fill('Strong-password-123');
+    await page.getByRole('button', { name: /Зарегистрироваться/ }).click();
+
+    await expect(page).toHaveURL(/\/$|\/index/);
+    expect(new URL(page.url()).hostname).toBe('localhost');
+  });
 });
 
 test.describe('Конфигурация окружения (инвариант И-3)', () => {

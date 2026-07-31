@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { ArrowLeft, CheckCircle2, CreditCard, Smartphone, Banknote, ShieldCheck, Check } from 'lucide-react';
-import { getGroup, addSettlement, setGroupStatus } from '@/lib/store';
+import { getGroup, addSettlement, setGroupStatus, isMultiUser } from '@/lib/store';
+import { getActiveSession } from '@/lib/supabase';
 import { formatMoney } from '@/lib/currency';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
@@ -15,23 +16,50 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   const searchParams = useSearchParams();
 
   const [group, setGroup] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     // Ничего не подставляем: раньше при отсутствии события показывалась
     // выдуманная «Совместная поездка» с двумя вымышленными участниками.
-    void getGroup(groupId).then(({ data }) => setGroup(data));
-  }, [groupId]);
+    void Promise.all([getGroup(groupId), getActiveSession()]).then(([result, session]) => {
+      if (result.error || !result.data) {
+        setLoadError(result.error ?? 'Событие недоступно');
+        return;
+      }
 
-  const defaultFrom = searchParams.get('from') || 'm-1';
-  const defaultTo = searchParams.get('to') || 'm-2';
+      const loadedGroup = result.data;
+      const memberIds = (loadedGroup.members || []).map((member: any) => member.id);
+      const requestedFrom = searchParams.get('from');
+      const requestedTo = searchParams.get('to');
+      const nextPayer =
+        isMultiUser() && session && memberIds.includes(session.id)
+          ? session.id
+          : requestedFrom && memberIds.includes(requestedFrom)
+            ? requestedFrom
+            : memberIds[0] ?? '';
+      const nextPayee =
+        requestedTo && memberIds.includes(requestedTo) && requestedTo !== nextPayer
+          ? requestedTo
+          : memberIds.find((id: string) => id !== nextPayer) ?? nextPayer;
+
+      setPayerId(nextPayer);
+      setPayeeId(nextPayee);
+      setGroup(loadedGroup);
+    });
+  }, [groupId, searchParams]);
+
   const defaultAmount = searchParams.get('amount') || '5000';
 
-  const [payerId, setPayerId] = useState(defaultFrom);
-  const [payeeId, setPayeeId] = useState(defaultTo);
+  const [payerId, setPayerId] = useState('');
+  const [payeeId, setPayeeId] = useState('');
   const [amount, setAmount] = useState(defaultAmount);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'cash'>('sbp');
   const [isSuccess, setIsSuccess] = useState(false);
+
+  if (loadError) {
+    return <div role="alert" className="p-4 text-xs font-bold text-rose-700 text-center">{loadError}</div>;
+  }
 
   if (!group) {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка взаиморасчетов...</div>;
@@ -155,6 +183,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             <select
               value={payerId}
               onChange={(e) => setPayerId(e.target.value)}
+              disabled={isMultiUser()}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
               {(group.members || []).map((m: any) => (
@@ -163,6 +192,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
                 </option>
               ))}
             </select>
+            {isMultiUser() && (
+              <p className="text-[11px] text-slate-500">В общем событии перевод фиксирует сам плательщик.</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

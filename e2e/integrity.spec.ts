@@ -196,6 +196,18 @@ test.describe('Обновления приложения (регрессия S1-
   });
 });
 
+test.describe('Профиль без сессии (инвариант И-14)', () => {
+  test('не показывает и не сохраняет выдуманного пользователя', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => window.localStorage.clear());
+    await page.goto('/profile');
+
+    await expect(page.getByRole('heading', { name: 'Профиль недоступен' })).toBeVisible();
+    await expect(page.getByText('user@example.com')).toHaveCount(0);
+    expect(await page.evaluate(() => window.localStorage.getItem('splitit_local_user_session'))).toBeNull();
+  });
+});
+
 test.describe('Режим авторизации из ссылки (регрессия S3-1)', () => {
   test('/auth?mode=login открывает форму входа', async ({ page }) => {
     await page.goto('/auth?mode=login');
