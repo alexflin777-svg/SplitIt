@@ -3,6 +3,7 @@
   "appName": "SplitIT",
   "webDir": "out",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "iosScheme": "https"
   }
 }
