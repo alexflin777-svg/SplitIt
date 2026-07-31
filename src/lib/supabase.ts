@@ -21,6 +21,7 @@ export interface UserProfile {
 
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
 const LOCAL_GROUPS_KEY = 'splitit_local_groups_data';
+const USERS_REGISTRY_KEY = 'splitit_registered_users_registry';
 
 // Cross-tab / Multi-session Realtime Broadcast Channel
 let broadcastChannel: BroadcastChannel | null = null;
@@ -46,7 +47,7 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
   }
 
   const storageHandler = (e: StorageEvent) => {
-    if (e.key === LOCAL_GROUPS_KEY) {
+    if (e.key === LOCAL_GROUPS_KEY || e.key === LOCAL_SESSION_KEY) {
       callback();
     }
   };
@@ -71,9 +72,30 @@ export function notifyRealtimeSync() {
   }
 }
 
+// User Accounts Registry helpers
+function getUsersRegistry(): Record<string, UserProfile> {
+  if (typeof window === 'undefined') return {};
+  const raw = localStorage.getItem(USERS_REGISTRY_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
+  }
+}
+
+function registerUserProfile(profile: UserProfile) {
+  if (typeof window === 'undefined') return;
+  const registry = getUsersRegistry();
+  const key = profile.email.toLowerCase().trim();
+  registry[key] = profile;
+  localStorage.setItem(USERS_REGISTRY_KEY, JSON.stringify(registry));
+}
+
 export function saveLocalSession(user: UserProfile) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(user));
+    registerUserProfile(user);
   }
 }
 
@@ -120,10 +142,11 @@ export function saveGroups(groups: any[]) {
 }
 
 export async function signUpUser(email: string, password: string, fullName: string, avatarUrl?: string) {
+  const normEmail = email.toLowerCase().trim();
   const userProfile: UserProfile = {
     id: 'user-' + Date.now(),
-    email,
-    full_name: fullName || email.split('@')[0] || 'Пользователь',
+    email: normEmail,
+    full_name: fullName || normEmail.split('@')[0] || 'Пользователь',
     avatar_url: avatarUrl || '👤',
     preferred_currency: 'RUB',
   };
@@ -132,7 +155,7 @@ export async function signUpUser(email: string, password: string, fullName: stri
 
   try {
     const { data } = await supabase.auth.signUp({
-      email,
+      email: normEmail,
       password,
       options: {
         data: {
@@ -153,25 +176,35 @@ export async function signUpUser(email: string, password: string, fullName: stri
 }
 
 export async function signInUser(email: string, password: string) {
-  const userProfile: UserProfile = {
-    id: 'user-' + Date.now(),
-    email,
-    full_name: email.split('@')[0] || 'Пользователь',
-    avatar_url: '👤',
-    preferred_currency: 'RUB',
-  };
+  const normEmail = email.toLowerCase().trim();
+  const registry = getUsersRegistry();
+  const registered = registry[normEmail];
+
+  let userProfile: UserProfile;
+
+  if (registered) {
+    userProfile = { ...registered };
+  } else {
+    userProfile = {
+      id: 'user-' + Date.now(),
+      email: normEmail,
+      full_name: normEmail.split('@')[0] || 'Пользователь',
+      avatar_url: '👤',
+      preferred_currency: 'RUB',
+    };
+  }
 
   saveLocalSession(userProfile);
 
   try {
     const { data } = await supabase.auth.signInWithPassword({
-      email,
+      email: normEmail,
       password,
     });
     if (data?.user) {
       userProfile.id = data.user.id;
       userProfile.full_name = data.user.user_metadata?.full_name || userProfile.full_name;
-      userProfile.avatar_url = data.user.user_metadata?.avatar_url || '👤';
+      userProfile.avatar_url = data.user.user_metadata?.avatar_url || userProfile.avatar_url;
       saveLocalSession(userProfile);
     }
   } catch (e) {
@@ -197,19 +230,13 @@ export async function signOutUser() {
   } catch (e) {
     // ignore
   }
+  notifyRealtimeSync();
 }
 
 export async function getActiveSession(): Promise<UserProfile | null> {
   const local = getLocalSession();
   if (local) return local;
 
-  const guestUser: UserProfile = {
-    id: 'guest-session',
-    email: 'guest@splitit.app',
-    full_name: 'Анастасия',
-    avatar_url: '👑',
-    preferred_currency: 'RUB',
-  };
-  saveLocalSession(guestUser);
-  return guestUser;
+  // No hardcoded guest account — return null so user is taken to Auth screen
+  return null;
 }

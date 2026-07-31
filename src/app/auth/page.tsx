@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Mail, Lock, Shield, CheckCircle2, ArrowRight, Smartphone, User, AlertCircle, Sparkles, Camera, KeyRound } from 'lucide-react';
+import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera } from 'lucide-react';
 import { signUpUser, signInUser, resetPassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
-import ProfileTesterBar from '@/components/ProfileTesterBar';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -15,7 +13,6 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('👤');
   const [customAvatarPreview, setCustomAvatarPreview] = useState<string | null>(null);
-  const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +23,7 @@ export default function AuthPage() {
     // Check existing session
     getActiveSession().then((user) => {
       if (user) {
-        setStatusMessage(`Авторизован как ${user.full_name || user.email}`);
+        setStatusMessage(`Вы вошли как ${user.full_name || user.email}`);
       }
     });
 
@@ -34,7 +31,6 @@ export default function AuthPage() {
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
       const tg = (window as any).Telegram.WebApp;
       if (tg.initDataUnsafe?.user) {
-        setIsTelegramWebApp(true);
         const tgUser = tg.initDataUnsafe.user;
         const profile: UserProfile = {
           id: 'tg-' + tgUser.id,
@@ -69,19 +65,19 @@ export default function AuthPage() {
 
     if (mode === 'register') {
       const selectedAvatar = customAvatarPreview || avatarUrl;
-      const { data, error } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
+      const { data } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
       setLoading(false);
-      setStatusMessage(`Аккаунт ${fullName || email} создан! Профиль сохранен.`);
+      setStatusMessage(`Аккаунт ${fullName || email} создан! Добро пожаловать.`);
       setTimeout(() => {
         router.push('/');
-      }, 1000);
+      }, 800);
     } else if (mode === 'login') {
-      const { data, error } = await signInUser(email, password);
+      const { data } = await signInUser(email, password);
       setLoading(false);
-      setStatusMessage(`Успешный вход в аккаунт!`);
+      setStatusMessage(`С возвращением, ${data.full_name}!`);
       setTimeout(() => {
         router.push('/');
-      }, 1000);
+      }, 800);
     } else if (mode === 'reset') {
       const res = await resetPassword(email);
       setLoading(false);
@@ -94,26 +90,18 @@ export default function AuthPage() {
     const guestUser: UserProfile = {
       id: 'guest-' + Date.now(),
       email: 'guest@splitit.app',
-      full_name: 'Тестовый Пользователь',
+      full_name: 'Демо Аккаунт',
       avatar_url: customAvatarPreview || avatarUrl || '👤',
     };
     saveLocalSession(guestUser);
-    setStatusMessage('Вы вошли в систему под демо-профилем!');
+    setStatusMessage('Вы вошли под демо-профилем');
     setTimeout(() => {
       router.push('/');
-    }, 800);
+    }, 600);
   };
 
   return (
     <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
-      {/* Quick Profile Tester Switcher Bar */}
-      <ProfileTesterBar
-        onProfileChanged={(p) => {
-          setStatusMessage(`Переключен профиль на: ${p.full_name}`);
-          setTimeout(() => router.push('/'), 600);
-        }}
-      />
-
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20">
@@ -125,11 +113,11 @@ export default function AuthPage() {
         </div>
         <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
           {mode === 'login' && 'Вход в SplitIt'}
-          {mode === 'register' && 'Регистрация нового пользователя'}
+          {mode === 'register' && 'Регистрация аккаунта'}
           {mode === 'reset' && 'Восстановление пароля'}
         </h2>
         <p className="text-xs text-slate-500 max-w-xs mx-auto">
-          Создайте профиль с аватаром для учета совместных расходов и синхронизации с друзьями.
+          Войдите или зарегистрируйтесь для синхронизации расходов с друзьями и создания групп.
         </p>
       </div>
 
@@ -277,7 +265,7 @@ export default function AuthPage() {
             className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all"
           >
             <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>Быстрый вход без пароля (Гостевой профиль)</span>
+            <span>Быстрый демо-вход</span>
           </button>
         </div>
       </form>

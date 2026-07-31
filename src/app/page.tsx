@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
 import { getActiveSession, getSavedGroups, subscribeToRealtimeSync, UserProfile } from '@/lib/supabase';
-import ProfileTesterBar from '@/components/ProfileTesterBar';
 import {
   Plus,
   Plane,
@@ -31,11 +30,13 @@ export default function HomePage() {
     // Synchronize groups state on mount
     setGroups(getSavedGroups());
 
-    // Check active session
+    // Check active session - redirect to auth if not logged in
     getActiveSession().then((user) => {
       if (user) {
         setUserProfile(user);
         setGroups(getSavedGroups());
+      } else {
+        router.push('/auth');
       }
     });
 
@@ -79,14 +80,6 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
-      {/* Quick Profile Tester Switcher Bar */}
-      <ProfileTesterBar
-        onProfileChanged={(p) => {
-          setUserProfile(p);
-          setGroups(getSavedGroups());
-        }}
-      />
-
       {/* User Greeting Bar */}
       {userProfile && (
         <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
