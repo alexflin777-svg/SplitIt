@@ -26,7 +26,7 @@
   body {
     background-color: #f8fafc;
     color: #0f172a;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -37,8 +37,17 @@
 }
 
 /* Custom Glassmorphism & Soft Elevation Cards */
+
+/* Здесь стоит background-color, а не сокращение background.
+   Сокращение сбрасывает background-image в none, а Tailwind реализует
+   bg-gradient-* именно через background-image. Из-за этого карточки с
+   классами `stitch-card bg-gradient-to-br from-slate-900 ... text-white`
+   теряли градиент и оставались белыми, а белый текст на них становился
+   невидимым: на экране события пропадала сумма расходов, на балансе —
+   блок расчёта, на главной — обе карточки-шапки. Текст в DOM был, но не
+   читался, поэтому дефект не ловился ни типами, ни тестами на содержимое. */
 .stitch-card {
-  background: #ffffff;
+  background-color: #ffffff;
   border-radius: 16px;
   box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(226, 232, 240, 0.8);
@@ -46,7 +55,7 @@
 }
 
 .dark .stitch-card {
-  background: #182232;
+  background-color: #182232;
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.4);
   color: #f8fafc;

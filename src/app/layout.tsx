@@ -1,8 +1,24 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
 import { PlusCircle } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
+import { routes } from '@/lib/routes';
+
+/**
+ * Шрифт вшивается в сборку, а не тянется с fonts.googleapis.com.
+ *
+ * Приложение позиционируется как offline-first и уезжает в APK: запрос к CDN
+ * там просто не проходит без сети, и вся типографика откатывалась на системный
+ * шрифт. next/font кладёт файлы в out/_next/static/media на этапе сборки.
+ */
+const inter = Inter({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
   title: 'SplitIt — Совместные расходы и сплит-чеки',
@@ -15,14 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" className="light">
+    <html lang="ru" className={`light ${inter.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
@@ -38,14 +48,16 @@ export default function RootLayout({
                   Split<span className="text-blue-600 dark:text-blue-400">It</span>
                 </span>
                 <span className="block text-[10px] uppercase font-semibold tracking-wider text-slate-400 dark:text-slate-400 -mt-1">
-                  Сплит-Чек 2.4-OTA
+                  {/* Была подпись «Сплит-Чек 2.4-OTA». Версии 2.4 не
+                      существовало: её сочиняла симуляция обновлений. */}
+                  Сплит-Чек
                 </span>
               </div>
             </Link>
 
             <div className="flex items-center gap-2">
               <Link
-                href="/events/new"
+                href={routes.eventNew()}
                 className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />

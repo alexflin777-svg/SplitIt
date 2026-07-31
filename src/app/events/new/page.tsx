@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plane, Home, Utensils, Sparkles, Check, UserPlus, X, Globe, Users } from 'lucide-react';
 import { CURRENCIES } from '@/lib/currency';
-import { getSavedGroups, saveGroups, getActiveSession, getSavedFriends, UserProfile } from '@/lib/supabase';
+import { getActiveSession, getSavedFriends, UserProfile } from '@/lib/supabase';
+import { createGroup, isMultiUser } from '@/lib/store';
+import { routes } from '@/lib/routes';
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -15,6 +17,8 @@ export default function NewEventPage() {
   const [currency, setCurrency] = useState('RUB');
   const [memberInput, setMemberInput] = useState('');
   const [members, setMembers] = useState<string[]>(['Вы']);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [savedFriends, setSavedFriends] = useState<any[]>([]);
 
   useEffect(() => {
@@ -59,33 +63,23 @@ export default function NewEventPage() {
     }
   };
 
-  const handleCreate = () => {
-    const finalName = name.trim() || 'Поездка в Сочи 2026';
-    const newGroupId = `group-${Date.now()}`;
+  const handleCreate = async () => {
+    setCreateError(null);
+    setIsCreating(true);
 
-    const newGroup = {
-      id: newGroupId,
-      name: finalName,
+    const { data, error } = await createGroup({
+      name: name.trim() || 'Новое событие',
       category,
       currency,
-      status: 'active',
-      createdBy: userProfile?.id || 'user-me',
-      createdAt: new Date().toISOString(),
-      members: members.map((mName, idx) => ({
-        id: `member-${idx}-${Date.now()}`,
-        name: mName,
-        avatar: idx === 0 ? (userProfile?.avatar_url || '👑') : '👤',
-        phone: '',
-        email: '',
-        role: idx === 0 ? 'owner' : 'member',
-      })),
-      expenses: [],
-      settlements: [],
-    };
+      memberNames: members,
+    });
 
-    const existingGroups = getSavedGroups();
-    saveGroups([newGroup, ...existingGroups]);
-    router.push(`/events/${newGroupId}`);
+    setIsCreating(false);
+    if (error || !data) {
+      setCreateError(error ?? 'Не удалось создать событие');
+      return;
+    }
+    router.push(routes.eventDetail(data.id));
   };
 
   return (
@@ -249,13 +243,31 @@ export default function NewEventPage() {
         </div>
 
         {/* Action Button */}
+        {createError && (
+          <div
+            role="alert"
+            data-testid="create-error"
+            className="p-3 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
+          >
+            {createError}
+          </div>
+        )}
+
+        {isMultiUser() && (
+          <p className="text-[11px] text-slate-500 mb-3">
+            Событие общее: участники присоединяются по ссылке-приглашению, которую вы отправите
+            после создания.
+          </p>
+        )}
+
         <button
           id="btn-create-event"
           type="button"
           onClick={handleCreate}
-          className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
+          disabled={isCreating}
+          className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
         >
-          Создать событие и перейти
+          {isCreating ? 'Создаём…' : 'Создать событие и перейти'}
         </button>
       </div>
     </div>

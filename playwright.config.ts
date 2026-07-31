@@ -1,0 +1,59 @@
+import { defineConfig, devices } from '@playwright/test';
+
+const PORT = Number(process.env.PLAYWRIGHT_PORT || 4173);
+
+/**
+ * Тесты гоняются по статическому экспорту из out/, а не по `next dev`.
+ *
+ * Причина в правиле §1 из .agents/rules/antigravity2_core.md: дефект S0-2
+ * (созданное событие отдаёт 404) в dev-режиме не воспроизводится вообще, потому
+ * что dev-сервер рендерит динамические маршруты на лету. В APK, IPA и на статик-
+ * хостинге такого рантайма нет. Проверять нужно ровно то, что уезжает к
+ * пользователю.
+ */
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+
+  use: {
+    baseURL: `http://localhost:${PORT}`,
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+
+  projects: [
+    {
+      name: 'mobile',
+      use: { ...devices['iPhone 13'] },
+    },
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+
+  /**
+   * Сервер поднимается только на свежесобранном out/ и только своим процессом.
+   *
+   * Прошлая версия делала build внутри webServer.command и разрешала
+   * reuseExistingServer вне CI. Два Чекера, запущенные параллельно, начинали
+   * сборку одновременно; первый занимал порт, второй получал EADDRINUSE и
+   * прогонял тесты на чужом сервере — зелёный результат не говорил, какой
+   * именно out/ проверялся.
+   *
+   * Теперь: порт берётся из PLAYWRIGHT_PORT (можно развести параллельные
+   * прогоны), переиспользование чужого сервера запрещено всегда, а сборка
+   * вынесена в отдельный скрипт pretest, чтобы падение сборки было падением
+   * сборки, а не таймаутом ожидания порта.
+   */
+  webServer: {
+    command: `PORT=${PORT} node scripts/serve-out.mjs`,
+    url: `http://localhost:${PORT}/__ping`,
+    reuseExistingServer: false,
+    timeout: 60_000,
+    stdout: 'pipe',
+  },
+});

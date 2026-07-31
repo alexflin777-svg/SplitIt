@@ -1,0 +1,466 @@
+/**
+ * Слой данных поверх Supabase.
+ *
+ * До этого всё хранилось только в localStorage: события существовали на том
+ * устройстве, где были созданы, а ссылка-приглашение передавала лишь id и не
+ * могла подтянуть группу. Многопользовательский режим требует общего
+ * хранилища — здесь оно и появляется.
+ *
+ * Соглашения этого модуля:
+ *
+ * 1. Ни одна функция не бросает. Любой сбой возвращается полем `error` со
+ *    строкой для пользователя. Пустой `catch` в этом проекте уже один раз
+ *    спрятал полное отсутствие бэкенда.
+ * 2. Форма данных наружу — та же, что у локального хранилища (`Group` с
+ *    вложенными `members`, `expenses`, `settlements`), чтобы экраны не
+ *    переписывались под две разные модели.
+ * 3. Права не проверяются здесь. Их проверяет RLS: клиент может отправить
+ *    что угодно, база отклонит чужое. Клиентская проверка — удобство, а не
+ *    защита.
+ */
+
+import { supabase } from './supabase';
+
+export interface RemoteResult<T> {
+  data: T | null;
+  error: string | null;
+}
+
+export interface GroupMember {
+  id: string;
+  name: string;
+  avatar: string;
+  role: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface GroupExpense {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  amountInGroupCurrency: number;
+  category: string;
+  paidById: string;
+  splits: Array<{ userId: string; amountOwed: number }>;
+  createdAt: string;
+}
+
+export interface GroupSettlement {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  category: string;
+  currency: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  members: GroupMember[];
+  expenses: GroupExpense[];
+  settlements: GroupSettlement[];
+}
+
+const NO_BACKEND = 'Бэкенд не подключён — данные хранятся только на этом устройстве.';
+
+function fail<T>(message: string): RemoteResult<T> {
+  return { data: null, error: message };
+}
+
+/** Переводит ошибку PostgREST в текст, понятный пользователю. */
+function translate(error: { message: string; code?: string }): string {
+  const m = error.message.toLowerCase();
+
+  // Отказ RLS выглядит как нарушение политики, а не как «нет прав».
+  if (error.code === '42501' || m.includes('row-level security')) {
+    return 'Недостаточно прав для этой операции.';
+  }
+  if (error.code === '23514' || m.includes('check constraint')) {
+    return 'Значение не прошло проверку: суммы должны быть больше нуля.';
+  }
+  if (error.code === '23505') return 'Такая запись уже существует.';
+  if (m.includes('fetch') || m.includes('network')) return 'Нет связи с сервером.';
+  return error.message;
+}
+
+// ---------------------------------------------------------------------------
+// Чтение
+// ---------------------------------------------------------------------------
+
+/**
+ * Одна вложенная выборка вместо пяти запросов: PostgREST собирает связи по
+ * внешним ключам, а RLS отсекает чужое на каждом уровне.
+ */
+const GROUP_SELECT = `
+  id, name, category, default_currency, created_by, created_at,
+  group_members ( user_id, role, profiles ( id, full_name, avatar_url, email, phone ) ),
+  expenses (
+    id, title, amount, currency, amount_in_group_currency, category,
+    paid_by_id, created_at,
+    expense_splits ( user_id, amount_owed )
+  ),
+  settlements ( id, payer_id, payee_id, amount, currency, payment_method, status, created_at )
+`;
+
+function mapGroup(row: any): Group {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category ?? 'trip',
+    currency: row.default_currency ?? 'RUB',
+    status: row.status ?? 'active',
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    members: (row.group_members ?? []).map((m: any) => ({
+      id: m.user_id,
+      name: m.profiles?.full_name ?? 'Участник',
+      avatar: m.profiles?.avatar_url ?? '👤',
+      role: m.role ?? 'member',
+      email: m.profiles?.email ?? undefined,
+      phone: m.profiles?.phone ?? undefined,
+    })),
+    expenses: (row.expenses ?? [])
+      .map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        amount: Number(e.amount),
+        currency: e.currency,
+        amountInGroupCurrency: Number(e.amount_in_group_currency),
+        category: e.category ?? 'other',
+        paidById: e.paid_by_id,
+        splits: (e.expense_splits ?? []).map((s: any) => ({
+          userId: s.user_id,
+          amountOwed: Number(s.amount_owed),
+        })),
+        createdAt: e.created_at,
+      }))
+      .sort((a: GroupExpense, b: GroupExpense) => b.createdAt.localeCompare(a.createdAt)),
+    settlements: (row.settlements ?? []).map((s: any) => ({
+      id: s.id,
+      fromUserId: s.payer_id,
+      toUserId: s.payee_id,
+      amount: Number(s.amount),
+      currency: s.currency ?? 'RUB',
+      paymentMethod: s.payment_method ?? 'sbp',
+      status: s.status ?? 'completed',
+      createdAt: s.created_at,
+    })),
+  };
+}
+
+export async function fetchGroups(): Promise<RemoteResult<Group[]>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data, error } = await supabase
+    .from('groups')
+    .select(GROUP_SELECT)
+    .order('created_at', { ascending: false });
+
+  if (error) return fail(translate(error));
+  return { data: (data ?? []).map(mapGroup), error: null };
+}
+
+export async function fetchGroup(groupId: string): Promise<RemoteResult<Group>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data, error } = await supabase.from('groups').select(GROUP_SELECT).eq('id', groupId).maybeSingle();
+
+  if (error) return fail(translate(error));
+  // Отсутствие строки здесь означает «нет доступа или не существует» — RLS не
+  // различает эти случаи намеренно, чтобы по ответу нельзя было перебирать id.
+  if (!data) return fail('Событие недоступно: его не существует или у вас нет доступа.');
+  return { data: mapGroup(data), error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Запись
+// ---------------------------------------------------------------------------
+
+export async function createGroup(input: {
+  name: string;
+  category: string;
+  currency: string;
+  ownerId: string;
+}): Promise<RemoteResult<Group>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data: created, error } = await supabase
+    .from('groups')
+    .insert({
+      name: input.name,
+      category: input.category,
+      default_currency: input.currency,
+      created_by: input.ownerId,
+    })
+    .select('id')
+    .single();
+
+  if (error) return fail(translate(error));
+
+  // Создатель добавляется участником-владельцем отдельной записью: групп без
+  // участников быть не должно, иначе автор потеряет доступ к собственной группе.
+  const { error: memberError } = await supabase
+    .from('group_members')
+    .insert({ group_id: created.id, user_id: input.ownerId, role: 'owner' });
+
+  if (memberError) return fail(translate(memberError));
+
+  return fetchGroup(created.id);
+}
+
+export async function renameGroup(groupId: string, name: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  const { error } = await supabase.from('groups').update({ name }).eq('id', groupId);
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+export async function renameGroupStatus(groupId: string, status: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  const { error } = await supabase.from('groups').update({ status }).eq('id', groupId);
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+export async function addExpense(
+  groupId: string,
+  expense: {
+    title: string;
+    amount: number;
+    currency: string;
+    amountInGroupCurrency: number;
+    category: string;
+    paidById: string;
+    splits: Array<{ userId: string; amountOwed: number }>;
+    createdAt?: string;
+  },
+): Promise<RemoteResult<string>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data: created, error } = await supabase
+    .from('expenses')
+    .insert({
+      group_id: groupId,
+      paid_by_id: expense.paidById,
+      title: expense.title,
+      amount: expense.amount,
+      currency: expense.currency,
+      amount_in_group_currency: expense.amountInGroupCurrency,
+      category: expense.category,
+      created_at: expense.createdAt,
+    })
+    .select('id')
+    .single();
+
+  if (error) return fail(translate(error));
+
+  if (expense.splits.length > 0) {
+    const { error: splitError } = await supabase.from('expense_splits').insert(
+      expense.splits.map((s) => ({
+        expense_id: created.id,
+        user_id: s.userId,
+        amount_owed: s.amountOwed,
+      })),
+    );
+    // Расход без долей бессмыслен, поэтому неудачную вставку откатываем руками:
+    // транзакций через PostgREST нет.
+    if (splitError) {
+      await supabase.from('expenses').delete().eq('id', created.id);
+      return fail(translate(splitError));
+    }
+  }
+
+  return { data: created.id, error: null };
+}
+
+/**
+ * Правка расхода: поля обновляются, доли переписываются целиком.
+ * Транзакций через PostgREST нет, поэтому порядок выбран так, чтобы худший
+ * исход был «доли не сохранились», а не «расход исчез».
+ */
+export async function updateExpense(
+  expenseId: string,
+  expense: {
+    title: string;
+    amount: number;
+    currency: string;
+    amountInGroupCurrency: number;
+    category: string;
+    paidById: string;
+    splits: Array<{ userId: string; amountOwed: number }>;
+    createdAt?: string;
+  },
+): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { error } = await supabase
+    .from('expenses')
+    .update({
+      title: expense.title,
+      amount: expense.amount,
+      currency: expense.currency,
+      amount_in_group_currency: expense.amountInGroupCurrency,
+      category: expense.category,
+      paid_by_id: expense.paidById,
+      created_at: expense.createdAt,
+    })
+    .eq('id', expenseId);
+
+  if (error) return fail(translate(error));
+
+  const { error: clearError } = await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
+  if (clearError) return fail(translate(clearError));
+
+  if (expense.splits.length > 0) {
+    const { error: insertError } = await supabase.from('expense_splits').insert(
+      expense.splits.map((s) => ({ expense_id: expenseId, user_id: s.userId, amount_owed: s.amountOwed })),
+    );
+    if (insertError) return fail(translate(insertError));
+  }
+
+  return { data: true, error: null };
+}
+
+export async function deleteExpense(expenseId: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+export async function addSettlement(
+  groupId: string,
+  settlement: { fromUserId: string; toUserId: string; amount: number; currency: string; paymentMethod: string },
+): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { error } = await supabase.from('settlements').insert({
+    group_id: groupId,
+    payer_id: settlement.fromUserId,
+    payee_id: settlement.toUserId,
+    amount: settlement.amount,
+    currency: settlement.currency,
+    payment_method: settlement.paymentMethod,
+  });
+
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Приглашения
+// ---------------------------------------------------------------------------
+
+function randomInviteCode(): string {
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(36).padStart(2, '0'))
+    .join('')
+    .toUpperCase()
+    .slice(0, 12);
+}
+
+/**
+ * Ссылка-приглашение содержит одноразовый код, а не id группы. По id вступить
+ * нельзя: политика на group_members разрешает прямую запись только владельцу.
+ */
+export async function createInvite(
+  groupId: string,
+  createdBy: string,
+  ttlHours = 24 * 14,
+): Promise<RemoteResult<string>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const code = randomInviteCode();
+  const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
+
+  const { error } = await supabase
+    .from('group_invites')
+    .insert({ group_id: groupId, invite_code: code, created_by: createdBy, expires_at: expiresAt });
+
+  return error ? fail(translate(error)) : { data: code, error: null };
+}
+
+/** Вызывает SECURITY DEFINER функцию: единственный путь в чужую группу. */
+export async function redeemInvite(code: string): Promise<RemoteResult<string>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data, error } = await supabase.rpc('redeem_group_invite', { p_invite_code: code });
+
+  if (error) {
+    const m = error.message.toLowerCase();
+    if (m.includes('недействительно') || m.includes('истекло')) {
+      return fail('Приглашение недействительно или истекло. Попросите новую ссылку.');
+    }
+    return fail(translate(error));
+  }
+  return { data: data as string, error: null };
+}
+
+export async function leaveGroup(groupId: string, userId: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', userId);
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Профиль
+// ---------------------------------------------------------------------------
+
+export async function upsertProfile(profile: {
+  id: string;
+  full_name: string;
+  avatar_url?: string;
+  email?: string;
+  phone?: string;
+  preferred_currency?: string;
+}): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { error } = await supabase.from('profiles').upsert({
+    id: profile.id,
+    full_name: profile.full_name,
+    avatar_url: profile.avatar_url,
+    email: profile.email,
+    phone: profile.phone,
+    default_currency: profile.preferred_currency,
+    updated_at: new Date().toISOString(),
+  });
+
+  return error ? fail(translate(error)) : { data: true, error: null };
+}
+
+/**
+ * Подписка на изменения группы через Postgres Changes.
+ *
+ * Это не тот broadcast-канал, что был раньше: события приходят из базы после
+ * применения RLS, поэтому чужие изменения физически не долетают — в отличие от
+ * прошлой схемы, где клиенты сами рассылали друг другу всё своё состояние.
+ */
+export function subscribeToGroup(groupId: string, onChange: () => void): () => void {
+  const client = supabase;
+  if (!client) return () => {};
+
+  const channel = client
+    .channel(`group:${groupId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `group_id=eq.${groupId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, onChange)
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+  };
+}

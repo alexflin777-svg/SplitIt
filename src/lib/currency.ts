@@ -38,6 +38,34 @@ export function getExchangeRateStatus(): LiveRateStatus {
 }
 
 /**
+ * Текст о качестве курса для показа рядом со сконвертированной суммой.
+ *
+ * Раньше `getExchangeRateStatus()` не вызывался ни в одном файле интерфейса:
+ * при недоступном API приложение молча считало по курсам, зашитым в код
+ * (USD 88.5, EUR 96.2, TRY 2.7), и пользователь не мог отличить свежий
+ * пересчёт от устаревшего. Возвращает null, если пересчёта нет — когда валюта
+ * расхода совпадает с валютой события, сообщать не о чем.
+ */
+export function getRateDisclosure(fromCurrency: string, toCurrency: string): string | null {
+  if (fromCurrency === toCurrency) return null;
+
+  switch (currentStatus.source) {
+    case 'api':
+      return `Курс загружен сегодня в ${currentStatus.lastUpdated}`;
+    case 'cache':
+      return `Курс из кэша, обновлён в ${currentStatus.lastUpdated}`;
+    case 'fallback':
+    default:
+      return 'Курс не загружен — расчёт по резервным значениям, сумма может отличаться от фактической';
+  }
+}
+
+/** Нужен ли пользователю предупреждающий вид: курс не настоящий. */
+export function isRateStale(): boolean {
+  return currentStatus.source === 'fallback';
+}
+
+/**
  * Fetches live exchange rates from free open API with offline local storage caching
  */
 export async function fetchLiveExchangeRates(): Promise<Record<string, number>> {

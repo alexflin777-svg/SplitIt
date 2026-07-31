@@ -1,13 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
 import { signUpUser, signInUser, resetPassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
+import { getConfigProblem } from '@/lib/env';
+import { processAvatarFile } from '@/lib/avatar';
+import { routes } from '@/lib/routes';
 
-export default function AuthPage() {
+type AuthMode = 'register' | 'login' | 'reset';
+
+const AUTH_MODES: AuthMode[] = ['register', 'login', 'reset'];
+
+function AuthForm() {
   const router = useRouter();
-  const [mode, setMode] = useState<'register' | 'login' | 'reset'>('register');
+  const searchParams = useSearchParams();
+
+  // Раньше режим всегда стартовал с 'register', а query-строка не читалась
+  // вовсе: ссылка /auth?mode=login открывала форму регистрации.
+  const requestedMode = searchParams.get('mode');
+  const initialMode: AuthMode = AUTH_MODES.includes(requestedMode as AuthMode)
+    ? (requestedMode as AuthMode)
+    : 'register';
+
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -18,6 +34,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   const presetAvatars = ['👤', '👨‍💻', '👩‍🎨', '🦊', '🚀', '🐱', '🐼', '🕶️'];
+  const configProblem = getConfigProblem();
 
   useEffect(() => {
     // Check existing session
@@ -45,17 +62,21 @@ export default function AuthPage() {
     }
   }, [router]);
 
-  const handleAvatarFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setCustomAvatarPreview(reader.result);
-        setAvatarUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setErrorMessage(null);
+
+    // Изображение проверяется и сжимается до записи — иначе фото с телефона
+    // пробивает квоту localStorage и обрывает регистрацию без объяснений.
+    const { dataUrl, error } = await processAvatarFile(file);
+    if (error || !dataUrl) {
+      setErrorMessage(error ?? 'Не удалось обработать изображение');
+      e.target.value = '';
+      return;
+    }
+    setCustomAvatarPreview(dataUrl);
+    setAvatarUrl(dataUrl);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,41 +84,56 @@ export default function AuthPage() {
     setErrorMessage(null);
     setLoading(true);
 
+    // Ошибка каждой ветки доходит до пользователя. Раньше результат просто
+    // игнорировался: провал и успех выглядели одинаково, а вход пускал кого
+    // угодно под любым email.
     if (mode === 'register') {
       const selectedAvatar = customAvatarPreview || avatarUrl;
-      const { data } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
+      const { data, error } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
       setLoading(false);
-      setStatusMessage(`Аккаунт ${fullName || email} успешно зарегистрирован!`);
-      setTimeout(() => {
-        router.push('/');
-      }, 800);
+      if (error || !data) {
+        setErrorMessage(error ?? 'Не удалось зарегистрировать аккаунт');
+        return;
+      }
+      setStatusMessage(`Аккаунт ${data.full_name} успешно зарегистрирован!`);
+      setTimeout(() => router.push(routes.home()), 800);
     } else if (mode === 'login') {
-      const { data } = await signInUser(email, password);
+      const { data, error } = await signInUser(email, password);
       setLoading(false);
+      if (error || !data) {
+        setErrorMessage(error ?? 'Не удалось войти');
+        return;
+      }
       setStatusMessage(`С возвращением, ${data.full_name}!`);
-      setTimeout(() => {
-        router.push('/');
-      }, 800);
+      setTimeout(() => router.push(routes.home()), 800);
     } else if (mode === 'reset') {
       const res = await resetPassword(email);
       setLoading(false);
+      if (!res.success) {
+        setErrorMessage(res.message);
+        return;
+      }
       setStatusMessage(res.message);
     }
   };
 
   const handleGuestLogin = () => {
     setLoading(true);
+    setErrorMessage(null);
     const guestUser: UserProfile = {
       id: 'guest-' + Date.now(),
       email: 'guest@splitit.app',
       full_name: 'Демо Аккаунт',
       avatar_url: customAvatarPreview || avatarUrl || '👤',
     };
-    saveLocalSession(guestUser);
+    const saveError = saveLocalSession(guestUser);
+    if (saveError) {
+      setLoading(false);
+      setErrorMessage(saveError);
+      return;
+    }
     setStatusMessage('Вы вошли под демо-профилем');
-    setTimeout(() => {
-      router.push('/');
-    }, 600);
+    setTimeout(() => router.push(routes.home()), 600);
   };
 
   return (
@@ -117,9 +153,20 @@ export default function AuthPage() {
           {mode === 'reset' && 'Восстановление пароля'}
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-          Авторизуйтесь на любых 2х и более устройствах для мгновенной синхронизации расходов без конфликтов.
+          {configProblem
+            ? 'Аккаунт хранится на этом устройстве. Синхронизация между устройствами появится, когда будет подключён бэкенд.'
+            : 'Авторизуйтесь на любых 2х и более устройствах для мгновенной синхронизации расходов без конфликтов.'}
         </p>
       </div>
+
+      {/* Конфигурация окружения: отсутствие бэкенда должно быть видно, а не
+          подменяться тихим локальным режимом. */}
+      {configProblem && (
+        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2 font-medium">
+          <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{configProblem}</span>
+        </div>
+      )}
 
       {/* Status Message */}
       {statusMessage && (
@@ -129,9 +176,22 @@ export default function AuthPage() {
         </div>
       )}
 
+      {/* Error Message */}
+      {errorMessage && (
+        <div
+          role="alert"
+          data-testid="auth-error"
+          className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2 font-bold animate-in fade-in"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       {/* Mode Selector Tabs */}
       <div className="stitch-card p-1.5 flex items-center bg-slate-100/80 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <button
+          type="button"
           onClick={() => setMode('register')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
             mode === 'register' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
@@ -140,6 +200,7 @@ export default function AuthPage() {
           Регистрация
         </button>
         <button
+          type="button"
           onClick={() => setMode('login')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
             mode === 'login' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
@@ -148,6 +209,7 @@ export default function AuthPage() {
           Вход
         </button>
         <button
+          type="button"
           onClick={() => setMode('reset')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
             mode === 'reset' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
@@ -272,5 +334,19 @@ export default function AuthPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * useSearchParams требует Suspense-границы при output: 'export' — без неё
+ * Next не может собрать страницу статически.
+ */
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={<div className="p-8 text-center text-xs font-bold text-slate-400">Загрузка…</div>}
+    >
+      <AuthForm />
+    </Suspense>
   );
 }

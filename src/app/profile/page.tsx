@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, saveLocalSession, signOutUser, UserProfile } from '@/lib/supabase';
-import { checkForAppUpdates, getCurrentInstalledVersion, applyInAppOTAUpdate, UpdateCheckResult } from '@/lib/app-updater';
+import { checkForAppUpdates, getCurrentInstalledVersion, UpdateCheckResult } from '@/lib/app-updater';
 import { requestNotificationPermission, sendInAppNotification } from '@/lib/notifications';
 import { useRouter } from 'next/navigation';
+import { processAvatarFile } from '@/lib/avatar';
 import {
   User,
   Bell,
@@ -41,14 +42,12 @@ export default function ProfilePage() {
   const [darkMode, setDarkMode] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // App updater state
   const [currentVersion, setCurrentVersion] = useState<string>('v2.3.0');
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState(0);
-  const [updateSuccess, setUpdateSuccess] = useState(false);
 
   useEffect(() => {
     setCurrentVersion(getCurrentInstalledVersion());
@@ -68,17 +67,20 @@ export default function ProfilePage() {
     }
   }, []);
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setCustomAvatar(reader.result);
-        setUser((prev) => ({ ...prev, avatar_url: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    setAvatarError(null);
+
+    // Проверка и сжатие до записи — см. src/lib/avatar.ts.
+    const { dataUrl, error } = await processAvatarFile(file);
+    if (error || !dataUrl) {
+      setAvatarError(error ?? 'Не удалось обработать изображение');
+      e.target.value = '';
+      return;
+    }
+    setCustomAvatar(dataUrl);
+    setUser((prev) => ({ ...prev, avatar_url: dataUrl }));
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -114,25 +116,10 @@ export default function ProfilePage() {
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     setUpdateResult(null);
-    setUpdateSuccess(false);
-    try {
-      const res = await checkForAppUpdates();
-      setIsCheckingUpdate(false);
-      setUpdateResult(res);
-    } catch (e) {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  const handleApplyOTAUpdate = async () => {
-    if (!updateResult) return;
-    setIsUpdating(true);
-    setUpdateProgress(10);
-    await applyInAppOTAUpdate(updateResult.latestVersion, (percent) => setUpdateProgress(percent));
-    setIsUpdating(false);
-    setCurrentVersion(updateResult.latestVersion);
-    setUpdateSuccess(true);
-    setUpdateResult(null);
+    // checkForAppUpdates не бросает: сетевые сбои возвращаются как status: 'error'
+    // с текстом для пользователя.
+    setUpdateResult(await checkForAppUpdates());
+    setIsCheckingUpdate(false);
   };
 
   const handleEnablePushNotifications = async () => {
@@ -168,6 +155,15 @@ export default function ProfilePage() {
         <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>Профиль и настройки успешно сохранены!</span>
+        </div>
+      )}
+
+      {avatarError && (
+        <div
+          role="alert"
+          className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
+        >
+          {avatarError}
         </div>
       )}
 
@@ -323,45 +319,61 @@ export default function ProfilePage() {
           </div>
 
           <p className="text-xs text-slate-300 font-medium">
-            Обновление приложения происходит **без перезаписи данных**. Все группы, участники и история сохранятся на 100%.
+            Новая сборка устанавливается вручную поверх текущей. Локальные данные при этом
+            не стираются: группы, участники и история расходов остаются на устройстве.
           </p>
 
           <button
             type="button"
             onClick={handleCheckForUpdates}
-            disabled={isCheckingUpdate || isUpdating}
+            disabled={isCheckingUpdate}
             className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs border border-white/20 flex items-center justify-center gap-2 transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
             <span>{isCheckingUpdate ? 'Проверка...' : 'Проверить обновления приложения'}</span>
           </button>
 
+          {/* Кнопка «обновить прямо сейчас» убрана намеренно. Приложение не может
+              установить себя само: в вебе это делает браузер, в Capacitor —
+              нативный плагин, которого в зависимостях нет. Прошлая версия
+              крутила прогресс на таймерах и рапортовала об успешной установке,
+              не скачав ни байта. */}
           {updateResult && (
-            <div className="p-4 rounded-xl bg-white/10 border border-white/20 text-xs space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between font-bold">
-                <span>{updateResult.hasUpdate ? '🔥 Доступно новое OTA-обновление!' : 'У вас актуальная версия'}</span>
-                <span className="text-amber-300">{updateResult.latestVersion}</span>
+            <div
+              role="status"
+              className="p-4 rounded-xl bg-white/10 border border-white/20 text-xs space-y-3 animate-in fade-in duration-200"
+            >
+              <div className="flex items-center justify-between font-bold gap-2">
+                <span>{updateResult.message}</span>
+                {updateResult.latestVersion && (
+                  <span className="text-amber-300 flex-shrink-0">{updateResult.latestVersion}</span>
+                )}
               </div>
-              <p className="text-[11px] text-slate-300">{updateResult.releaseNotes}</p>
 
-              {updateResult.hasUpdate && (
-                <button
-                  type="button"
-                  onClick={handleApplyOTAUpdate}
-                  disabled={isUpdating}
+              {updateResult.releaseNotes && (
+                <p className="text-[11px] text-slate-300">{updateResult.releaseNotes}</p>
+              )}
+
+              {updateResult.status === 'available' && updateResult.downloadUrl && (
+                <a
+                  href={updateResult.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
                 >
                   <Download className="w-4 h-4" />
-                  <span>{isUpdating ? `Загрузка патча (${updateProgress}%)...` : 'Обновить прямо сейчас (OTA)'}</span>
-                </button>
+                  <span>
+                    Скачать {updateResult.latestVersion}
+                    {updateResult.downloadSize ? ` (${updateResult.downloadSize})` : ''}
+                  </span>
+                </a>
               )}
-            </div>
-          )}
 
-          {updateSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Приложение успешно обновлено! История и профиль сохранены.</span>
+              {updateResult.status === 'available' && !updateResult.downloadUrl && (
+                <p className="text-[11px] text-amber-200">
+                  В манифесте нет ссылки на скачивание — обратитесь к владельцу сборки.
+                </p>
+              )}
             </div>
           )}
         </div>

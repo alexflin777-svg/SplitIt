@@ -10,7 +10,46 @@ export interface OcrResult {
   detectedItems: Array<{ name: string; price: number }>;
 }
 
-export async function parseReceiptImage(imageFile: File | Blob): Promise<OcrResult> {
+/** Дальше нет смысла запускать распознавание: браузер съест память и повиснет. */
+const MAX_RECEIPT_BYTES = 8 * 1024 * 1024;
+
+export interface OcrOutcome {
+  /** 'ok' — что-то распознано, 'empty' — движок отработал, но данных нет. */
+  status: 'ok' | 'empty' | 'error';
+  result: OcrResult | null;
+  /** Текст для пользователя. Заполнен всегда, кроме успешного распознавания. */
+  message: string | null;
+}
+
+/**
+ * Распознавание чека.
+ *
+ * Раньше функция глушила любую ошибку Tesseract и возвращала обычный OcrResult
+ * с заголовком «Оплата по чеку». Для вызывающего это выглядело как успешное
+ * распознавание: спиннер снимался, а статус «Сканирование чека…» так и висел,
+ * потому что суммы не было и ветка обновления статуса не срабатывала. Сбой
+ * выглядел как бесконечное сканирование.
+ *
+ * Теперь исход возвращается явно, а сбой не притворяется результатом.
+ */
+export async function parseReceiptImage(imageFile: File | Blob): Promise<OcrOutcome> {
+  if (imageFile.size > MAX_RECEIPT_BYTES) {
+    const mb = (imageFile.size / 1024 / 1024).toFixed(1);
+    return {
+      status: 'error',
+      result: null,
+      message: `Файл слишком большой (${mb} МБ). Распознавание работает с файлами до 8 МБ — сфотографируйте чек в меньшем разрешении или введите сумму вручную.`,
+    };
+  }
+
+  if (imageFile instanceof File && !imageFile.type.startsWith('image/')) {
+    return {
+      status: 'error',
+      result: null,
+      message: 'Это не изображение. Выберите фотографию чека или введите сумму вручную.',
+    };
+  }
+
   try {
     // Dynamic import to prevent SSR issues with tesseract.js
     const Tesseract = await import('tesseract.js');
@@ -18,16 +57,23 @@ export async function parseReceiptImage(imageFile: File | Blob): Promise<OcrResu
       logger: () => {},
     });
 
-    const rawText = data.text;
-    return extractDataFromText(rawText);
-  } catch (error) {
-    console.error('OCR Processing error:', error);
-    // Fallback parser if OCR engine fails or is offline
+    const result = extractDataFromText(data.text);
+
+    if (result.suggestedTotal === null && result.detectedItems.length === 0) {
+      return {
+        status: 'empty',
+        result,
+        message: 'Сумма в чеке не распозналась. Введите её вручную.',
+      };
+    }
+
+    return { status: 'ok', result, message: null };
+  } catch (error: any) {
+    console.error('[SplitIT] Ошибка распознавания чека', error);
     return {
-      rawText: 'Чек обработан (ручной ввод)',
-      suggestedTotal: null,
-      suggestedTitle: 'Оплата по чеку',
-      detectedItems: [],
+      status: 'error',
+      result: null,
+      message: `Не удалось распознать чек: ${error?.message ?? 'движок распознавания недоступен'}. Введите сумму вручную.`,
     };
   }
 }

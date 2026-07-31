@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
-import { getActiveSession, getSavedGroups, subscribeToRealtimeSync, UserProfile, saveLocalSession } from '@/lib/supabase';
+import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
+import { listGroups, isMultiUser } from '@/lib/store';
 import {
   Plus,
   Plane,
@@ -26,6 +27,7 @@ import {
   KeyRound,
   LogOut,
 } from 'lucide-react';
+import { routes } from '@/lib/routes';
 
 export default function HomePage() {
   const router = useRouter();
@@ -34,13 +36,20 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const refreshGroups = useCallback(async () => {
+    const { data, error } = await listGroups();
+    setLoadError(error);
+    setGroups(data ?? []);
+  }, []);
 
   useEffect(() => {
     // Check active user session
     getActiveSession().then((user) => {
       setUserProfile(user);
       if (user) {
-        setGroups(getSavedGroups());
+        void refreshGroups();
       }
       setIsLoaded(true);
     });
@@ -48,22 +57,26 @@ export default function HomePage() {
     const handleProfileChanged = () => {
       getActiveSession().then((user) => {
         setUserProfile(user);
-        if (user) setGroups(getSavedGroups());
+        if (user) void refreshGroups();
       });
     };
     window.addEventListener('splitit_profile_changed', handleProfileChanged);
 
-    // Subscribe to cross-device and multi-tab realtime sync
-    const unsubscribe = subscribeToRealtimeSync(() => {
-      setGroups(getSavedGroups());
+    // Список перечитывается при возврате на вкладку. Подписка на изменения
+    // конкретного события живёт на его экране: здесь она дала бы поток
+    // событий по всем группам сразу.
+    const onFocus = () => {
+      void refreshGroups();
       getActiveSession().then((user) => setUserProfile(user));
-    });
+    };
+    window.addEventListener('focus', onFocus);
+    const unsubscribe = () => window.removeEventListener('focus', onFocus);
 
     return () => {
       window.removeEventListener('splitit_profile_changed', handleProfileChanged);
       unsubscribe();
     };
-  }, []);
+  }, [refreshGroups]);
 
   const handleDemoLogin = () => {
     const demoUser: UserProfile = {
@@ -75,7 +88,7 @@ export default function HomePage() {
     };
     saveLocalSession(demoUser);
     setUserProfile(demoUser);
-    setGroups(getSavedGroups());
+    void refreshGroups();
   };
 
   const categoryIcons: Record<string, any> = {
@@ -324,7 +337,7 @@ export default function HomePage() {
           </span>
         </h3>
         <Link
-          href="/events/new"
+          href={routes.eventNew()}
           className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
         >
           <span>Создать</span>
@@ -342,7 +355,7 @@ export default function HomePage() {
             return (
               <Link
                 key={group.id}
-                href={`/events/${group.id}`}
+                href={routes.eventDetail(group.id)}
                 className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all block bg-white dark:bg-slate-800"
               >
                 <div className="flex items-center gap-3">
@@ -389,7 +402,7 @@ export default function HomePage() {
           
           <div className="pt-2 flex flex-col gap-2 max-w-xs mx-auto">
             <Link
-              href="/events/new"
+              href={routes.eventNew()}
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
