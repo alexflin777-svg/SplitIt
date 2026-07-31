@@ -22,6 +22,55 @@ export interface UserProfile {
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
 const LOCAL_GROUPS_KEY = 'splitit_local_groups_data';
 
+// Cross-tab / Multi-session Realtime Broadcast Channel
+let broadcastChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    broadcastChannel = new BroadcastChannel('splitit_sync_channel');
+  } catch (e) {
+    console.warn('BroadcastChannel not supported', e);
+  }
+}
+
+export function subscribeToRealtimeSync(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handler = (event: MessageEvent) => {
+    if (event.data?.type === 'SPLITIT_DATA_UPDATED') {
+      callback();
+    }
+  };
+
+  if (broadcastChannel) {
+    broadcastChannel.addEventListener('message', handler);
+  }
+
+  const storageHandler = (e: StorageEvent) => {
+    if (e.key === LOCAL_GROUPS_KEY) {
+      callback();
+    }
+  };
+
+  window.addEventListener('storage', storageHandler);
+
+  return () => {
+    if (broadcastChannel) {
+      broadcastChannel.removeEventListener('message', handler);
+    }
+    window.removeEventListener('storage', storageHandler);
+  };
+}
+
+export function notifyRealtimeSync() {
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({ type: 'SPLITIT_DATA_UPDATED', timestamp: Date.now() });
+    } catch (e) {
+      console.warn('Broadcast notify failed', e);
+    }
+  }
+}
+
 export function saveLocalSession(user: UserProfile) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(user));
@@ -48,7 +97,7 @@ export function clearLocalSession() {
   }
 }
 
-// Persistent Groups Store
+// Persistent Groups Store with Realtime Broadcast Trigger
 export function getSavedGroups(): any[] {
   if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(LOCAL_GROUPS_KEY);
@@ -66,6 +115,7 @@ export function getSavedGroups(): any[] {
 export function saveGroups(groups: any[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(groups));
+    notifyRealtimeSync();
   }
 }
 
@@ -153,7 +203,6 @@ export async function getActiveSession(): Promise<UserProfile | null> {
   const local = getLocalSession();
   if (local) return local;
 
-  // Fallback guest session so app never crashes or forces auth loops
   const guestUser: UserProfile = {
     id: 'guest-session',
     email: 'guest@splitit.app',

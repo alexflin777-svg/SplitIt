@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
-import { getActiveSession, getSavedGroups, UserProfile } from '@/lib/supabase';
+import { getActiveSession, getSavedGroups, subscribeToRealtimeSync, UserProfile } from '@/lib/supabase';
 import {
   Plus,
   Plane,
@@ -37,6 +37,13 @@ export default function HomePage() {
         setGroups(getSavedGroups());
       }
     });
+
+    // Subscribe to cross-tab / multi-user realtime sync
+    const unsubscribe = subscribeToRealtimeSync(() => {
+      setGroups(getSavedGroups());
+    });
+
+    return () => unsubscribe();
   }, [router]);
 
   const categoryIcons: Record<string, any> = {

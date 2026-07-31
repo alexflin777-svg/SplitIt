@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, saveLocalSession, signOutUser, UserProfile } from '@/lib/supabase';
-import { checkForAppUpdates, CURRENT_APP_VERSION, UpdateCheckResult } from '@/lib/app-updater';
+import { checkForAppUpdates, getCurrentInstalledVersion, applyInAppOTAUpdate, UpdateCheckResult } from '@/lib/app-updater';
 import { requestNotificationPermission, sendInAppNotification } from '@/lib/notifications';
 import { useRouter } from 'next/navigation';
 import {
@@ -21,6 +21,7 @@ import {
   Camera,
   RefreshCw,
   Sparkles,
+  Download,
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -42,10 +43,16 @@ export default function ProfilePage() {
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
 
   // App updater state
+  const [currentVersion, setCurrentVersion] = useState<string>('v2.3.0');
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
 
   useEffect(() => {
+    setCurrentVersion(getCurrentInstalledVersion());
+
     getActiveSession().then((u) => {
       if (u) {
         setUser(u);
@@ -107,6 +114,7 @@ export default function ProfilePage() {
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     setUpdateResult(null);
+    setUpdateSuccess(false);
     try {
       const res = await checkForAppUpdates();
       setIsCheckingUpdate(false);
@@ -114,6 +122,17 @@ export default function ProfilePage() {
     } catch (e) {
       setIsCheckingUpdate(false);
     }
+  };
+
+  const handleApplyOTAUpdate = async () => {
+    if (!updateResult) return;
+    setIsUpdating(true);
+    setUpdateProgress(10);
+    await applyInAppOTAUpdate(updateResult.latestVersion, (percent) => setUpdateProgress(percent));
+    setIsUpdating(false);
+    setCurrentVersion(updateResult.latestVersion);
+    setUpdateSuccess(true);
+    setUpdateResult(null);
   };
 
   const handleEnablePushNotifications = async () => {
@@ -176,7 +195,7 @@ export default function ProfilePage() {
             <h3 className="font-extrabold text-slate-900 text-base">{user.full_name}</h3>
             <p className="text-xs text-slate-500 font-medium">{user.email}</p>
             <span className="inline-block mt-1 text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-              Подключен профиль ({CURRENT_APP_VERSION})
+              Версия {currentVersion}
             </span>
           </div>
         </div>
@@ -295,7 +314,7 @@ export default function ProfilePage() {
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Версия SplitIT: {CURRENT_APP_VERSION}
+                Версия SplitIT: {currentVersion}
               </span>
             </div>
             <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
@@ -304,13 +323,13 @@ export default function ProfilePage() {
           </div>
 
           <p className="text-xs text-slate-300 font-medium">
-            Обновление приложения происходит **без потери данных**. Вся история расходов и группы останутся на месте.
+            Обновление приложения происходит **без перезаписи данных**. Все группы, участники и история сохранятся на 100%.
           </p>
 
           <button
             type="button"
             onClick={handleCheckForUpdates}
-            disabled={isCheckingUpdate}
+            disabled={isCheckingUpdate || isUpdating}
             className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-extrabold text-xs border border-white/20 flex items-center justify-center gap-2 transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
@@ -318,12 +337,31 @@ export default function ProfilePage() {
           </button>
 
           {updateResult && (
-            <div className="p-3 rounded-xl bg-white/10 border border-white/20 text-xs space-y-1">
+            <div className="p-4 rounded-xl bg-white/10 border border-white/20 text-xs space-y-3 animate-in fade-in duration-200">
               <div className="flex items-center justify-between font-bold">
-                <span>{updateResult.hasUpdate ? 'Новое обновление!' : 'У вас актуальная версия'}</span>
+                <span>{updateResult.hasUpdate ? '🔥 Доступно новое OTA-обновление!' : 'У вас актуальная версия'}</span>
                 <span className="text-amber-300">{updateResult.latestVersion}</span>
               </div>
               <p className="text-[11px] text-slate-300">{updateResult.releaseNotes}</p>
+
+              {updateResult.hasUpdate && (
+                <button
+                  type="button"
+                  onClick={handleApplyOTAUpdate}
+                  disabled={isUpdating}
+                  className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{isUpdating ? `Загрузка патча (${updateProgress}%)...` : 'Обновить прямо сейчас (OTA)'}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {updateSuccess && (
+            <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Приложение успешно обновлено! История и профиль сохранены.</span>
             </div>
           )}
         </div>
