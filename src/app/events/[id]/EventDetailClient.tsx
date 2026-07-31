@@ -113,7 +113,8 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     config: categoryConfig[catKey] || categoryConfig['other'],
   }));
 
-  const inviteLink = `https://splitit.app/join/${group.id}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://splitit.app';
+  const inviteLink = `${origin}/events/${group.id}?join=true`;
   const inviteText = `Привет! Присоединяйся к совместным расходам "${group.name}" в SplitIT:`;
 
   const handleNativeShare = async () => {

@@ -23,6 +23,14 @@ export interface UserProfile {
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
 const LOCAL_GROUPS_KEY = 'splitit_local_groups_data';
 const USERS_REGISTRY_KEY = 'splitit_registered_users_registry';
+const LOCAL_FRIENDS_KEY = 'splitit_saved_friends_list';
+
+// Default initial friends array
+const DEFAULT_INITIAL_FRIENDS = [
+  { id: 'user-2', name: 'Максим Громов', avatar: '👨‍💻', phone: '+7 (916) 123-45-67', email: 'maksim@example.com', role: 'member' },
+  { id: 'user-3', name: 'Елена Воронова', avatar: '👩‍🎨', phone: '+7 (926) 987-65-43', email: 'elena@example.com', role: 'member' },
+  { id: 'user-4', name: 'Анастасия Ким', avatar: '🦊', phone: '+7 (903) 555-12-34', email: 'anastasia@example.com', role: 'member' },
+];
 
 // Global Supabase Realtime & Web Broadcast Channels for Multi-Device Realtime Sync
 let broadcastChannel: BroadcastChannel | null = null;
@@ -62,7 +70,7 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
 
   // 2. Storage event listener for multi-tab
   const storageHandler = (e: StorageEvent) => {
-    if (e.key === LOCAL_GROUPS_KEY || e.key === LOCAL_SESSION_KEY) {
+    if (e.key === LOCAL_GROUPS_KEY || e.key === LOCAL_SESSION_KEY || e.key === LOCAL_FRIENDS_KEY) {
       callback();
     }
   };
@@ -74,15 +82,15 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
       .on('broadcast', { event: 'SPLITIT_DEVICE_SYNC' }, (payload: any) => {
         if (payload?.payload?.groups) {
           try {
-            const incomingGroups = payload.payload.groups;
-            localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(incomingGroups));
-            callback();
-          } catch (e) {
-            console.error('Error applying remote realtime update', e);
-          }
-        } else {
-          callback();
+            localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(payload.payload.groups));
+          } catch (e) {}
         }
+        if (payload?.payload?.friends) {
+          try {
+            localStorage.setItem(LOCAL_FRIENDS_KEY, JSON.stringify(payload.payload.friends));
+          } catch (e) {}
+        }
+        callback();
       })
       .subscribe();
   }
@@ -95,7 +103,7 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
   };
 }
 
-export function notifyRealtimeSync(groups?: any[]) {
+export function notifyRealtimeSync(groups?: any[], friends?: any[]) {
   // Broadcast locally across tabs
   if (broadcastChannel) {
     try {
@@ -110,6 +118,7 @@ export function notifyRealtimeSync(groups?: any[]) {
     try {
       const activeUser = getLocalSession();
       const currentGroups = groups || getSavedGroups();
+      const currentFriends = friends || getSavedFriends();
       supabaseRealtimeChannel.send({
         type: 'broadcast',
         event: 'SPLITIT_DEVICE_SYNC',
@@ -117,12 +126,38 @@ export function notifyRealtimeSync(groups?: any[]) {
           user_id: activeUser?.id,
           email: activeUser?.email,
           groups: currentGroups,
+          friends: currentFriends,
           timestamp: Date.now(),
         },
       });
     } catch (e) {
       console.warn('Supabase Realtime broadcast failed', e);
     }
+  }
+}
+
+// Persistent Friends Store
+export function getSavedFriends(): any[] {
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem(LOCAL_FRIENDS_KEY);
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+        return DEFAULT_INITIAL_FRIENDS;
+      }
+    } else {
+      localStorage.setItem(LOCAL_FRIENDS_KEY, JSON.stringify(DEFAULT_INITIAL_FRIENDS));
+      return DEFAULT_INITIAL_FRIENDS;
+    }
+  }
+  return DEFAULT_INITIAL_FRIENDS;
+}
+
+export function saveFriends(friends: any[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_FRIENDS_KEY, JSON.stringify(friends));
+    notifyRealtimeSync(undefined, friends);
   }
 }
 
