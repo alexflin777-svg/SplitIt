@@ -12,7 +12,7 @@
     "serve:out": "node scripts/serve-out.mjs",
     "pretest": "node --test test/rls.test.mjs && npm run build:test",
     "test:rls": "node --test test/rls.test.mjs",
-    "build:test": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= next build"
+    "build:test": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= NEXT_PUBLIC_APP_URL= VERCEL_PROJECT_PRODUCTION_URL= next build"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
