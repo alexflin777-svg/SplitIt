@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
-import { getSavedGroups, saveGroups, getActiveSession, UserProfile } from '@/lib/supabase';
+import { getSavedGroups, saveGroups, getActiveSession, getSavedFriends, UserProfile, subscribeToRealtimeSync } from '@/lib/supabase';
 import { formatMoney } from '@/lib/currency';
 import {
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   CreditCard,
   FileText,
   Share2,
-  Receipt,
   CheckCircle2,
   Calendar,
   User,
@@ -26,10 +25,10 @@ import {
   Send,
   MessageCircle,
   MessageSquare,
-  Lock,
   RotateCcw,
   Sparkles,
   PieChart,
+  Users,
 } from 'lucide-react';
 
 export default function EventDetailClient({ groupId }: { groupId: string }) {
@@ -41,25 +40,24 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const [newMemberName, setNewMemberName] = useState('');
   const [isAddingMember, setIsAddingMember] = useState(false);
 
-  // Invite modal state
+  // Modals state
   const [showInviteModal, setShowInviteModal] = useState(false);
-
-  // Delete expense confirmation modal state
+  const [showPhonebookModal, setShowPhonebookModal] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any | null>(null);
-
-  // Complete event modal state
   const [showCompleteModal, setShowCompleteModal] = useState(false);
 
-  useEffect(() => {
-    getActiveSession().then((u) => setUserProfile(u));
+  // Phonebook manual entry
+  const [contactNameInput, setContactNameInput] = useState('');
+  const [contactPhoneInput, setContactPhoneInput] = useState('');
 
+  const savedFriends = getSavedFriends();
+
+  const loadGroup = () => {
     const saved = getSavedGroups();
-    const found = saved.find((g: any) => g.id === groupId);
-    if (found) {
-      setGroup(found);
-      setEditedName(found.name);
-    } else {
-      const fallbackGroup = {
+    let found = saved.find((g: any) => g.id === groupId);
+
+    if (!found) {
+      found = {
         id: groupId,
         name: 'Совместная поездка',
         category: 'trip',
@@ -74,9 +72,45 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         expenses: [],
         settlements: [],
       };
-      setGroup(fallbackGroup);
-      setEditedName(fallbackGroup.name);
+      saveGroups([found, ...saved]);
     }
+
+    setGroup(found);
+    setEditedName(found.name);
+
+    // Auto-link active logged in user to the event if not already a member
+    getActiveSession().then((u) => {
+      setUserProfile(u);
+      if (u && found) {
+        const isAlreadyMember = (found.members || []).some(
+          (m: any) => m.id === u.id || (m.name && m.name.toLowerCase() === (u.full_name || '').toLowerCase())
+        );
+        if (!isAlreadyMember) {
+          const newMember = {
+            id: u.id || `m-${Date.now()}`,
+            name: u.full_name || 'Участник',
+            avatar: u.avatar_url || '👤',
+            role: 'member',
+          };
+          const updatedGroup = { ...found, members: [...found.members, newMember] };
+          setGroup(updatedGroup);
+          const currentSaved = getSavedGroups();
+          const idx = currentSaved.findIndex((g: any) => g.id === groupId);
+          if (idx !== -1) {
+            currentSaved[idx] = updatedGroup;
+            saveGroups(currentSaved);
+          } else {
+            saveGroups([updatedGroup, ...currentSaved]);
+          }
+        }
+      }
+    });
+  };
+
+  useEffect(() => {
+    loadGroup();
+    const unsubscribe = subscribeToRealtimeSync(loadGroup);
+    return () => unsubscribe();
   }, [groupId]);
 
   if (!group) {
@@ -139,7 +173,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     setTimeout(() => setCopiedInvite(false), 2000);
   };
 
-  // Contacts API Integration (Select from Phonebook)
+  // Contacts Selection
   const handleSelectFromPhonebook = async () => {
     if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
       try {
@@ -147,24 +181,30 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         if (contacts && contacts.length > 0) {
           const cName = contacts[0].name?.[0] || contacts[0].tel?.[0] || 'Контакт';
           addMemberByName(cName);
+          setShowPhonebookModal(false);
+          return;
         }
       } catch (err) {
-        console.warn('Contacts selection cancelled or failed', err);
+        console.warn('Contacts selection cancelled or fallback', err);
       }
-    } else {
-      alert('Выбор из телефонной книги поддерживается на Android/Chrome. Введите имя вручную ниже.');
     }
+    setShowPhonebookModal(true);
   };
 
   const addMemberByName = (nameStr: string) => {
     if (!nameStr.trim()) return;
+    const isExists = (group.members || []).some(
+      (m: any) => m.name.toLowerCase().trim() === nameStr.toLowerCase().trim()
+    );
+    if (isExists) return;
+
     const newMember = {
       id: `m-${Date.now()}`,
       name: nameStr.trim(),
       avatar: '👤',
       role: 'member',
     };
-    const updated = { ...group, members: [...group.members, newMember] };
+    const updated = { ...group, members: [...(group.members || []), newMember] };
     setGroup(updated);
     setNewMemberName('');
     setIsAddingMember(false);
@@ -177,6 +217,15 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     } else {
       saveGroups([updated, ...saved]);
     }
+  };
+
+  const handleAddFromPhonebookSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactNameInput.trim()) return;
+    addMemberByName(contactNameInput);
+    setContactNameInput('');
+    setContactPhoneInput('');
+    setShowPhonebookModal(false);
   };
 
   const handleSaveGroupName = () => {
@@ -241,7 +290,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       <div className="flex items-center justify-between">
         <Link
           href="/"
-          className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
@@ -252,7 +301,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               type="text"
               value={editedName}
               onChange={(e) => setEditedName(e.target.value)}
-              className="w-full px-2 py-1 text-xs font-bold border border-blue-400 rounded-lg focus:outline-none"
+              className="w-full px-2 py-1 text-xs font-bold border border-blue-400 rounded-lg focus:outline-none dark:bg-slate-900 dark:text-white"
             />
             <button
               onClick={handleSaveGroupName}
@@ -263,7 +312,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </div>
         ) : (
           <div className="text-center flex items-center gap-1.5 cursor-pointer" onClick={() => setIsEditingName(true)}>
-            <h2 className="font-extrabold text-slate-900 text-base">{group.name}</h2>
+            <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{group.name}</h2>
             <Edit2 className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
           </div>
         )}
@@ -271,10 +320,10 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowInviteModal(true)}
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+            className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
             title="Пригласить участников"
           >
-            <Share2 className="w-5 h-5 text-blue-600" />
+            <Share2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </button>
         </div>
       </div>
@@ -334,7 +383,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               <span>{categorySegments.length} кат.</span>
             </div>
 
-            {/* Segmented Color Bar */}
             <div className="h-3 w-full rounded-full bg-slate-800/80 overflow-hidden flex shadow-inner border border-white/10">
               {categorySegments.map((seg) => (
                 <div
@@ -346,7 +394,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               ))}
             </div>
 
-            {/* Category Legend Badges */}
             <div className="flex items-center gap-2 overflow-x-auto pt-1 no-scrollbar text-[11px]">
               {categorySegments.map((seg) => (
                 <div
@@ -399,7 +446,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </Link>
         </div>
 
-        {/* Complete Event Footer Button */}
         {!isCompleted && (
           <div className="pt-2">
             <button
@@ -414,7 +460,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       </div>
 
       {/* Group Members Bar */}
-      <div className="stitch-card p-4 space-y-2">
+      <div className="stitch-card p-4 space-y-2 bg-white dark:bg-slate-800">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Участники ({group.members?.length || 0})
@@ -422,7 +468,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           <div className="flex items-center gap-2">
             <button
               onClick={handleSelectFromPhonebook}
-              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100"
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800"
               title="Выбрать из телефонной книги"
             >
               <Phone className="w-3 h-3" />
@@ -430,7 +476,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             </button>
             <button
               onClick={() => setIsAddingMember(true)}
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100"
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800"
             >
               <UserPlus className="w-3 h-3" />
               <span>Добавить</span>
@@ -445,7 +491,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               placeholder="Имя нового участника..."
               value={newMemberName}
               onChange={(e) => setNewMemberName(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none"
+              className="flex-1 px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none dark:bg-slate-900 dark:text-white"
             />
             <button
               onClick={() => addMemberByName(newMemberName)}
@@ -463,10 +509,10 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           {(group.members || []).map((m: any) => (
             <div
               key={m.id}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 flex-shrink-0"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex-shrink-0"
             >
               <span className="text-base">{m.avatar || '👤'}</span>
-              <span className="text-xs font-semibold text-slate-800">{m.name}</span>
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{m.name}</span>
             </div>
           ))}
         </div>
@@ -475,12 +521,12 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       {/* Expenses Feed */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="font-bold text-slate-900 text-sm">
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm">
             Лента транзакций ({(group.expenses || []).length})
           </h4>
           <Link
             href={`/events/${group.id}/expense/new`}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Добавить</span>
@@ -488,7 +534,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         </div>
 
         {(group.expenses || []).length === 0 ? (
-          <div className="stitch-card p-6 text-center text-slate-500 text-xs">
+          <div className="stitch-card p-6 text-center text-slate-500 dark:text-slate-400 text-xs bg-white dark:bg-slate-800">
             Транзакции пока не добавлены. Нажмите «Добавить», чтобы зафиксировать первый расход!
           </div>
         ) : (
@@ -498,24 +544,24 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 (group.members || []).find((m: any) => m.id === expense.paidById) || group.members[0];
 
               return (
-                <div key={expense.id} className="stitch-card p-4 space-y-3 group hover:border-blue-300 transition-all">
+                <div key={expense.id} className="stitch-card p-4 space-y-3 group hover:border-blue-300 transition-all bg-white dark:bg-slate-800">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 font-bold">
                         {paidByMember?.avatar || '👤'}
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 text-sm">{expense.title}</h5>
-                        <p className="text-xs text-slate-500 font-medium">
+                        <h5 className="font-bold text-slate-900 dark:text-white text-sm">{expense.title}</h5>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                           Оплатил(а){' '}
-                          <span className="font-bold text-slate-800">{paidByMember?.name || 'Участник'}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || 'Участник'}</span>
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-start gap-3">
                       <div className="text-right">
-                        <span className="block font-extrabold text-slate-900 text-base">
+                        <span className="block font-extrabold text-slate-900 dark:text-white text-base">
                           {formatMoney(expense.amount, expense.currency || group.currency)}
                         </span>
                         {expense.currency !== group.currency && (
@@ -525,18 +571,17 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         )}
                       </div>
 
-                      {/* Edit & Delete quick action buttons */}
-                      <div className="flex items-center gap-1 pl-1 border-l border-slate-100">
+                      <div className="flex items-center gap-1 pl-1 border-l border-slate-100 dark:border-slate-700">
                         <Link
                           href={`/events/${group.id}/expense/${expense.id}/edit`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-all"
                           title="Редактировать расход"
                         >
                           <Pencil className="w-4 h-4" />
                         </Link>
                         <button
                           onClick={() => setExpenseToDelete(expense)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-all"
                           title="Удалить расход"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -545,10 +590,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                     </div>
                   </div>
 
-                  {/* Splits breakdown */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-[10px] uppercase">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase">
                         {expense.splitType === 'equal' ? 'Поровну' : 'Доли'}
                       </span>
                       <span>• {(expense.splits || []).length} участников</span>
@@ -569,25 +613,113 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         )}
       </div>
 
+      {/* Phonebook Contacts Picker Modal */}
+      {showPhonebookModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base flex items-center gap-2">
+                <Phone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span>Телефонная книга контактов</span>
+              </h3>
+              <button onClick={() => setShowPhonebookModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Pick Saved Friends List */}
+            {savedFriends.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Выбрать из сохраненных друзей:
+                </label>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {savedFriends.map((f) => {
+                    const isAlreadyIn = (group.members || []).some((m: any) => m.name === f.name);
+                    return (
+                      <div
+                        key={f.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{f.avatar || '👤'}</span>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white block">{f.name}</span>
+                            <span className="text-[10px] text-slate-400">{f.phone}</span>
+                          </div>
+                        </div>
+                        <button
+                          disabled={isAlreadyIn}
+                          onClick={() => {
+                            addMemberByName(f.name);
+                            setShowPhonebookModal(false);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            isAlreadyIn
+                              ? 'bg-slate-200 dark:bg-slate-700 text-slate-400'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                          }`}
+                        >
+                          {isAlreadyIn ? 'В событии' : '+ Добавить'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Manual Contact Entry */}
+            <form onSubmit={handleAddFromPhonebookSubmit} className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Или введите контакт вручную:
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Имя контакта"
+                value={contactNameInput}
+                onChange={(e) => setContactNameInput(e.target.value)}
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
+              />
+              <input
+                type="tel"
+                placeholder="+7 (999) 000-00-00"
+                value={contactPhoneInput}
+                onChange={(e) => setContactPhoneInput(e.target.value)}
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
+              />
+
+              <button
+                type="submit"
+                className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md transition-all"
+              >
+                Сохранить контакт в событие
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Delete Expense Modal */}
       {expenseToDelete && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
-            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 text-base">Удаление расхода</h3>
-              <p className="text-xs text-slate-600 font-medium">
-                Удалить «<span className="font-bold text-slate-900">{expenseToDelete.title}</span>» на сумму{' '}
-                <span className="font-extrabold text-slate-900">{formatMoney(expenseToDelete.amount, expenseToDelete.currency)}</span>?
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Удаление расхода</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                Удалить «<span className="font-bold text-slate-900 dark:text-white">{expenseToDelete.title}</span>» на сумму{' '}
+                <span className="font-extrabold text-slate-900 dark:text-white">{formatMoney(expenseToDelete.amount, expenseToDelete.currency)}</span>?
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setExpenseToDelete(null)}
-                className="py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all"
+                className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
               >
                 Отмена
               </button>
@@ -606,13 +738,13 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       {/* Complete Event Confirmation Modal */}
       {showCompleteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 text-base">Завершить событие?</h3>
-              <p className="text-xs text-slate-600 font-medium">
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Завершить событие?</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
                 Все взаиморасчеты будут зафиксированы как выровненные в 0 ₽. Статус события изменится на «Завершено».
               </p>
             </div>
@@ -620,7 +752,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               <button
                 type="button"
                 onClick={() => setShowCompleteModal(false)}
-                className="py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all"
+                className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
               >
                 Отмена
               </button>
@@ -636,19 +768,19 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         </div>
       )}
 
-      {/* Invite Modal (Telegram, WhatsApp, SMS, Web Share API, Contacts) */}
+      {/* Invite Modal */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-900 text-base">Пригласить участников</h3>
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Пригласить участников</h3>
               <button onClick={() => setShowInviteModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-600 font-medium">
-              Отправьте приглашение друзьями в удобном мессенджере или добавьте из телефонной книги:
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+              Отправьте приглашение друзьям в удобном мессенджере или добавьте из телефонной книги:
             </p>
 
             <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -656,7 +788,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(inviteText)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 font-bold text-xs transition-all"
+                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 font-bold text-xs transition-all"
               >
                 <Send className="w-4 h-4 text-sky-600" />
                 <span>Telegram</span>
@@ -666,7 +798,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 href={`https://wa.me/?text=${encodeURIComponent(inviteText + ' ' + inviteLink)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-xs transition-all"
+                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 font-bold text-xs transition-all"
               >
                 <MessageCircle className="w-4 h-4 text-emerald-600" />
                 <span>WhatsApp</span>
@@ -674,7 +806,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
               <a
                 href={`sms:?body=${encodeURIComponent(inviteText + ' ' + inviteLink)}`}
-                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 font-bold text-xs transition-all"
+                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 font-bold text-xs transition-all"
               >
                 <MessageSquare className="w-4 h-4 text-purple-600" />
                 <span>SMS</span>
@@ -682,14 +814,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
               <button
                 onClick={handleNativeShare}
-                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-bold text-xs transition-all"
+                className="flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 font-bold text-xs transition-all"
               >
                 <Share2 className="w-4 h-4 text-blue-600" />
                 <span>Системный</span>
               </button>
             </div>
 
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
               <button
                 onClick={handleSelectFromPhonebook}
                 className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-500/20 transition-all"
@@ -700,7 +832,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             </div>
 
             {copiedInvite && (
-              <p className="text-[11px] font-bold text-center text-emerald-600 bg-emerald-50 p-2 rounded-lg">
+              <p className="text-[11px] font-bold text-center text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 p-2 rounded-lg">
                 Ссылка скопирована в буфер обмена!
               </p>
             )}

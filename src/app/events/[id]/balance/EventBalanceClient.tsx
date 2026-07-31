@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { INITIAL_GROUPS, INITIAL_MEMBERS } from '@/lib/mock-data';
 import { formatMoney } from '@/lib/currency';
 import { simplifyDebts } from '@/lib/debt-simplification';
+import { getSavedGroups, subscribeToRealtimeSync } from '@/lib/supabase';
 import {
   ArrowLeft,
   Scale,
@@ -18,25 +18,46 @@ import {
 } from 'lucide-react';
 
 export default function EventBalanceClient({ groupId }: { groupId: string }) {
-  const group = INITIAL_GROUPS.find((g) => g.id === groupId) || {
-    id: groupId,
-    name: 'Новое событие',
-    category: 'trip' as const,
-    currency: 'RUB',
-    createdBy: 'user-me',
-    createdAt: new Date().toISOString(),
-    members: INITIAL_MEMBERS,
-    expenses: [],
-    settlements: [],
-  };
+  const [group, setGroup] = useState<any>(null);
+
+  useEffect(() => {
+    const loadGroupData = () => {
+      const saved = getSavedGroups();
+      const found = saved.find((g: any) => g.id === groupId);
+      if (found) {
+        setGroup(found);
+      } else {
+        setGroup({
+          id: groupId,
+          name: 'Событие',
+          category: 'trip',
+          currency: 'RUB',
+          members: [
+            { id: 'm-1', name: 'Вы', avatar: '👑' },
+            { id: 'm-2', name: 'Участник 2', avatar: '👤' },
+          ],
+          expenses: [],
+          settlements: [],
+        });
+      }
+    };
+
+    loadGroupData();
+    const unsubscribe = subscribeToRealtimeSync(loadGroupData);
+    return () => unsubscribe();
+  }, [groupId]);
+
+  if (!group) {
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка баланса...</div>;
+  }
 
   // Calculate Net Balances for each member
   const memberBalances: Record<string, { name: string; avatar: string; paid: number; owes: number; netAmount: number }> = {};
 
-  group.members.forEach((m) => {
+  (group.members || []).forEach((m: any) => {
     memberBalances[m.id] = {
       name: m.name,
-      avatar: m.avatar,
+      avatar: m.avatar || '👤',
       paid: 0,
       owes: 0,
       netAmount: 0,
@@ -44,23 +65,40 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
   });
 
   // Calculate total paid & owed from expenses
-  group.expenses.forEach((expense) => {
-    if (memberBalances[expense.paidById]) {
-      memberBalances[expense.paidById].paid += expense.amountInGroupCurrency;
+  (group.expenses || []).forEach((expense: any) => {
+    const paidBy = expense.paidById;
+    const expenseAmt = expense.amountInGroupCurrency || expense.amount || 0;
+
+    if (memberBalances[paidBy]) {
+      memberBalances[paidBy].paid += expenseAmt;
     }
-    expense.splits.forEach((split) => {
-      if (memberBalances[split.userId]) {
-        memberBalances[split.userId].owes += split.amountOwed;
-      }
-    });
+
+    if (expense.splits && expense.splits.length > 0) {
+      expense.splits.forEach((split: any) => {
+        if (memberBalances[split.userId]) {
+          memberBalances[split.userId].owes += (split.amountOwed || 0);
+        }
+      });
+    } else {
+      // Default equal split if splits array missing
+      const memberCount = (group.members || []).length || 1;
+      const share = expenseAmt / memberCount;
+      (group.members || []).forEach((m: any) => {
+        if (memberBalances[m.id]) {
+          memberBalances[m.id].owes += share;
+        }
+      });
+    }
   });
 
-  // Adjust for settlements
-  group.settlements.forEach((s) => {
-    if (s.status === 'completed') {
-      if (memberBalances[s.payerId]) memberBalances[s.payerId].paid += s.amount;
-      if (memberBalances[s.payeeId]) memberBalances[s.payeeId].owes += s.amount;
-    }
+  // Adjust for completed settlements
+  (group.settlements || []).forEach((s: any) => {
+    const fromId = s.fromUserId || s.payerId;
+    const toId = s.toUserId || s.payeeId;
+    const amt = parseFloat(s.amount) || 0;
+
+    if (memberBalances[fromId]) memberBalances[fromId].paid += amt;
+    if (memberBalances[toId]) memberBalances[toId].owes += amt;
   });
 
   // Compute Net Balance
@@ -75,24 +113,24 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
     debtGraphInput[id] = { name: data.name, netAmount: data.netAmount };
   });
 
-  const optimizedTransactions = simplifyDebts(debtGraphInput, group.currency);
+  const optimizedTransactions = simplifyDebts(debtGraphInput, group.currency || 'RUB');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-md mx-auto px-1 pb-24">
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <Link
           href={`/events/${group.id}`}
-          className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 text-base">Баланс & Итоговый расчет</h2>
+        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">Баланс & Итоговый расчет</h2>
         <div className="w-9" />
       </div>
 
       {/* Debt Simplification Alert Card */}
-      <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl space-y-3 relative overflow-hidden">
+      <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white shadow-xl space-y-3 relative overflow-hidden border-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
@@ -108,8 +146,8 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed">
-          Вместо {group.members.length * (group.members.length - 1)} переводов между всеми участниками,
-          алгоритм свел все взаиморасчеты всего к <strong className="text-white font-extrabold">{optimizedTransactions.length} оптимальным транзакциям</strong>.
+          Вместо {(group.members || []).length * ((group.members || []).length - 1)} переводов между всеми участниками,
+          алгоритм свел все взаиморасчеты к <strong className="text-white font-extrabold">{optimizedTransactions.length} оптимальным транзакциям</strong>.
         </p>
 
         <Link
@@ -123,54 +161,54 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
       {/* Optimized Transactions Graph List */}
       <div className="space-y-3">
-        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+        <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
           <span>Оптимальные переводы для закрытия долгов</span>
-          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold">
             {optimizedTransactions.length}
           </span>
         </h3>
 
         {optimizedTransactions.length === 0 ? (
-          <div className="stitch-card p-5 text-center text-xs text-slate-500">
+          <div className="stitch-card p-5 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800">
             Все расчеты выполнены. Никто никому не должен! 🎉
           </div>
         ) : (
           optimizedTransactions.map((tx, idx) => {
-            const fromMember = group.members.find((m) => m.id === tx.fromId);
-            const toMember = group.members.find((m) => m.id === tx.toId);
+            const fromMember = (group.members || []).find((m: any) => m.id === tx.fromId) || { name: 'Участник', avatar: '👤' };
+            const toMember = (group.members || []).find((m: any) => m.id === tx.toId) || { name: 'Участник', avatar: '👤' };
 
             return (
               <div
                 key={idx}
-                className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all"
+                className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all bg-white dark:bg-slate-800"
               >
                 <div className="flex items-center gap-3">
                   <div className="flex items-center -space-x-1">
-                    <div className="w-9 h-9 rounded-full bg-amber-100 border-2 border-white flex items-center justify-center text-sm font-bold shadow-xs">
+                    <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs">
                       {fromMember?.avatar || '👤'}
                     </div>
-                    <div className="w-9 h-9 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center text-sm font-bold shadow-xs">
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs">
                       {toMember?.avatar || '👤'}
                     </div>
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-1 text-xs font-bold text-slate-900">
-                      <span>{fromMember?.name.split(' ')[0]}</span>
+                    <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white">
+                      <span>{fromMember?.name?.split(' ')[0]}</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{toMember?.name.split(' ')[0]}</span>
+                      <span>{toMember?.name?.split(' ')[0]}</span>
                     </div>
-                    <span className="text-[11px] text-slate-500 font-medium">Перевод через СБП / Карту</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Перевод через СБП / Карту</span>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="font-extrabold text-slate-900 text-sm">
-                    {formatMoney(tx.amount, tx.currency)}
+                  <span className="font-extrabold text-slate-900 dark:text-white text-sm">
+                    {formatMoney(tx.amount, tx.currency || group.currency || 'RUB')}
                   </span>
                   <Link
                     href={`/events/${group.id}/settle?from=${tx.fromId}&to=${tx.toId}&amount=${tx.amount}`}
-                    className="block text-[11px] font-bold text-blue-600 hover:text-blue-700 mt-0.5"
+                    className="block text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 mt-0.5"
                   >
                     Оплатить ➔
                   </Link>
@@ -183,7 +221,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
       {/* Individual Net Balances List */}
       <div className="space-y-3 pt-2">
-        <h3 className="font-bold text-slate-900 text-sm">Итоговые балансы участников</h3>
+        <h3 className="font-bold text-slate-900 dark:text-white text-sm">Итоговые балансы участников</h3>
 
         <div className="space-y-2.5">
           {Object.entries(memberBalances).map(([id, data]) => {
@@ -191,15 +229,15 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
             const owes = data.netAmount < -0.01;
 
             return (
-              <div key={id} className="stitch-card p-3.5 flex items-center justify-between">
+              <div key={id} className="stitch-card p-3.5 flex items-center justify-between bg-white dark:bg-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-base">
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-base">
                     {data.avatar}
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-xs">{data.name}</h4>
-                    <p className="text-[11px] text-slate-500">
-                      Оплатил(а): {formatMoney(data.paid, group.currency)}
+                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">{data.name}</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Оплатил(а): {formatMoney(data.paid, group.currency || 'RUB')}
                     </p>
                   </div>
                 </div>
@@ -207,11 +245,11 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                 <div className="text-right">
                   <span
                     className={`font-extrabold text-sm ${
-                      isOwed ? 'text-emerald-600' : owes ? 'text-amber-600' : 'text-slate-400'
+                      isOwed ? 'text-emerald-600 dark:text-emerald-400' : owes ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
                     }`}
                   >
                     {isOwed && '+ '}
-                    {formatMoney(data.netAmount, group.currency)}
+                    {formatMoney(data.netAmount, group.currency || 'RUB')}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-semibold">
                     {isOwed ? 'Ему должны' : owes ? 'Должен' : 'В расчете'}
