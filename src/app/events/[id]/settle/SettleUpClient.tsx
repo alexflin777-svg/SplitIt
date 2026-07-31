@@ -1,30 +1,42 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
-import { ArrowLeft, CheckCircle2, CreditCard, Smartphone, Banknote, Upload, ShieldCheck } from 'lucide-react';
-import { INITIAL_GROUPS, INITIAL_MEMBERS } from '@/lib/mock-data';
-import { CURRENCIES, formatMoney } from '@/lib/currency';
+import { ArrowLeft, CheckCircle2, CreditCard, Smartphone, Banknote, ShieldCheck, Check } from 'lucide-react';
+import { getSavedGroups, saveGroups } from '@/lib/supabase';
+import { formatMoney } from '@/lib/currency';
 
 function SettleUpForm({ groupId }: { groupId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const group = INITIAL_GROUPS.find((g) => g.id === groupId) || {
-    id: groupId,
-    name: 'Новое событие',
-    category: 'trip' as const,
-    currency: 'RUB',
-    createdBy: 'user-me',
-    createdAt: new Date().toISOString(),
-    members: INITIAL_MEMBERS,
-    expenses: [],
-    settlements: [],
-  };
 
-  const defaultFrom = searchParams.get('from') || group.members[0]?.id || 'user-me';
-  const defaultTo = searchParams.get('to') || group.members[0]?.id || 'user-me';
+  const [group, setGroup] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = getSavedGroups();
+    const found = saved.find((g: any) => g.id === groupId);
+    if (found) {
+      setGroup(found);
+    } else {
+      setGroup({
+        id: groupId,
+        name: 'Совместная поездка',
+        currency: 'RUB',
+        status: 'active',
+        members: [
+          { id: 'm-1', name: 'Вы', avatar: '👑' },
+          { id: 'm-2', name: 'Максим', avatar: '👤' },
+        ],
+        expenses: [],
+        settlements: [],
+      });
+    }
+  }, [groupId]);
+
+  const defaultFrom = searchParams.get('from') || 'm-1';
+  const defaultTo = searchParams.get('to') || 'm-2';
   const defaultAmount = searchParams.get('amount') || '5000';
 
   const [payerId, setPayerId] = useState(defaultFrom);
@@ -33,25 +45,92 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'cash'>('sbp');
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const payerMember = group.members.find((m) => m.id === payerId) || group.members[0];
-  const payeeMember = group.members.find((m) => m.id === payeeId) || group.members[0];
+  if (!group) {
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка взаиморасчетов...</div>;
+  }
+
+  const payerMember = (group.members || []).find((m: any) => m.id === payerId) || group.members[0];
+  const payeeMember = (group.members || []).find((m: any) => m.id === payeeId) || group.members[0];
 
   const handleSettleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const parsedAmount = parseFloat(amount) || 0;
+    if (!parsedAmount) return;
+
+    // Create settlement record
+    const newSettlement = {
+      id: 'stl-' + Date.now(),
+      fromUserId: payerId,
+      toUserId: payeeId,
+      amount: parsedAmount,
+      currency: group.currency || 'RUB',
+      method: paymentMethod,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedGroup = {
+      ...group,
+      settlements: [newSettlement, ...(group.settlements || [])],
+    };
+
+    const saved = getSavedGroups();
+    const idx = saved.findIndex((g: any) => g.id === group.id);
+    if (idx !== -1) {
+      saved[idx] = updatedGroup;
+      saveGroups(saved);
+    } else {
+      saveGroups([updatedGroup, ...saved]);
+    }
+
     setIsSuccess(true);
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
+    try {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch (err) {
+      console.warn('Confetti error', err);
+    }
 
     setTimeout(() => {
       router.push(`/events/${group.id}`);
-    }, 2500);
+    }, 2000);
+  };
+
+  const handleCompleteAllSettlements = () => {
+    const updatedGroup = {
+      ...group,
+      status: 'completed',
+    };
+
+    const saved = getSavedGroups();
+    const idx = saved.findIndex((g: any) => g.id === group.id);
+    if (idx !== -1) {
+      saved[idx] = updatedGroup;
+      saveGroups(saved);
+    } else {
+      saveGroups([updatedGroup, ...saved]);
+    }
+
+    setIsSuccess(true);
+    try {
+      confetti({
+        particleCount: 150,
+        spread: 90,
+        origin: { y: 0.5 },
+      });
+    } catch (err) {
+      console.warn('Confetti error', err);
+    }
+
+    setTimeout(() => {
+      router.push(`/events/${group.id}`);
+    }, 2000);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <Link
@@ -69,9 +148,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto text-white">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <h3 className="text-xl font-extrabold">Оплата зарегистрирована!</h3>
-          <p className="text-xs text-emerald-100 max-w-xs mx-auto">
-            Перевод между {payerMember.name} и {payeeMember.name} учтен в балансе группы.
+          <h3 className="text-xl font-extrabold">Оплата успешно зарегистрирована!</h3>
+          <p className="text-xs text-emerald-100 max-w-xs mx-auto font-medium">
+            Перевод между {payerMember?.name} и {payeeMember?.name} учтен в итоговом балансе группы.
           </p>
         </div>
       )}
@@ -88,9 +167,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
               onChange={(e) => setPayerId(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
-              {group.members.map((m) => (
+              {(group.members || []).map((m: any) => (
                 <option key={m.id} value={m.id}>
-                  {m.avatar} {m.name}
+                  {m.avatar || '👤'} {m.name}
                 </option>
               ))}
             </select>
@@ -105,9 +184,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
               onChange={(e) => setPayeeId(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
-              {group.members.map((m) => (
+              {(group.members || []).map((m: any) => (
                 <option key={m.id} value={m.id}>
-                  {m.avatar} {m.name}
+                  {m.avatar || '👤'} {m.name}
                 </option>
               ))}
             </select>
@@ -117,7 +196,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
         {/* Amount Input */}
         <div className="stitch-card p-5 space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Сумма перевода ({group.currency})
+            Сумма перевода ({group.currency || 'RUB'})
           </label>
           <input
             type="number"
@@ -163,24 +242,24 @@ function SettleUpForm({ groupId }: { groupId: string }) {
           </div>
         </div>
 
-        {/* Phone / Details for SBP */}
-        {paymentMethod === 'sbp' && payeeMember.phone && (
-          <div className="stitch-card p-4 bg-emerald-50/60 border-emerald-200 text-xs text-emerald-900 space-y-1">
-            <div className="flex items-center gap-2 font-bold">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Телефон получателя {payeeMember.name}:</span>
-            </div>
-            <p className="font-extrabold text-sm text-emerald-800 pl-6">{payeeMember.phone}</p>
-          </div>
-        )}
-
         {/* Action Button */}
-        <button
-          type="submit"
-          className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md shadow-emerald-500/20 transition-all active:scale-98"
-        >
-          Подтвердить перевод
-        </button>
+        <div className="space-y-3">
+          <button
+            type="submit"
+            className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md shadow-emerald-500/20 transition-all active:scale-98"
+          >
+            Подтвердить перевод
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCompleteAllSettlements}
+            className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Завершить все взаиморасчеты и закрыть событие</span>
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -188,7 +267,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
 
 export default function SettleUpClient({ groupId }: { groupId: string }) {
   return (
-    <Suspense fallback={<div className="p-4 text-xs font-bold text-slate-500">Загрузка формы...</div>}>
+    <Suspense fallback={<div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка формы...</div>}>
       <SettleUpForm groupId={groupId} />
     </Suspense>
   );
