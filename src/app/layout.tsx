@@ -26,8 +26,8 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
-        {/* Top Navbar with iOS Notch Safe Area Support */}
-        <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-11 pb-3">
+        {/* Top Navbar with Responsive Mobile Safe Area Support */}
+        <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-3 sm:pt-4 pb-3">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2 group">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">
@@ -55,8 +55,8 @@ export default function RootLayout({
           </div>
         </header>
 
-        {/* Main Content Container */}
-        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-24">
+        {/* Main Content Container with Fixed Width Guard */}
+        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-24 space-y-4">
           {children}
         </main>
 

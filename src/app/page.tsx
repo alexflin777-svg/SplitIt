@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
-import { getActiveSession, getSavedGroups, subscribeToRealtimeSync, UserProfile } from '@/lib/supabase';
+import { getActiveSession, getSavedGroups, subscribeToRealtimeSync, UserProfile, saveLocalSession } from '@/lib/supabase';
 import {
   Plus,
   Plane,
@@ -17,47 +17,66 @@ import {
   TrendingUp,
   Search,
   Users,
+  ShieldCheck,
+  Zap,
+  Smartphone,
+  Camera,
+  ArrowRight,
+  UserCheck,
+  KeyRound,
+  LogOut,
 } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
-  const [groups, setGroups] = useState<any[]>(() => getSavedGroups());
+  const [groups, setGroups] = useState<any[]>([]);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // Synchronize groups state on mount
-    setGroups(getSavedGroups());
-
-    // Check active session - redirect to auth if not logged in
+    // Check active user session
     getActiveSession().then((user) => {
+      setUserProfile(user);
       if (user) {
-        setUserProfile(user);
         setGroups(getSavedGroups());
-      } else {
-        router.push('/auth');
       }
+      setIsLoaded(true);
     });
 
     const handleProfileChanged = () => {
       getActiveSession().then((user) => {
-        if (user) setUserProfile(user);
-        setGroups(getSavedGroups());
+        setUserProfile(user);
+        if (user) setGroups(getSavedGroups());
       });
     };
     window.addEventListener('splitit_profile_changed', handleProfileChanged);
 
-    // Subscribe to cross-tab / multi-user realtime sync
+    // Subscribe to cross-device and multi-tab realtime sync
     const unsubscribe = subscribeToRealtimeSync(() => {
       setGroups(getSavedGroups());
+      getActiveSession().then((user) => setUserProfile(user));
     });
 
     return () => {
       window.removeEventListener('splitit_profile_changed', handleProfileChanged);
       unsubscribe();
     };
-  }, [router]);
+  }, []);
+
+  const handleDemoLogin = () => {
+    const demoUser: UserProfile = {
+      id: 'demo-user-' + Date.now(),
+      email: 'demo@splitit.app',
+      full_name: 'Алексей (Демо)',
+      avatar_url: '👨‍💻',
+      preferred_currency: 'RUB',
+    };
+    saveLocalSession(demoUser);
+    setUserProfile(demoUser);
+    setGroups(getSavedGroups());
+  };
 
   const categoryIcons: Record<string, any> = {
     trip: <Plane className="w-5 h-5 text-blue-500" />,
@@ -78,34 +97,147 @@ export default function HomePage() {
     return acc + groupSum;
   }, 0);
 
-  return (
-    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
-      {/* User Greeting Bar */}
-      {userProfile && (
-        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 font-extrabold flex items-center justify-center text-lg overflow-hidden">
-              {userProfile.avatar_url && userProfile.avatar_url.startsWith('data:image') ? (
-                <img src={userProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span>{userProfile.avatar_url || '👤'}</span>
-              )}
+  if (!isLoaded) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-slate-500 font-semibold">Загрузка данных...</p>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------------------------
+  // WELCOME LANDING SCREEN (If no user is logged in)
+  // ----------------------------------------------------------------------
+  if (!userProfile) {
+    return (
+      <div className="space-y-6 max-w-md mx-auto px-1 pb-20 animate-in fade-in duration-300">
+        {/* Welcome Banner Card */}
+        <div className="stitch-card p-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-900 text-white shadow-xl relative overflow-hidden text-center space-y-4">
+          <div className="absolute -right-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center mx-auto shadow-inner text-3xl">
+            🤝
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
+              Делите чеки и расходы без путаницы и долгов
+            </h1>
+            <p className="text-xs text-blue-100/90 max-w-xs mx-auto leading-relaxed">
+              Удобный сервис для совместных поездок, ресторанов и компаний. Синхронизация между несколькими устройствами в реальном времени.
+            </p>
+          </div>
+
+          {/* Welcome Action Buttons */}
+          <div className="pt-2 space-y-2.5 max-w-xs mx-auto">
+            <Link
+              href="/auth?mode=register"
+              className="w-full py-3.5 rounded-xl bg-white text-blue-700 font-extrabold text-sm shadow-md hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-98"
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>Создать аккаунт</span>
+            </Link>
+
+            <Link
+              href="/auth?mode=login"
+              className="w-full py-3 rounded-xl bg-blue-800/80 hover:bg-blue-800 border border-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Войти в свой профиль</span>
+            </Link>
+
+            <button
+              onClick={handleDemoLogin}
+              className="w-full py-2.5 text-xs text-blue-200 font-semibold hover:text-white flex items-center justify-center gap-1 transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Попробовать быстрый демо-вход</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Key Features Cards */}
+        <div className="space-y-3">
+          <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">
+            Основные возможности SplitIt:
+          </h3>
+
+          <div className="grid grid-cols-1 gap-2.5">
+            <div className="stitch-card p-3.5 flex items-start gap-3 bg-white dark:bg-slate-800">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
+                  Синхронизация в реальном времени
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Заходите с 2х или более устройств под своим аккаунтом — любые добавления и редактирования обновляются мгновенно.
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Активный профиль
-              </span>
-              <h3 className="font-extrabold text-slate-900 text-sm">{userProfile.full_name}</h3>
+
+            <div className="stitch-card p-3.5 flex items-start gap-3 bg-white dark:bg-slate-800">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center flex-shrink-0">
+                <Camera className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
+                  Сканирование чеков по фото (OCR)
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Сфотографируйте чек из ресторана или магазина — нейросеть автоматически распознает сумму и позиции.
+                </p>
+              </div>
+            </div>
+
+            <div className="stitch-card p-3.5 flex items-start gap-3 bg-white dark:bg-slate-800">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
+                  Нативные приложения iOS и Android
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Готовые мобильные приложения с темной темой, встроенным сканером и поддержкой всех устройств.
+                </p>
+              </div>
             </div>
           </div>
-          <Link
-            href="/auth"
-            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
-          >
-            Сменить
-          </Link>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------------------------
+  // AUTHENTICATED USER WORKSPACE FEED
+  // ----------------------------------------------------------------------
+  return (
+    <div className="space-y-5 max-w-md mx-auto px-1 pb-24">
+      {/* User Greeting Bar */}
+      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold flex items-center justify-center text-lg overflow-hidden border border-blue-200/50">
+            {userProfile.avatar_url && userProfile.avatar_url.startsWith('data:image') ? (
+              <img src={userProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span>{userProfile.avatar_url || '👤'}</span>
+            )}
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block">
+              Вы вошли как
+            </span>
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">{userProfile.full_name}</h3>
+          </div>
+        </div>
+        <Link
+          href="/auth"
+          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all"
+        >
+          Сменить
+        </Link>
+      </div>
 
       {/* Top User Financial Overview Card */}
       <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white shadow-xl relative overflow-hidden">
@@ -157,7 +289,7 @@ export default function HomePage() {
             placeholder="Поиск событий или групп..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-400 shadow-sm"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-400 shadow-sm"
           />
         </div>
 
@@ -174,7 +306,7 @@ export default function HomePage() {
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                 filterCategory === cat.id
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
               }`}
             >
               {cat.label}
@@ -185,15 +317,15 @@ export default function HomePage() {
 
       {/* Events List Header */}
       <div className="flex items-center justify-between pt-1">
-        <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+        <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
           <span>Мои группы и события</span>
-          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-extrabold">
+          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
             {filteredGroups.length}
           </span>
         </h3>
         <Link
           href="/events/new"
-          className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
         >
           <span>Создать</span>
           <Plus className="w-3.5 h-3.5" />
@@ -211,15 +343,15 @@ export default function HomePage() {
               <Link
                 key={group.id}
                 href={`/events/${group.id}`}
-                className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all block"
+                className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all block bg-white dark:bg-slate-800"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/40 flex items-center justify-center">
                     {categoryIcons[group.category] || categoryIcons.trip}
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{group.name}</h4>
-                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">{group.name}</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                       <Users className="w-3 h-3 text-slate-400" />
                       <span>{group.members?.length || 1} участн.</span>
                       <span>•</span>
@@ -230,10 +362,10 @@ export default function HomePage() {
 
                 <div className="flex items-center gap-2 text-right">
                   <div>
-                    <span className="block font-extrabold text-slate-900 text-sm">
+                    <span className="block font-extrabold text-slate-900 dark:text-white text-sm">
                       {formatMoney(groupSum, group.currency || 'RUB')}
                     </span>
-                    <span className="text-[10px] text-blue-600 font-semibold">Открыть ➔</span>
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Открыть ➔</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </div>
@@ -242,16 +374,16 @@ export default function HomePage() {
           })}
         </div>
       ) : (
-        <div className="text-center py-12 stitch-card bg-white space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center shadow-xs">
+        <div className="text-center py-12 stitch-card bg-white dark:bg-slate-800 space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center shadow-xs">
             <Sparkles className="w-7 h-7" />
           </div>
           <div className="space-y-1">
-            <h4 className="font-extrabold text-slate-900 text-base">
-              {userProfile ? `Добро пожаловать, ${userProfile.full_name}!` : 'Нет активных событий'}
+            <h4 className="font-extrabold text-slate-900 dark:text-white text-base">
+              У вас пока нет активных событий
             </h4>
-            <p className="text-xs text-slate-500 max-w-xs mx-auto">
-              Создайте первое совместное событие (поездку, ресторан или совместное жилье) для разделения расходов с друзьями.
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+              Создайте первое совместное событие для разделения расходов с друзьями.
             </p>
           </div>
           
@@ -261,7 +393,7 @@ export default function HomePage() {
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Создать первое событие</span>
+              <span>Создать событие</span>
             </Link>
           </div>
         </div>

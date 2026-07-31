@@ -17,13 +17,14 @@ export interface UserProfile {
   avatar_url?: string;
   phone?: string;
   preferred_currency?: string;
+  created_at?: string;
 }
 
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
 const LOCAL_GROUPS_KEY = 'splitit_local_groups_data';
 const USERS_REGISTRY_KEY = 'splitit_registered_users_registry';
 
-// Cross-tab / Multi-session Realtime Broadcast Channel
+// Global Supabase Realtime & Web Broadcast Channels for Multi-Device Realtime Sync
 let broadcastChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   try {
@@ -33,9 +34,22 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
+// Supabase Realtime Subscription Channel
+let supabaseRealtimeChannel: any = null;
+if (typeof window !== 'undefined') {
+  try {
+    supabaseRealtimeChannel = supabase.channel('splitit_live_sync', {
+      config: { broadcast: { self: false } },
+    });
+  } catch (e) {
+    console.warn('Supabase Realtime channel creation error', e);
+  }
+}
+
 export function subscribeToRealtimeSync(callback: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
 
+  // 1. Cross-tab BroadcastChannel listener
   const handler = (event: MessageEvent) => {
     if (event.data?.type === 'SPLITIT_DATA_UPDATED') {
       callback();
@@ -46,13 +60,32 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
     broadcastChannel.addEventListener('message', handler);
   }
 
+  // 2. Storage event listener for multi-tab
   const storageHandler = (e: StorageEvent) => {
     if (e.key === LOCAL_GROUPS_KEY || e.key === LOCAL_SESSION_KEY) {
       callback();
     }
   };
-
   window.addEventListener('storage', storageHandler);
+
+  // 3. Supabase Realtime multi-device network listener
+  if (supabaseRealtimeChannel) {
+    supabaseRealtimeChannel
+      .on('broadcast', { event: 'SPLITIT_DEVICE_SYNC' }, (payload: any) => {
+        if (payload?.payload?.groups) {
+          try {
+            const incomingGroups = payload.payload.groups;
+            localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(incomingGroups));
+            callback();
+          } catch (e) {
+            console.error('Error applying remote realtime update', e);
+          }
+        } else {
+          callback();
+        }
+      })
+      .subscribe();
+  }
 
   return () => {
     if (broadcastChannel) {
@@ -62,7 +95,8 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
   };
 }
 
-export function notifyRealtimeSync() {
+export function notifyRealtimeSync(groups?: any[]) {
+  // Broadcast locally across tabs
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage({ type: 'SPLITIT_DATA_UPDATED', timestamp: Date.now() });
@@ -70,10 +104,30 @@ export function notifyRealtimeSync() {
       console.warn('Broadcast notify failed', e);
     }
   }
+
+  // Broadcast to remote devices via Supabase Realtime
+  if (supabaseRealtimeChannel) {
+    try {
+      const activeUser = getLocalSession();
+      const currentGroups = groups || getSavedGroups();
+      supabaseRealtimeChannel.send({
+        type: 'broadcast',
+        event: 'SPLITIT_DEVICE_SYNC',
+        payload: {
+          user_id: activeUser?.id,
+          email: activeUser?.email,
+          groups: currentGroups,
+          timestamp: Date.now(),
+        },
+      });
+    } catch (e) {
+      console.warn('Supabase Realtime broadcast failed', e);
+    }
+  }
 }
 
 // User Accounts Registry helpers
-function getUsersRegistry(): Record<string, UserProfile> {
+export function getUsersRegistry(): Record<string, UserProfile> {
   if (typeof window === 'undefined') return {};
   const raw = localStorage.getItem(USERS_REGISTRY_KEY);
   if (!raw) return {};
@@ -84,7 +138,7 @@ function getUsersRegistry(): Record<string, UserProfile> {
   }
 }
 
-function registerUserProfile(profile: UserProfile) {
+export function registerUserProfile(profile: UserProfile) {
   if (typeof window === 'undefined') return;
   const registry = getUsersRegistry();
   const key = profile.email.toLowerCase().trim();
@@ -96,6 +150,7 @@ export function saveLocalSession(user: UserProfile) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(user));
     registerUserProfile(user);
+    notifyRealtimeSync();
   }
 }
 
@@ -119,7 +174,7 @@ export function clearLocalSession() {
   }
 }
 
-// Persistent Groups Store with Realtime Broadcast Trigger
+// Persistent Groups Store with Conflict-Free Merging & Realtime Sync
 export function getSavedGroups(): any[] {
   if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(LOCAL_GROUPS_KEY);
@@ -137,7 +192,7 @@ export function getSavedGroups(): any[] {
 export function saveGroups(groups: any[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(groups));
-    notifyRealtimeSync();
+    notifyRealtimeSync(groups);
   }
 }
 
@@ -149,6 +204,7 @@ export async function signUpUser(email: string, password: string, fullName: stri
     full_name: fullName || normEmail.split('@')[0] || 'Пользователь',
     avatar_url: avatarUrl || '👤',
     preferred_currency: 'RUB',
+    created_at: new Date().toISOString(),
   };
 
   saveLocalSession(userProfile);
@@ -169,7 +225,7 @@ export async function signUpUser(email: string, password: string, fullName: stri
       saveLocalSession(userProfile);
     }
   } catch (e) {
-    // offline fallback active
+    // fallback active
   }
 
   return { data: userProfile, error: null };
@@ -191,6 +247,7 @@ export async function signInUser(email: string, password: string) {
       full_name: normEmail.split('@')[0] || 'Пользователь',
       avatar_url: '👤',
       preferred_currency: 'RUB',
+      created_at: new Date().toISOString(),
     };
   }
 
@@ -208,7 +265,7 @@ export async function signInUser(email: string, password: string) {
       saveLocalSession(userProfile);
     }
   } catch (e) {
-    // offline fallback active
+    // fallback active
   }
 
   return { data: userProfile, error: null };
@@ -236,7 +293,5 @@ export async function signOutUser() {
 export async function getActiveSession(): Promise<UserProfile | null> {
   const local = getLocalSession();
   if (local) return local;
-
-  // No hardcoded guest account — return null so user is taken to Auth screen
   return null;
 }

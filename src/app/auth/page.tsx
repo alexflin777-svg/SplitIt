@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera } from 'lucide-react';
+import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck } from 'lucide-react';
 import { signUpUser, signInUser, resetPassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
 
 export default function AuthPage() {
@@ -67,7 +67,7 @@ export default function AuthPage() {
       const selectedAvatar = customAvatarPreview || avatarUrl;
       const { data } = await signUpUser(email, password, fullName || 'Пользователь', selectedAvatar);
       setLoading(false);
-      setStatusMessage(`Аккаунт ${fullName || email} создан! Добро пожаловать.`);
+      setStatusMessage(`Аккаунт ${fullName || email} успешно зарегистрирован!`);
       setTimeout(() => {
         router.push('/');
       }, 800);
@@ -101,71 +101,73 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
+    <div className="space-y-5 max-w-md mx-auto px-1 pb-24">
       {/* Header */}
       <div className="text-center space-y-2">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20 overflow-hidden">
           {customAvatarPreview ? (
             <img src={customAvatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-2xl" />
           ) : (
             <span>S</span>
           )}
         </div>
-        <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-          {mode === 'login' && 'Вход в SplitIt'}
+        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          {mode === 'login' && 'Вход в ваш профиль'}
           {mode === 'register' && 'Регистрация аккаунта'}
           {mode === 'reset' && 'Восстановление пароля'}
         </h2>
-        <p className="text-xs text-slate-500 max-w-xs mx-auto">
-          Войдите или зарегистрируйтесь для синхронизации расходов с друзьями и создания групп.
+        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+          Авторизуйтесь на любых 2х и более устройствах для мгновенной синхронизации расходов без конфликтов.
         </p>
       </div>
 
       {/* Status Message */}
       {statusMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 font-bold animate-in fade-in">
+        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2 font-bold animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <span>{statusMessage}</span>
         </div>
       )}
 
       {/* Mode Selector Tabs */}
-      <div className="stitch-card p-1.5 flex items-center bg-slate-100/70 border-slate-200">
+      <div className="stitch-card p-1.5 flex items-center bg-slate-100/80 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <button
           onClick={() => setMode('register')}
-          className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${
-            mode === 'register' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+          className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+            mode === 'register' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
           }`}
         >
           Регистрация
         </button>
         <button
           onClick={() => setMode('login')}
-          className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${
-            mode === 'login' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+          className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+            mode === 'login' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
           }`}
         >
           Вход
         </button>
         <button
           onClick={() => setMode('reset')}
-          className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${
-            mode === 'reset' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+          className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+            mode === 'reset' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
           }`}
         >
           Сброс пароля
         </button>
       </div>
 
-      {/* Auth Form */}
-      <form onSubmit={handleSubmit} className="stitch-card p-5 space-y-4">
+      {/* Auth Form with Aligned Input Fields */}
+      <form onSubmit={handleSubmit} className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
         {mode === 'register' && (
           <>
             {/* Avatar Picker & Upload */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700 block">Выбор или загрузка аватара</label>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                Выбор или загрузка аватара
+              </label>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                 {presetAvatars.map((av) => (
                   <button
                     key={av}
@@ -174,17 +176,17 @@ export default function AuthPage() {
                       setAvatarUrl(av);
                       setCustomAvatarPreview(null);
                     }}
-                    className={`w-9 h-9 rounded-xl border flex items-center justify-center text-base transition-all ${
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center text-base flex-shrink-0 transition-all ${
                       avatarUrl === av && !customAvatarPreview
-                        ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-500/20'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/50 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50'
                     }`}
                   >
                     {av}
                   </button>
                 ))}
 
-                <label className="w-9 h-9 rounded-xl border border-dashed border-blue-400 bg-blue-50/50 hover:bg-blue-100/50 flex items-center justify-center text-blue-600 cursor-pointer transition-all" title="Загрузить свое фото">
+                <label className="w-9 h-9 rounded-xl border border-dashed border-blue-400 bg-blue-50/50 dark:bg-blue-900/30 hover:bg-blue-100/50 flex items-center justify-center text-blue-600 dark:text-blue-400 cursor-pointer flex-shrink-0 transition-all" title="Загрузить свое фото">
                   <Camera className="w-4 h-4" />
                   <input type="file" accept="image/*" onChange={handleAvatarFileUpload} className="hidden" />
                 </label>
@@ -192,16 +194,16 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Ваше имя или никнейм</label>
-              <div className="relative">
-                <User className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Ваше имя или никнейм</label>
+              <div className="relative flex items-center">
+                <User className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   required
                   placeholder="Иван Иванов"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
             </div>
@@ -209,32 +211,32 @@ export default function AuthPage() {
         )}
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">Электронная почта (Email)</label>
-          <div className="relative">
-            <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Электронная почта (Email)</label>
+          <div className="relative flex items-center">
+            <Mail className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
             <input
               type="email"
               required
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
         </div>
 
         {mode !== 'reset' && (
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Пароль</label>
-            <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Пароль</label>
+            <div className="relative flex items-center">
+              <Lock className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="password"
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
             </div>
           </div>
@@ -243,7 +245,7 @@ export default function AuthPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+          className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
         >
           <span>
             {loading
@@ -258,11 +260,11 @@ export default function AuthPage() {
         </button>
 
         {/* Guest Demo Login Button */}
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
           <button
             type="button"
             onClick={handleGuestLogin}
-            className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+            className="w-full h-10 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all"
           >
             <Sparkles className="w-4 h-4 text-amber-500" />
             <span>Быстрый демо-вход</span>
