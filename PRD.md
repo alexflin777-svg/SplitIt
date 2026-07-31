@@ -7,6 +7,13 @@
 
 ---
 
+## 1.1. Распределение ролей в команде разработки
+- 🧠 **Cloud (Claude / Anthropic)**: Разработка основного кода приложения, бизнес-логики, функции расчетов и бэкенд (Supabase integration & SQL).
+- 🔍 **Codex (OpenAI / Chk)**: Верификатор, независимый чекер качества, QA, проверка RLS-безопасности и тестовое покрытие (`bug_report.md`).
+- 🎨 **Gemini / Antigravity**: UX/UI дизайн, верстка (Stitch 2.0 aesthetics, Tailwind CSS, темная/светлая темы), нативная сборка (iOS `.ipa`/`.app`, Android `.apk`), деплой и Git-коммиты.
+
+---
+
 ## 2. Архитектура и Технологический Стек
 - **Frontend**: Next.js 14+ (App Router, TypeScript, Tailwind CSS, Shadcn UI, Lucide Icons, Canvas-Confetti, Framer Motion).
 - **Backend & Database**: Supabase (PostgreSQL, Auth, Storage, Edge Functions / SQL Migrations).
