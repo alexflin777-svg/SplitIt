@@ -1,0 +1,37 @@
+# Зависимости
+node_modules/
+
+# Сборка
+.next/
+out/
+build/
+dist/
+
+# Тесты
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+.playwright-cli/
+
+# Служебное
+tsconfig.tsbuildinfo
+
+# Мобильные артефакты
+*.apk
+*.ipa
+*.app/
+android/app/build/
+ios/App/build/
+ios/App/Pods/
+
+# Окружение — секреты не коммитятся (см. .agents/rules/antigravity2_core.md §8)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# Прочее
+.DS_Store
+*.log
+.vercel
