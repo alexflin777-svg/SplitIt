@@ -34,10 +34,13 @@
 Через панель управления, без установки CLI:
 
 1. **SQL Editor** → **New query**.
-2. Выполните по очереди, в этом порядке, каждый файл целиком:
+2. Выполните по очереди, в лексикографическом порядке, каждый `.sql`-файл из
+   `supabase/migrations/` целиком. На текущем срезе это:
    - `supabase/migrations/20260731000000_init_splitit_schema.sql`
    - `supabase/migrations/20260731000001_drop_permissive_rls.sql`
    - `supabase/migrations/20260731000002_multiuser_support.sql`
+   - `supabase/migrations/20260801000000_fix_multiuser_contracts.sql`
+   - `supabase/migrations/20260801000001_harden_function_privileges.sql`
 
 Через CLI, если предпочитаете:
 
