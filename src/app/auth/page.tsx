@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Shield, CheckCircle2, ArrowRight, Smartphone, User, AlertCircle, Sparkles, Camera, KeyRound } from 'lucide-react';
 import { signUpUser, signInUser, resetPassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
+import ProfileTesterBar from '@/components/ProfileTesterBar';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -104,7 +105,15 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
+      {/* Quick Profile Tester Switcher Bar */}
+      <ProfileTesterBar
+        onProfileChanged={(p) => {
+          setStatusMessage(`Переключен профиль на: ${p.full_name}`);
+          setTimeout(() => router.push('/'), 600);
+        }}
+      />
+
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20">

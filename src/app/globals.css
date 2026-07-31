@@ -105,6 +105,17 @@
   color: #f8fafc !important;
 }
 
+/* High contrast active navigation tab and button badges in dark mode */
+.dark .bg-blue-600 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
 .dark .border-slate-200 {
   border-color: #334155 !important;
 }
@@ -122,7 +133,7 @@
 }
 
 .dark .glass-panel {
-  background: rgba(24, 34, 50, 0.85);
+  background: rgba(15, 23, 42, 0.95);
   border-color: rgba(255, 255, 255, 0.15);
 }
 
