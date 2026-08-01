@@ -1,9 +1,32 @@
 # Handoff — SplitIT
 
 **Обновлён:** 2026-08-01
-**Роль, сдающая работу:** ① Claude Code (логика бэкенда и API)
-**Роль, принимающая работу:** ② CODEX → ③ Чекер → ④ Gemini в Antigravity
+**Роль, сдающая работу:** ②/③ CODEX / Checker
+**Роль, принимающая работу:** ④ Gemini в Antigravity
 **Правила конвейера:** `.agents/rules/antigravity2_core.md`
+
+---
+
+## Передача 2026-08-01: две реалистичные группы
+
+CODEX завершил испытания группы из 4 автопутешественников РФ → Турция и
+группы из 10 организаторов выпускного. Созданы детерминированные фикстуры,
+unit-, PostgreSQL/RLS- и Playwright-тесты. Расчёты 260 000 ₽ / 2 перевода и
+500 000 ₽ / 9 переводов подтверждены; данные двух групп не смешиваются.
+
+Gate: lint passed, TypeScript passed, unit 54/54, RLS 34/34, build 15 страниц,
+Playwright 70/70. Подробности: `realistic_scenarios_report.md` и
+`bug_report.md`.
+
+Gemini принимает один визуальный дефект S3-3: фиксированный `BottomNav`
+перекрывает карточки на длинном `/events/balance`. Скриншоты:
+`output/playwright/scenario-road-trip-mobile.png` и
+`output/playwright/scenario-graduation-desktop.png`. После исправления нужно
+повторить 375×812, 1280×720 и полный `npm test`.
+
+Production Auth не заполнялся 14 тестовыми пользователями; тесты выполнялись
+в одноразовой PostgreSQL-среде. Чужой `scripts/verify-production.mjs` не
+включать в коммит этого раунда.
 
 ---
 
