@@ -7,14 +7,16 @@
  *
  * По умолчанию берёт адрес и публикуемый ключ из .env.local; переменные
  * VERIFY_SUPABASE_URL и VERIFY_SUPABASE_ANON_KEY перекрывают их и направляют
- * прогон на отдельный проект-песочницу.
+ * прогон на отдельный проект-песочницу. Общая обвязка — в
+ * `scripts/lib/supabase-verify.mjs`.
  *
  * Тестовые аккаунты создаёт сам, пароли генерирует случайно и никуда не пишет.
  *
  * Зачем это нужно. Локальный харнесс (`npm run test:rls`) проверяет политики
  * базы на настоящем PostgreSQL, но не трогает HTTP-обвязку PostgREST и GoTrue.
  * Проверить её можно только живым прогоном под настоящей сессией — ровно это
- * здесь и происходит. Realtime требует отдельного WebSocket-сценария.
+ * здесь и происходит. Realtime идёт по WebSocket и проверяется отдельно:
+ * `npm run verify:realtime`.
  *
  * Что проверяется:
  *   1. регистрация выдаёт рабочую сессию;
@@ -29,160 +31,41 @@
  *
  * Про уборку. Прогон создаёт два аккаунта и одно событие в той базе, на
  * которую направлен. С переданным SUPABASE_SERVICE_ROLE_KEY скрипт удаляет их
- * в конце. Событие удаляется отдельным service-role запросом, затем Admin API
- * удаляет пользователей, а внешние ключи уносят расходы, доли и погашения —
- * база остаётся чистой. Без ключа удалить пользователей нельзя (клиенту это и
- * не положено), и скрипт печатает, что осталось удалить руками.
+ * в конце и проверяет результат тем же привилегированным контекстом.
  *
  * Ключ передавайте строкой запуска, а не через .env.local: он обходит RLS, и
  * ему нечего делать рядом с клиентской конфигурацией.
  */
 
-import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import {
+  cleanupAccounts,
+  createApi,
+  createReporter,
+  makeAccount,
+  resolveConfig,
+  signUpAccount,
+} from './lib/supabase-verify.mjs';
 
-function loadEnv() {
-  const raw = readFileSync(path.join(ROOT, '.env.local'), 'utf-8');
-  const env = {};
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const [key, ...rest] = trimmed.split('=');
-    env[key] = rest.join('=').trim();
-  }
-  return env;
-}
-
-const fileEnv = loadEnv();
-
-/**
- * Переменные окружения перекрывают .env.local — так прогон направляется на
- * отдельный проект-песочницу, не трогая боевой:
- *
- *   VERIFY_SUPABASE_URL=https://... VERIFY_SUPABASE_ANON_KEY=... npm run verify:prod
- */
-const SUPABASE_URL = process.env.VERIFY_SUPABASE_URL || fileEnv.NEXT_PUBLIC_SUPABASE_URL;
-const ANON_KEY = process.env.VERIFY_SUPABASE_ANON_KEY || fileEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-/**
- * Ключ для уборки. Скрипт его не хранит и не пишет никуда — берёт из окружения
- * текущего процесса и использует один раз, чтобы удалить созданные аккаунты.
- *
- *   SUPABASE_SERVICE_ROLE_KEY=... npm run verify:prod
- *
- * Передавайте его строкой запуска, а не через .env.local: этот ключ обходит
- * RLS, и ему нечего делать рядом с клиентской конфигурацией.
- */
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-if (!SUPABASE_URL || !ANON_KEY) {
-  console.error('Нет адреса проекта или публикуемого ключа.');
-  console.error('Задайте VERIFY_SUPABASE_URL и VERIFY_SUPABASE_ANON_KEY либо заполните .env.local.');
-  process.exit(1);
-}
-
-// --- вывод ---------------------------------------------------------------
-
-let passed = 0;
-let failed = 0;
-
-function ok(label, detail = '') {
-  passed += 1;
-  console.log(`  ✓ ${label}${detail ? ` — ${detail}` : ''}`);
-}
-
-function fail(label, detail) {
-  failed += 1;
-  console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`);
-}
-
-function check(label, condition, detail) {
-  condition ? ok(label) : fail(label, detail);
-}
-
-function step(title) {
-  console.log(`\n${title}`);
-}
-
-// --- транспорт -----------------------------------------------------------
-
-async function api(pathname, { token, apiKey = ANON_KEY, method = 'GET', body, prefer } = {}) {
-  const headers = {
-    apikey: apiKey,
-    'Content-Type': 'application/json',
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (prefer) headers.Prefer = prefer;
-
-  const res = await fetch(`${SUPABASE_URL}${pathname}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-  return { status: res.status, ok: res.ok, data };
-}
-
-const rest = (p, opts) => api(`/rest/v1${p}`, opts);
-const rpc = (fn, args, token) => api(`/rest/v1/rpc/${fn}`, { token, method: 'POST', body: args });
-const adminRest = (p, opts = {}) =>
-  api(`/rest/v1${p}`, { ...opts, token: SERVICE_KEY, apiKey: SERVICE_KEY });
-
-/** Пароль генерируется случайно и живёт только в памяти этого процесса. */
-function makeAccount(tag) {
-  return {
-    tag,
-    email: `splitit-verify-${tag}-${Date.now()}-${Math.floor(Math.random() * 1000)}@example.com`,
-    password: `Pv-${randomUUID()}`,
-  };
-}
-
-async function signUp(account) {
-  const res = await api('/auth/v1/signup', {
-    method: 'POST',
-    body: {
-      email: account.email,
-      password: account.password,
-      data: { full_name: `Проверка ${account.tag}` },
-    },
-  });
-
-  if (!res.ok || !res.data?.access_token) {
-    const hint =
-      res.data?.msg?.includes('confirm') || res.data?.error_description?.includes('confirm')
-        ? ' (похоже, подтверждение email всё ещё включено)'
-        : '';
-    throw new Error(
-      `регистрация ${account.tag} не удалась: HTTP ${res.status} ${JSON.stringify(res.data)}${hint}`,
-    );
-  }
-
-  return { token: res.data.access_token, userId: res.data.user?.id };
-}
+const config = resolveConfig();
+const apiClient = createApi(config);
+const { rest, rpc } = apiClient;
+const report = createReporter();
+const { ok, check, step } = report;
 
 // --- сценарий ------------------------------------------------------------
 
 async function runScenario(state) {
-  console.log(`Проверка ${SUPABASE_URL}\n${'─'.repeat(60)}`);
+  console.log(`Проверка ${config.url}\n${'─'.repeat(60)}`);
 
   step('1. Регистрация двух аккаунтов');
   const accountA = makeAccount('a');
   const accountB = makeAccount('b');
-  const A = await signUp(accountA);
+  const A = await signUpAccount(apiClient, accountA);
   state.userIds.push(A.userId);
   state.emails.push(accountA.email);
-  const B = await signUp(accountB);
+  const B = await signUpAccount(apiClient, accountB);
   state.userIds.push(B.userId);
   state.emails.push(accountB.email);
   ok('оба аккаунта получили рабочую сессию');
@@ -206,7 +89,7 @@ async function runScenario(state) {
     throw new Error(`create_group_with_owner: HTTP ${created.status} ${JSON.stringify(created.data)}`);
   }
   const groupId = created.data;
-  state.groupId = groupId;
+  state.groupIds.push(groupId);
   ok('событие создано', groupId);
 
   const members = await rest(`/group_members?group_id=eq.${groupId}&select=user_id,role`, {
@@ -328,84 +211,22 @@ async function runScenario(state) {
 }
 
 async function main() {
-  const state = { userIds: [], emails: [], groupId: null };
+  const state = { userIds: [], emails: [], groupIds: [] };
 
   try {
     await runScenario(state);
   } finally {
-    if (state.userIds.length > 0 || state.groupId) {
+    if (state.userIds.length > 0 || state.groupIds.length > 0) {
       step('9. Уборка');
       try {
-        await cleanup(state.userIds, state.emails, state.groupId);
+        await cleanupAccounts(config, apiClient, report, state);
       } catch (cleanupError) {
-        fail('аварийная уборка завершилась ошибкой', cleanupError.message);
+        report.fail('аварийная уборка завершилась ошибкой', cleanupError.message);
       }
     }
   }
 
-  console.log(`\n${'─'.repeat(60)}`);
-  console.log(`Пройдено: ${passed}   Провалено: ${failed}`);
-
-  return failed === 0 ? 0 : 1;
-}
-
-/**
- * Удаляет созданное событие привилегированным Data API запросом, а затем
- * созданные аккаунты через Auth Admin API. Каскад группы уносит расходы, доли
- * и погашения.
- *
- * Без service-ключа уборка невозможна: клиент не может удалять пользователей,
- * и это правильно. Тогда скрипт печатает, что осталось, чтобы удалить руками.
- */
-async function cleanup(userIds, emails, groupId) {
-  if (!SERVICE_KEY) {
-    fail(
-      'аккаунты остались в проекте',
-      'нет SUPABASE_SERVICE_ROLE_KEY — удалите вручную в Authentication → Users',
-    );
-    console.log(`      ${emails.join('\n      ')}`);
-    if (groupId) console.log(`      событие: ${groupId}`);
-    return;
-  }
-
-  if (groupId) {
-    const deletedGroup = await adminRest(`/groups?id=eq.${groupId}`, {
-      method: 'DELETE',
-      prefer: 'return=representation',
-    });
-    check(
-      'тестовое событие удалено service-role запросом',
-      deletedGroup.ok && deletedGroup.data?.length === 1,
-      JSON.stringify(deletedGroup.data),
-    );
-  }
-
-  let removed = 0;
-  for (const id of userIds) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
-      method: 'DELETE',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-    });
-    if (res.ok) removed += 1;
-  }
-
-  if (removed === userIds.length) {
-    ok('тестовые аккаунты удалены', 'проект остался чистым');
-  } else {
-    fail('удалить удалось не все аккаунты', `${removed} из ${userIds.length}`);
-    console.log(`      ${emails.join('\n      ')}`);
-  }
-
-  // Проверяем остаток тем же привилегированным контекстом. Anon-запрос здесь
-  // всегда видит пусто из-за RLS и способен дать ложноположительный результат.
-  if (groupId) {
-    const left = await adminRest(`/groups?id=eq.${groupId}&select=id`);
-    check(
-      'данные события действительно отсутствуют',
-      left.ok && !left.data?.length,
-      JSON.stringify(left.data),
-    );
-  }
+  return report.summary();
 }
 
 main()
