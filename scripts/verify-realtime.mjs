@@ -147,7 +147,16 @@ async function clientFor(session) {
  */
 function watchGroup(client, groupId, label) {
   const events = [];
-  const record = (table) => (p) => events.push({ table, type: p.eventType, at: Date.now() });
+  // Вместе с событием запоминаем, чья это строка. Без этого «канал получил
+  // expense_splits» — наблюдение, а не проверка: непонятно, чужая строка
+  // прилетела или своя. Разбирать это глазами по итоговой сводке нельзя.
+  const record = (table) => (p) =>
+    events.push({
+      table,
+      type: p.eventType,
+      at: Date.now(),
+      userId: p.new?.user_id ?? null,
+    });
 
   const channel = client
     .channel(`group:${groupId}`)
@@ -439,6 +448,35 @@ async function runScenario(state) {
     watchers.b.events.length === memberBefore,
     `после отписки пришло ещё ${watchers.b.events.length - memberBefore}`,
   );
+
+  step('8. Ни одна чужая строка не долетела до постороннего за весь прогон');
+
+  /**
+   * Итоговая проверка по всему прогону, а не по одному окну.
+   *
+   * Подписка на `expense_splits` идёт без фильтра — в таблице нет group_id, и
+   * отбор оставлен RLS. Поэтому на канал чужой группы посторонний законно
+   * получает СВОИ splits из своей группы: привязка не знает про группу, а RLS
+   * пропускает его собственные строки.
+   *
+   * Отличить это от утечки можно только по владельцу строки. Всё, что пришло
+   * на чужой канал и не принадлежит самому постороннему, — утечка, независимо
+   * от того, в каком окне оно пришло.
+   */
+  const foreignLeaks = watchers.cForeign.events.filter((e) => e.userId !== sessions.c.userId);
+  check(
+    'на чужом канале у постороннего нет ни одной чужой строки',
+    foreignLeaks.length === 0,
+    `чужих событий: ${foreignLeaks.map((e) => `${e.table}:${e.type} user=${e.userId}`).join(', ')}`,
+  );
+
+  const ownEcho = watchers.cForeign.events.length;
+  if (ownEcho > 0) {
+    ok(
+      'на чужой канал долетели только собственные splits постороннего',
+      `${ownEcho} шт. — следствие подписки на expense_splits без фильтра, не утечка`,
+    );
+  }
 
   step('Что получил каждый канал');
   for (const watcher of Object.values(watchers)) {
