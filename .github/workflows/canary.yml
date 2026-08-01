@@ -1,0 +1,52 @@
+# Canary: после деплоя кто-то должен посмотреть на прод.
+#
+# Гейт проверяет исходник и локальную сборку. Он не видит того, что ломается
+# только при деплое: выкатку без переменных Supabase (приложение молча уходит в
+# локальный режим) и выкатку без применённых миграций (RPC нет, а сборка
+# зелёная). Оба сбоя в этом проекте уже случались, и оба видны снаружи
+# обычными GET-запросами.
+#
+# Запускается тремя способами:
+#   - когда Vercel отметил production-деплой успешным (deployment_status);
+#   - раз в сутки, чтобы поймать поломку, которую не приносил деплой
+#     (истёкший ключ, откат миграции, упавший проект Supabase);
+#   - руками, кнопкой Run workflow.
+#
+# Секретов не требует: адрес публичный, публикуемый ключ скрипт достаёт из
+# клиентского бандла — он и так лежит в каждой загруженной странице.
+
+name: canary
+
+on:
+  deployment_status:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Адрес для проверки (по умолчанию боевой)'
+        required: false
+
+jobs:
+  canary:
+    # Превью-деплои пропускаем: у них может не быть переменных окружения, и
+    # красный canary на превью — это шум, а не сигнал.
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Скрипту нужен только node и src/app для списка маршрутов — зависимости не ставим.
+      - name: Проверить задеплоенное приложение
+        env:
+          CANARY_URL: ${{ github.event.deployment_status.environment_url || inputs.url }}
+        run: npm run canary
