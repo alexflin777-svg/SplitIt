@@ -12,25 +12,47 @@
  *
  * Почему отдельный скрипт. Postgres Changes идут по WebSocket и требуют
  * второго живого клиента. `npm run verify:prod` работает по HTTP и их не
- * трогает: зелёный HTTP-прогон не является доказательством Realtime. Здесь
- * поднимаются три настоящих клиента supabase-js с настоящими сессиями.
+ * трогает: зелёный HTTP-прогон не является доказательством Realtime.
+ *
+ * ── Про прогрев, и почему без него тест врал ────────────────────────────
+ *
+ * Первый прогон на боевом проекте дал 17/18: запись участника не долетела до
+ * владельца за 20 секунд, а всё остальное прошло. Вывод показал главное:
+ * к моменту проверки у владельца не было НИ ОДНОГО события, включая
+ * неотфильтрованные expense_splits, — канал молчал целиком. Позже, на той же
+ * подписке, события пошли.
+ *
+ * Статус SUBSCRIBED подтверждает, что канал присоединён, но не гарантирует,
+ * что серверная подписка на изменения уже установлена. Запись, сделанная в
+ * этом окне, не долетает и не переигрывается: Postgres Changes не хранит
+ * историю.
+ *
+ * Хуже, что при этом зеленела проверка «посторонний ничего не увидел».
+ * Посторонний не увидел ничего потому, что события не увидел никто. Проверка,
+ * которая проходит по той же причине, по которой падает соседняя, не проверяет
+ * ничего — тот же дефект, что год назад дала anon-проверка уборки.
+ *
+ * Поэтому: сначала прогрев. Канал считается живым, только когда через него
+ * реально прошло событие. До этого ни одно утверждение не проверяется. И у
+ * постороннего есть собственная группа с собственным каналом — его молчание
+ * на чужой группе засчитывается лишь тогда, когда его же сокет в тот же
+ * промежуток доставляет события из своей.
  *
  * Что проверяется:
- *   1. подписка участника действительно устанавливается (SUBSCRIBED);
- *   2. запись одного участника долетает до другого без перезагрузки;
- *   3. посторонний, подписанный на тот же канал, не получает ничего —
- *      RLS применяется к Postgres Changes (инвариант И-5);
+ *   1. подписка устанавливается и канал оживает (прогрев);
+ *   2. запись участника долетает до владельца без перезагрузки;
+ *   3. посторонний с заведомо живым сокетом не получает ничего из чужой
+ *      группы — RLS применяется к Postgres Changes (инвариант И-5);
  *   4. изменение самой группы долетает до участника;
- *   5. функция очистки действительно снимает подписку: после неё события
- *      перестают приходить.
+ *   5. функция очистки действительно снимает подписку.
  *
  * Отдельно сверяется список таблиц: если `subscribeToGroup` в
  * `src/lib/remote-store.ts` начнёт слушать другой набор, сценарий об этом
  * скажет, а не продолжит проверять устаревшую схему подписки.
  *
- * Про уборку — как в `verify-production.mjs`: три аккаунта и одно событие
- * удаляются service-ключом, результат проверяется тем же привилегированным
- * контекстом. Ключ передавайте строкой запуска, а не через .env.local.
+ * Про уборку — как в `verify-production.mjs`: аккаунты и обе группы удаляются
+ * service-ключом, результат проверяется тем же привилегированным контекстом.
+ * Ключ передавайте строкой запуска, а не через .env.local.
  */
 
 import { readFileSync } from 'node:fs';
@@ -49,12 +71,15 @@ import {
   signUpAccount,
 } from './lib/supabase-verify.mjs';
 
-/** Сколько ждём события, которое обязано прийти. Realtime на холодном канале не мгновенный. */
+/** Сколько ждём события, которое обязано прийти. */
 const EVENT_TIMEOUT_MS = Number(process.env.REALTIME_EVENT_TIMEOUT_MS || 20_000);
-/** Сколько ждём после прихода ожидаемого события, прежде чем утверждать, что другой клиент тишину сохранил. */
+/** Сколько ждём после прихода ожидаемого события, прежде чем утверждать, что другой клиент молчал. */
 const SILENCE_GRACE_MS = Number(process.env.REALTIME_SILENCE_GRACE_MS || 4_000);
 /** Сколько ждём подтверждения самой подписки. */
 const SUBSCRIBE_TIMEOUT_MS = 15_000;
+/** Прогрев: сколько попыток и сколько ждать доставки в каждой. */
+const WARMUP_ATTEMPTS = Number(process.env.REALTIME_WARMUP_ATTEMPTS || 8);
+const WARMUP_WAIT_MS = Number(process.env.REALTIME_WARMUP_WAIT_MS || 4_000);
 
 /**
  * Таблицы, которые слушает `subscribeToGroup`. Держится синхронно с
@@ -67,6 +92,9 @@ const apiClient = createApi(config);
 const { rest, rpc } = apiClient;
 const report = createReporter();
 const { ok, check, step } = report;
+
+const startedAt = Date.now();
+const since = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
 // --- сверка со сценарием подписки в приложении ---------------------------
 
@@ -115,27 +143,19 @@ async function clientFor(session) {
 /**
  * Повторяет подписку `subscribeToGroup` и складывает события в массив.
  *
- * Возвращает и функцию отписки — её отдельно проверяет шаг 5.
+ * Возвращает и функцию отписки — её отдельно проверяет последний шаг.
  */
 function watchGroup(client, groupId, label) {
   const events = [];
+  const record = (table) => (p) => events.push({ table, type: p.eventType, at: Date.now() });
+
   const channel = client
     .channel(`group:${groupId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'groups', filter: `id=eq.${groupId}` }, (p) =>
-      events.push({ table: 'groups', type: p.eventType }),
-    )
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, (p) =>
-      events.push({ table: 'expenses', type: p.eventType }),
-    )
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, (p) =>
-      events.push({ table: 'expense_splits', type: p.eventType }),
-    )
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `group_id=eq.${groupId}` }, (p) =>
-      events.push({ table: 'settlements', type: p.eventType }),
-    )
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, (p) =>
-      events.push({ table: 'group_members', type: p.eventType }),
-    );
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'groups', filter: `id=eq.${groupId}` }, record('groups'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, record('expenses'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, record('expense_splits'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `group_id=eq.${groupId}` }, record('settlements'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, record('group_members'));
 
   const subscribed = new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -158,6 +178,8 @@ function watchGroup(client, groupId, label) {
     label,
     events,
     subscribed,
+    /** Счётчик на момент вызова — от него отмеряются последующие ожидания. */
+    mark: () => events.length,
     unsubscribe: () => client.removeChannel(channel),
   };
 }
@@ -170,14 +192,42 @@ const countFor = (watcher, table) => watcher.events.filter((e) => e.table === ta
  * Ждёт, пока по таблице накопится `minCount` событий. Возвращает время ожидания
  * в миллисекундах или null, если не дождались.
  *
- * Считаем именно количество, а не факт наличия: на шаге 7 у владельца уже есть
- * событие с шага 4, и проверка «событие есть» прошла бы, не дождавшись нового.
+ * Считаем количество, а не факт наличия: у наблюдателя уже могут быть события
+ * с прошлых шагов, и проверка «событие есть» прошла бы, не дождавшись нового.
  */
 async function waitForTable(watcher, table, minCount = 1, timeoutMs = EVENT_TIMEOUT_MS) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (countFor(watcher, table) >= minCount) return Date.now() - startedAt;
+  const waitStarted = Date.now();
+  while (Date.now() - waitStarted < timeoutMs) {
+    if (countFor(watcher, table) >= minCount) return Date.now() - waitStarted;
     await sleep(100);
+  }
+  return null;
+}
+
+/** Короткая расшифровка того, что наблюдатель успел получить. */
+const digest = (watcher) =>
+  watcher.events.map((e) => `${e.table}:${e.type}`).join(', ') || 'ничего';
+
+/**
+ * Гоняет действие, пока событие о нём не дойдёт до всех перечисленных
+ * наблюдателей.
+ *
+ * Возвращает номер удачной попытки или null. Повтор нужен потому, что
+ * серверная подписка может встать позже, чем канал ответил SUBSCRIBED, а
+ * пропущенное событие не переигрывается.
+ */
+async function warmUp(label, action, watchers, table) {
+  for (let attempt = 1; attempt <= WARMUP_ATTEMPTS; attempt += 1) {
+    const marks = watchers.map((w) => countFor(w, table));
+    const res = await action(attempt);
+    if (res && res.ok === false) {
+      throw new Error(`${label}: действие прогрева не выполнилось: ${JSON.stringify(res.data)}`);
+    }
+
+    const delivered = await Promise.all(
+      watchers.map((w, i) => waitForTable(w, table, marks[i] + 1, WARMUP_WAIT_MS)),
+    );
+    if (delivered.every((d) => d !== null)) return attempt;
   }
   return null;
 }
@@ -205,18 +255,18 @@ async function runScenario(state) {
   }
   ok('все три аккаунта получили рабочую сессию');
 
-  step('2. Владелец создаёт событие, участник вступает по коду');
-  const created = await rpc(
-    'create_group_with_owner',
-    { p_name: 'Проверка Realtime', p_category: 'trip', p_default_currency: 'RUB' },
-    sessions.a.token,
-  );
-  if (!created.ok || typeof created.data !== 'string') {
-    throw new Error(`create_group_with_owner: HTTP ${created.status} ${JSON.stringify(created.data)}`);
-  }
-  const groupId = created.data;
-  state.groupIds.push(groupId);
-  ok('событие создано', groupId);
+  const createGroup = async (name, token) => {
+    const res = await rpc('create_group_with_owner', { p_name: name, p_category: 'trip', p_default_currency: 'RUB' }, token);
+    if (!res.ok || typeof res.data !== 'string') {
+      throw new Error(`create_group_with_owner: HTTP ${res.status} ${JSON.stringify(res.data)}`);
+    }
+    state.groupIds.push(res.data);
+    return res.data;
+  };
+
+  step('2. Две группы: общая и своя у постороннего');
+  const groupId = await createGroup('Проверка Realtime', sessions.a.token);
+  ok('событие владельца создано', groupId);
 
   const code = `RT-${randomUUID().slice(0, 8).toUpperCase()}`;
   const invite = await rest('/group_invites', {
@@ -229,7 +279,13 @@ async function runScenario(state) {
   const redeem = await rpc('redeem_group_invite', { p_invite_code: code }, sessions.b.token);
   check('участник вступил', redeem.ok && redeem.data === groupId, JSON.stringify(redeem.data));
 
-  step('3. Все трое открывают WebSocket-подписку на событие');
+  // Своя группа постороннего — контрольная группа в прямом смысле слова.
+  // Без неё его молчание на чужом канале ничего не доказывает: молчать можно
+  // и из-за RLS, и из-за мёртвого сокета.
+  const ownGroupId = await createGroup('Своя группа постороннего', sessions.c.token);
+  ok('у постороннего есть своя группа', ownGroupId);
+
+  step('3. Подписки');
   const clients = {
     a: await clientFor(sessions.a),
     b: await clientFor(sessions.b),
@@ -240,14 +296,56 @@ async function runScenario(state) {
   const watchers = {
     a: watchGroup(clients.a, groupId, 'владелец'),
     b: watchGroup(clients.b, groupId, 'участник'),
-    c: watchGroup(clients.c, groupId, 'посторонний'),
+    cForeign: watchGroup(clients.c, groupId, 'посторонний на чужой группе'),
+    cOwn: watchGroup(clients.c, ownGroupId, 'посторонний на своей группе'),
   };
   state.watchers = watchers;
 
-  await Promise.all([watchers.a.subscribed, watchers.b.subscribed, watchers.c.subscribed]);
-  ok('три канала подтвердили подписку', 'SUBSCRIBED');
+  await Promise.all(Object.values(watchers).map((w) => w.subscribed));
+  ok('четыре канала подтвердили подписку', `SUBSCRIBED, ${since()}`);
 
-  step('4. Запись участника долетает до владельца');
+  step('4. Прогрев: канал считается живым только после реально прошедшего события');
+  const renameShared = (attempt) =>
+    rest(`/groups?id=eq.${groupId}`, {
+      token: sessions.a.token,
+      method: 'PATCH',
+      body: { name: `Проверка Realtime — прогрев ${attempt}` },
+    });
+  const sharedWarm = await warmUp('общий канал', renameShared, [watchers.a, watchers.b], 'groups');
+  check(
+    'общий канал живой: изменение группы дошло до владельца и участника',
+    sharedWarm !== null,
+    `${WARMUP_ATTEMPTS} попыток по ${WARMUP_WAIT_MS} мс — событий по groups так и не было`,
+  );
+
+  const renameOwn = (attempt) =>
+    rest(`/groups?id=eq.${ownGroupId}`, {
+      token: sessions.c.token,
+      method: 'PATCH',
+      body: { name: `Своя группа постороннего — прогрев ${attempt}` },
+    });
+  const ownWarm = await warmUp('канал постороннего', renameOwn, [watchers.cOwn], 'groups');
+  check(
+    'сокет постороннего живой: своя группа события доставляет',
+    ownWarm !== null,
+    `${WARMUP_ATTEMPTS} попыток по ${WARMUP_WAIT_MS} мс — событий по groups так и не было`,
+  );
+
+  if (sharedWarm !== null) ok('прогрев общего канала', `попытка ${sharedWarm}, ${since()}`);
+  if (ownWarm !== null) ok('прогрев канала постороннего', `попытка ${ownWarm}, ${since()}`);
+
+  if (sharedWarm === null || ownWarm === null) {
+    report.fail(
+      'дальше проверять нечего',
+      'на непрогретом канале и доставка, и тишина объясняются одним и тем же — мёртвой подпиской',
+    );
+    return;
+  }
+
+  step('5. Запись участника долетает до владельца');
+  const expensesBefore = countFor(watchers.a, 'expenses');
+  const foreignBefore = watchers.cForeign.events.length;
+
   const expense = await rpc(
     'add_expense_with_splits',
     {
@@ -264,42 +362,50 @@ async function runScenario(state) {
   );
   check('участник записал расход', expense.ok, JSON.stringify(expense.data));
 
-  const deliveredToOwner = await waitForTable(watchers.a, 'expenses');
+  const deliveredToOwner = await waitForTable(watchers.a, 'expenses', expensesBefore + 1);
   check(
     'владелец получил событие о чужом расходе без перезагрузки',
     deliveredToOwner !== null,
-    `за ${EVENT_TIMEOUT_MS} мс события по expenses не пришло — проверьте публикацию supabase_realtime`,
+    `за ${EVENT_TIMEOUT_MS} мс события по expenses не пришло; у владельца сейчас: ${digest(watchers.a)}`,
   );
+  if (deliveredToOwner !== null) ok('доставка заняла', `${deliveredToOwner} мс`);
 
-  step('5. Посторонний не получает ничего — RLS работает и на Postgres Changes (И-5)');
+  step('6. Посторонний не получает чужого — RLS работает и на Postgres Changes (И-5)');
   await sleep(SILENCE_GRACE_MS);
   check(
-    'посторонний подписан на тот же канал и не увидел ни одного события',
-    watchers.c.events.length === 0,
-    `посторонний получил: ${JSON.stringify(watchers.c.events)}`,
-  );
-  ok(
-    'у владельца при этом события есть',
-    watchers.a.events.map((e) => `${e.table}:${e.type}`).join(', ') || 'пусто',
+    'на чужой группе посторонний не увидел ни одного события',
+    watchers.cForeign.events.length === foreignBefore,
+    `посторонний получил: ${digest(watchers.cForeign)}`,
   );
 
-  step('6. Изменение самой группы долетает до участника');
-  const renamed = await rest(`/groups?id=eq.${groupId}`, {
-    token: sessions.a.token,
-    method: 'PATCH',
-    body: { name: 'Проверка Realtime — переименовано' },
-  });
-  check('владелец переименовал событие', renamed.ok, JSON.stringify(renamed.data));
+  // Тишина засчитывается только вместе с доказательством, что сокет жив
+  // именно сейчас, а не умер где-то между шагами.
+  const ownBefore = countFor(watchers.cOwn, 'expenses');
+  const ownExpense = await rpc(
+    'add_expense_with_splits',
+    {
+      p_group_id: ownGroupId,
+      p_title: 'Своя трата',
+      p_amount: 100,
+      p_currency: 'RUB',
+      p_amount_in_group_currency: 100,
+      p_category: 'other',
+      p_paid_by_id: sessions.c.userId,
+      p_splits: [{ user_id: sessions.c.userId, amount_owed: 100 }],
+    },
+    sessions.c.token,
+  );
+  check('посторонний записал расход в свою группу', ownExpense.ok, JSON.stringify(ownExpense.data));
 
-  const deliveredToMember = await waitForTable(watchers.b, 'groups');
+  const ownDelivered = await waitForTable(watchers.cOwn, 'expenses', ownBefore + 1);
   check(
-    'участник получил событие по таблице groups',
-    deliveredToMember !== null,
-    `за ${EVENT_TIMEOUT_MS} мс события по groups не пришло`,
+    'в ту же минуту его сокет доставляет события из своей группы',
+    ownDelivered !== null,
+    'сокет постороннего молчит вообще — тишина на чужой группе ничего не доказывает',
   );
 
   step('7. Отписка действительно отписывает');
-  const seenByMemberBefore = watchers.b.events.length;
+  const memberBefore = watchers.b.events.length;
   const ownerExpensesBefore = countFor(watchers.a, 'expenses');
   watchers.b.unsubscribe();
   await sleep(1_000);
@@ -324,15 +430,20 @@ async function runScenario(state) {
   check(
     'владелец, оставшийся подписанным, получил и второй расход',
     ownerGotSecond !== null,
-    `событий по expenses осталось ${countFor(watchers.a, 'expenses')}, ожидалось ${ownerExpensesBefore + 1}`,
+    `событий по expenses ${countFor(watchers.a, 'expenses')}, ожидалось ${ownerExpensesBefore + 1}`,
   );
 
   await sleep(SILENCE_GRACE_MS);
   check(
     'отписавшийся участник больше событий не получает',
-    watchers.b.events.length === seenByMemberBefore,
-    `после отписки пришло ещё ${watchers.b.events.length - seenByMemberBefore}`,
+    watchers.b.events.length === memberBefore,
+    `после отписки пришло ещё ${watchers.b.events.length - memberBefore}`,
   );
+
+  step('Что получил каждый канал');
+  for (const watcher of Object.values(watchers)) {
+    console.log(`  ${watcher.label}: ${digest(watcher)}`);
+  }
 }
 
 // --- запуск --------------------------------------------------------------
