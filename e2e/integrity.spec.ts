@@ -208,6 +208,59 @@ test.describe('Профиль без сессии (инвариант И-14)', (
   });
 });
 
+test.describe('Локальные контакты (инварианты И-14 и И-15)', () => {
+  test('пустой список не заполняется выдуманными друзьями и ссылками', async ({ page }) => {
+    await seed(page, []);
+    await page.goto('/friends');
+
+    await expect(page.getByText('Друзья не найдены')).toBeVisible();
+    await expect(page.getByText(/Контакты хранятся только на этом устройстве/)).toBeVisible();
+    await expect(page.getByText(/Максим Громов|Елена Воронова|Анастасия Ким/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Скопировать рабочую ссылку/ })).toHaveCount(0);
+    expect(await page.evaluate(() => window.localStorage.getItem('splitit_saved_friends_list'))).toBeNull();
+  });
+
+  test('ручной контакт без телефона не получает выдуманные phone и email', async ({ page }) => {
+    await seed(page, []);
+    await page.goto('/friends');
+
+    await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+    await page.getByPlaceholder('Имя и фамилия').fill('Иван Петров');
+    await page.getByRole('button', { name: 'Сохранить друга' }).click();
+
+    await expect(page.getByText('Иван Петров')).toBeVisible();
+    await expect(page.getByText('Телефон не указан')).toBeVisible();
+    const stored = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('splitit_saved_friends_list') || '[]'),
+    );
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ name: 'Иван Петров', role: 'member' });
+    expect(stored[0]).not.toHaveProperty('phone');
+    expect(stored[0]).not.toHaveProperty('email');
+  });
+
+  test('старый демо-набор удаляется, а пользовательский контакт сохраняется', async ({ page }) => {
+    await seed(page, []);
+    await page.evaluate(() => {
+      window.localStorage.setItem(
+        'splitit_saved_friends_list',
+        JSON.stringify([
+          { id: 'user-2', name: 'Максим Громов', email: 'maksim@example.com' },
+          { id: 'real-1', name: 'Реальный контакт', phone: '+90 555 000 00 00' },
+        ]),
+      );
+    });
+    await page.goto('/friends');
+
+    await expect(page.getByText('Максим Громов')).toHaveCount(0);
+    await expect(page.getByText('Реальный контакт')).toBeVisible();
+    const stored = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('splitit_saved_friends_list') || '[]'),
+    );
+    expect(stored).toEqual([{ id: 'real-1', name: 'Реальный контакт', phone: '+90 555 000 00 00' }]);
+  });
+});
+
 test.describe('Режим авторизации из ссылки (регрессия S3-1)', () => {
   test('/auth?mode=login открывает форму входа', async ({ page }) => {
     await page.goto('/auth?mode=login');

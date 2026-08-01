@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { UserPlus, Search, Share2, Check, Phone, Mail, QrCode, Sparkles, Trash2, Send, MessageCircle, MessageSquare } from 'lucide-react';
-import { getSavedFriends, saveFriends, subscribeToRealtimeSync } from '@/lib/supabase';
+import { UserPlus, Search, Phone, Info, Trash2 } from 'lucide-react';
+import { getSavedFriends, saveFriends, subscribeToLocalSync } from '@/lib/supabase';
 
 export default function FriendsPage() {
   const [friends, setFriends] = useState<any[]>([]);
@@ -11,14 +10,14 @@ export default function FriendsPage() {
   const [newFriendName, setNewFriendName] = useState('');
   const [newFriendPhone, setNewFriendPhone] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     // Load persistent friends list
     setFriends(getSavedFriends());
 
-    // Subscribe to realtime changes across devices
-    const unsubscribe = subscribeToRealtimeSync(() => {
+    // Соседняя вкладка этого браузера могла изменить локальный список.
+    const unsubscribe = subscribeToLocalSync(() => {
       setFriends(getSavedFriends());
     });
 
@@ -36,18 +35,22 @@ export default function FriendsPage() {
     if (!newFriendName.trim()) return;
 
     const newFriend = {
-      id: `user-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: newFriendName.trim(),
       avatar: '👤',
-      phone: newFriendPhone.trim() || '+7 (999) 000-00-00',
-      email: `${newFriendName.toLowerCase().trim().replace(/\s+/g, '')}@splitit.app`,
+      phone: newFriendPhone.trim() || undefined,
       role: 'member' as const,
     };
 
     const updatedFriends = [newFriend, ...friends];
-    setFriends(updatedFriends);
-    saveFriends(updatedFriends);
+    const error = saveFriends(updatedFriends);
+    if (error) {
+      setSaveError(error);
+      return;
+    }
 
+    setFriends(updatedFriends);
+    setSaveError('');
     setNewFriendName('');
     setNewFriendPhone('');
     setShowAddModal(false);
@@ -56,19 +59,14 @@ export default function FriendsPage() {
   const handleDeleteFriend = (id: string, name: string) => {
     if (confirm(`Удалить «${name}» из списка друзей?`)) {
       const updated = friends.filter((f) => f.id !== id);
+      const error = saveFriends(updated);
+      if (error) {
+        setSaveError(error);
+        return;
+      }
       setFriends(updated);
-      saveFriends(updated);
+      setSaveError('');
     }
-  };
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://splitit.app';
-  const inviteLink = `${origin}/auth?invite=friend`;
-  const inviteText = `Привет! Добавляйся ко мне в друзья в приложение SplitIT для совместного учета чеков и расходов:`;
-
-  const handleCopyInviteLink = () => {
-    navigator.clipboard.writeText(inviteLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   return (
@@ -91,61 +89,19 @@ export default function FriendsPage() {
         </button>
       </div>
 
-      {/* Invite Link & Share Banner */}
-      <div className="stitch-card p-5 bg-gradient-to-br from-indigo-900 to-slate-900 text-white shadow-xl space-y-3 relative overflow-hidden">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-              Персональная ссылка-приглашение
-            </span>
-          </div>
-          <QrCode className="w-5 h-5 text-indigo-300" />
-        </div>
-
-        <p className="text-xs text-slate-300 leading-relaxed">
-          Отправьте рабочую ссылку через Telegram, WhatsApp или SMS, чтобы друзья могли сразу зайти в ваше событие.
+      <div className="stitch-card p-4 flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+        <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          Контакты хранятся только на этом устройстве. Чтобы пригласить человека к расходам,
+          откройте нужное событие и отправьте ссылку из его карточки.
         </p>
-
-        {/* Share buttons grid */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
-          <a
-            href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(inviteText)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition-all"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Telegram</span>
-          </a>
-
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(inviteText + ' ' + inviteLink)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>WhatsApp</span>
-          </a>
-
-          <a
-            href={`sms:?body=${encodeURIComponent(inviteText + ' ' + inviteLink)}`}
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>SMS</span>
-          </a>
-        </div>
-
-        <button
-          onClick={handleCopyInviteLink}
-          className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-extrabold flex items-center justify-center gap-2 border border-white/20 transition-all"
-        >
-          <Share2 className="w-4 h-4 text-indigo-300" />
-          <span>{copiedLink ? 'Рабочая ссылка скопирована!' : 'Скопировать рабочую ссылку'}</span>
-        </button>
       </div>
+
+      {saveError && (
+        <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+          {saveError}
+        </p>
+      )}
 
       {/* Add Friend Form Modal */}
       {showAddModal && (
@@ -218,15 +174,15 @@ export default function FriendsPage() {
                   <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     <span className="flex items-center gap-1 font-medium">
                       <Phone className="w-3 h-3 text-slate-400" />
-                      {friend.phone || '+7 (999) 000-00-00'}
+                      {friend.phone || 'Телефон не указан'}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg">
-                  Активен
+                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2.5 py-1 rounded-lg">
+                  Локальный контакт
                 </span>
                 <button
                   type="button"
