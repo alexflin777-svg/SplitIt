@@ -4,9 +4,24 @@
 
 **Роль:** CODEX, ревьюер логики и Checker
 
-**Ветка:** `test/calculations`
+**Ветка:** `chore/verify-prod-tool`
 
-**Базовый HEAD до этого раунда:** `8408fc5`
+**Базовый HEAD до live-прогона:** `b252fe1`
+
+## Live production update
+
+`npm run verify:prod` пройден на production Supabase двумя временными
+пользователями: 24/24. Проверены GoTrue, PostgREST, RPC и RLS. После очистки
+SQL-аудит показывает `users=0`, `groups=0`, `members=0`, `expenses=0` для
+тестового префикса/события; в Auth остался 1 штатный пользователь.
+
+Найден и исправлен дефект cleanup: удаление Auth-пользователя не удаляло группу,
+а anon-проверка не видела остаток из-за RLS. Теперь группа удаляется отдельным
+service-role запросом, проверка также идёт с service-role, а cleanup вызывается
+из `finally`.
+
+Realtime WebSocket не проверен. Текущий verifier доказывает HTTP/Auth/RLS, но
+не доставку Postgres Changes.
 
 ## Цель проекта и моя цель
 
@@ -35,8 +50,8 @@ web-экспорте и мобильном WebView.
 - Выпускной: 10 участников, 7 расходов, 500 000 ₽. Доля каждого — 50 000 ₽;
   расчёт свёл долги к 9 переводам общим объёмом 230 000 ₽.
 - Данные групп не смешиваются. Перекрёстные записи расходов отвергаются.
-- Production Supabase не изменялся. Read-only проверка показывает одного
-  подтверждённого пользователя.
+- Production Supabase временно использовался live-verifier’ом и полностью
+  очищен от тестовых данных; остался один штатный подтверждённый пользователь.
 
 Полный gate зелёный:
 
@@ -46,7 +61,7 @@ npx tsc --noEmit      passed
 npm run test:unit     54/54, 13 suites
 npm run test:rls      34/34, 9 suites
 npm run build         passed, 15 static pages
-npm test              70/70 Playwright, failedTests: []
+npm test              92/92 в рабочем дереве (84 tracked + 8 external untracked)
 visual smoke          2 viewport, console/page errors: 0
 ```
 
@@ -97,9 +112,8 @@ visual smoke          2 viewport, console/page errors: 0
 5. 14 постоянных Auth-аккаунтов production не создавались: email confirmation
    и очистка пользователей требуют отдельного безопасного staging-сценария.
 
-В корне остаётся чужой незатреканный `scripts/verify-production.mjs`. Я его не
-открывал для правок, не запускал, не добавлял в индекс и не буду включать в
-коммит.
+`scripts/verify-production.mjs` теперь отслеживается в ветке
+`chore/verify-prod-tool`; в этом раунде исправлена его аварийная уборка.
 
 ## Найденные проблемы
 
@@ -128,9 +142,7 @@ Security Advisor сообщает `auth_leaked_password_protection`: защит�
 3. Запушить `test/calculations` и передать Gemini дефект S3-3 со скриншотами и
    критерием приёмки.
 4. После UI-исправления повторить два визуальных viewport и полный `npm test`.
-5. Для настоящего Auth/Realtime испытания подготовить отдельную Supabase
-   branch/staging-базу либо получить разрешение на создание и очистку
-   подтверждённых тестовых аккаунтов.
+5. Добавить отдельное live-испытание Realtime WebSocket между двумя сессиями.
 
 ## Осознанно не сделано
 
