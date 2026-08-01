@@ -12,9 +12,9 @@
  * Тестовые аккаунты создаёт сам, пароли генерирует случайно и никуда не пишет.
  *
  * Зачем это нужно. Локальный харнесс (`npm run test:rls`) проверяет политики
- * базы на настоящем PostgreSQL, но не трогает HTTP-обвязку: PostgREST, GoTrue и
- * Realtime. Проверить их можно только живым прогоном под настоящей сессией —
- * ровно это здесь и происходит.
+ * базы на настоящем PostgreSQL, но не трогает HTTP-обвязку PostgREST и GoTrue.
+ * Проверить её можно только живым прогоном под настоящей сессией — ровно это
+ * здесь и происходит. Realtime требует отдельного WebSocket-сценария.
  *
  * Что проверяется:
  *   1. регистрация выдаёт рабочую сессию;
@@ -29,9 +29,10 @@
  *
  * Про уборку. Прогон создаёт два аккаунта и одно событие в той базе, на
  * которую направлен. С переданным SUPABASE_SERVICE_ROLE_KEY скрипт удаляет их
- * в конце, и каскад по внешним ключам уносит группу, расходы, доли и
- * погашения — база остаётся чистой. Без ключа удалить пользователей нельзя
- * (клиенту это и не положено), и скрипт печатает, что осталось удалить руками.
+ * в конце. Событие удаляется отдельным service-role запросом, затем Admin API
+ * удаляет пользователей, а внешние ключи уносят расходы, доли и погашения —
+ * база остаётся чистой. Без ключа удалить пользователей нельзя (клиенту это и
+ * не положено), и скрипт печатает, что осталось удалить руками.
  *
  * Ключ передавайте строкой запуска, а не через .env.local: он обходит RLS, и
  * ему нечего делать рядом с клиентской конфигурацией.
@@ -109,9 +110,9 @@ function step(title) {
 
 // --- транспорт -----------------------------------------------------------
 
-async function api(pathname, { token, method = 'GET', body, prefer } = {}) {
+async function api(pathname, { token, apiKey = ANON_KEY, method = 'GET', body, prefer } = {}) {
   const headers = {
-    apikey: ANON_KEY,
+    apikey: apiKey,
     'Content-Type': 'application/json',
   };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -135,6 +136,8 @@ async function api(pathname, { token, method = 'GET', body, prefer } = {}) {
 
 const rest = (p, opts) => api(`/rest/v1${p}`, opts);
 const rpc = (fn, args, token) => api(`/rest/v1/rpc/${fn}`, { token, method: 'POST', body: args });
+const adminRest = (p, opts = {}) =>
+  api(`/rest/v1${p}`, { ...opts, token: SERVICE_KEY, apiKey: SERVICE_KEY });
 
 /** Пароль генерируется случайно и живёт только в памяти этого процесса. */
 function makeAccount(tag) {
@@ -170,14 +173,18 @@ async function signUp(account) {
 
 // --- сценарий ------------------------------------------------------------
 
-async function main() {
+async function runScenario(state) {
   console.log(`Проверка ${SUPABASE_URL}\n${'─'.repeat(60)}`);
 
   step('1. Регистрация двух аккаунтов');
   const accountA = makeAccount('a');
   const accountB = makeAccount('b');
   const A = await signUp(accountA);
+  state.userIds.push(A.userId);
+  state.emails.push(accountA.email);
   const B = await signUp(accountB);
+  state.userIds.push(B.userId);
+  state.emails.push(accountB.email);
   ok('оба аккаунта получили рабочую сессию');
   check('идентификаторы различаются', A.userId !== B.userId);
 
@@ -199,6 +206,7 @@ async function main() {
     throw new Error(`create_group_with_owner: HTTP ${created.status} ${JSON.stringify(created.data)}`);
   }
   const groupId = created.data;
+  state.groupId = groupId;
   ok('событие создано', groupId);
 
   const members = await rest(`/group_members?group_id=eq.${groupId}&select=user_id,role`, {
@@ -317,19 +325,34 @@ async function main() {
     bAfterLeave.data?.length === 0,
     JSON.stringify(bAfterLeave.data),
   );
+}
 
-  step('9. Уборка');
-  await cleanup([A.userId, B.userId], [accountA.email, accountB.email], groupId);
+async function main() {
+  const state = { userIds: [], emails: [], groupId: null };
+
+  try {
+    await runScenario(state);
+  } finally {
+    if (state.userIds.length > 0 || state.groupId) {
+      step('9. Уборка');
+      try {
+        await cleanup(state.userIds, state.emails, state.groupId);
+      } catch (cleanupError) {
+        fail('аварийная уборка завершилась ошибкой', cleanupError.message);
+      }
+    }
+  }
 
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`Пройдено: ${passed}   Провалено: ${failed}`);
 
-  process.exit(failed === 0 ? 0 : 1);
+  return failed === 0 ? 0 : 1;
 }
 
 /**
- * Удаляет созданные аккаунты. Каскад по внешним ключам уносит вместе с
- * профилем группы, расходы, доли и погашения — отдельная чистка не нужна.
+ * Удаляет созданное событие привилегированным Data API запросом, а затем
+ * созданные аккаунты через Auth Admin API. Каскад группы уносит расходы, доли
+ * и погашения.
  *
  * Без service-ключа уборка невозможна: клиент не может удалять пользователей,
  * и это правильно. Тогда скрипт печатает, что осталось, чтобы удалить руками.
@@ -341,8 +364,20 @@ async function cleanup(userIds, emails, groupId) {
       'нет SUPABASE_SERVICE_ROLE_KEY — удалите вручную в Authentication → Users',
     );
     console.log(`      ${emails.join('\n      ')}`);
-    console.log(`      событие: ${groupId}`);
+    if (groupId) console.log(`      событие: ${groupId}`);
     return;
+  }
+
+  if (groupId) {
+    const deletedGroup = await adminRest(`/groups?id=eq.${groupId}`, {
+      method: 'DELETE',
+      prefer: 'return=representation',
+    });
+    check(
+      'тестовое событие удалено service-role запросом',
+      deletedGroup.ok && deletedGroup.data?.length === 1,
+      JSON.stringify(deletedGroup.data),
+    );
   }
 
   let removed = 0;
@@ -361,12 +396,23 @@ async function cleanup(userIds, emails, groupId) {
     console.log(`      ${emails.join('\n      ')}`);
   }
 
-  // Проверяем, что каскад действительно унёс данные события.
-  const left = await rest(`/groups?id=eq.${groupId}&select=id`, { token: null });
-  check('данные события удалены каскадом', !left.data?.length, JSON.stringify(left.data));
+  // Проверяем остаток тем же привилегированным контекстом. Anon-запрос здесь
+  // всегда видит пусто из-за RLS и способен дать ложноположительный результат.
+  if (groupId) {
+    const left = await adminRest(`/groups?id=eq.${groupId}&select=id`);
+    check(
+      'данные события действительно отсутствуют',
+      left.ok && !left.data?.length,
+      JSON.stringify(left.data),
+    );
+  }
 }
 
-main().catch((e) => {
-  console.error(`\nПрогон оборвался: ${e.message}`);
-  process.exit(1);
-});
+main()
+  .then((exitCode) => {
+    process.exitCode = exitCode;
+  })
+  .catch((e) => {
+    console.error(`\nПрогон оборвался: ${e.message}`);
+    process.exitCode = 1;
+  });
