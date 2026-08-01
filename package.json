@@ -10,9 +10,10 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "serve:out": "node scripts/serve-out.mjs",
-    "pretest": "node --test test/rls.test.mjs && npm run build:test",
+    "pretest": "npm run test:unit && npm run test:rls && npm run build:test",
     "test:rls": "node --test test/rls.test.mjs",
-    "build:test": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= NEXT_PUBLIC_APP_URL= VERCEL_PROJECT_PRODUCTION_URL= next build"
+    "build:test": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= NEXT_PUBLIC_APP_URL= VERCEL_PROJECT_PRODUCTION_URL= next build",
+    "test:unit": "node --test test/debt-simplification.test.mjs test/currency.test.mjs test/ocr.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
