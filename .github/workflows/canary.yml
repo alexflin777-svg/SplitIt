@@ -7,13 +7,28 @@
 # обычными GET-запросами.
 #
 # Запускается тремя способами:
-#   - когда Vercel отметил production-деплой успешным (deployment_status);
+#   - когда Vercel отметил деплой успешным (deployment_status);
 #   - раз в сутки, чтобы поймать поломку, которую не приносил деплой
 #     (истёкший ключ, откат миграции, упавший проект Supabase);
 #   - руками, кнопкой Run workflow.
 #
 # Секретов не требует: адрес публичный, публикуемый ключ скрипт достаёт из
 # клиентского бандла — он и так лежит в каждой загруженной странице.
+#
+# ── Почему проверяется постоянный адрес, а не environment_url ──────────────
+#
+# Первая версия запускалась только при `environment == 'Production'` и на
+# `environment_url` из события. На живых деплоях это дало шесть пропущенных
+# прогонов подряд со статусом skipped: условие по имени окружения не совпало
+# с тем, что реально присылает Vercel.
+#
+# Угадывать строку дальше смысла нет. Canary отвечает на вопрос «жив ли прод,
+# который видят пользователи», а пользователи ходят на постоянный адрес, а не
+# на адрес конкретного деплоя. Поэтому проверяется он, а событие служит только
+# поводом — при любом успешном деплое, хоть production, хоть preview.
+#
+# Что именно прислал Vercel, печатает первый шаг: если условие снова окажется
+# не тем, это будет видно в логе, а не в тишине.
 
 name: canary
 
@@ -27,14 +42,17 @@ on:
         description: 'Адрес для проверки (по умолчанию боевой)'
         required: false
 
+# Vercel присылает несколько статусов подряд. Держим один прогон: интересен
+# последний, а не каждый промежуточный.
+concurrency:
+  group: canary
+  cancel-in-progress: true
+
 jobs:
   canary:
-    # Превью-деплои пропускаем: у них может не быть переменных окружения, и
-    # красный canary на превью — это шум, а не сигнал.
     if: >-
       github.event_name != 'deployment_status' ||
-      (github.event.deployment_status.state == 'success' &&
-       github.event.deployment_status.environment == 'Production')
+      github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -45,8 +63,26 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Что прислал Vercel
+        if: github.event_name == 'deployment_status'
+        env:
+          DS_STATE: ${{ github.event.deployment_status.state }}
+          DS_ENV: ${{ github.event.deployment_status.environment }}
+          DS_URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          echo "state=$DS_STATE"
+          echo "environment=$DS_ENV"
+          echo "environment_url=$DS_URL"
+
+      # Постоянный адрес переключается на новую сборку через несколько секунд
+      # после того, как деплой отмечен успешным. Без паузы canary иногда
+      # проверял бы предыдущую сборку и молчал бы о сломанной новой.
+      - name: Дать постоянному адресу переключиться
+        if: github.event_name == 'deployment_status'
+        run: sleep 30
+
       # Скрипту нужен только node и src/app для списка маршрутов — зависимости не ставим.
       - name: Проверить задеплоенное приложение
         env:
-          CANARY_URL: ${{ github.event.deployment_status.environment_url || inputs.url }}
+          CANARY_URL: ${{ inputs.url }}
         run: npm run canary
