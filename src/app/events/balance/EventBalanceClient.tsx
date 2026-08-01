@@ -103,7 +103,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
   const optimizedTransactions = simplifyDebts(debtGraphInput, group.currency || 'RUB');
 
   return (
-    <div className="space-y-6 max-w-md mx-auto px-1 pb-24">
+    <div className="space-y-6 max-w-md mx-auto px-1 pb-4">
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <Link

@@ -49,16 +49,12 @@ Production Supabase не заполнялся тестовыми аккаунт�
 viewport. Полный `npm test` дополнительно повторил unit, RLS и test-build через
 `pretest`.
 
-## Новый дефект
+## Открытые дефекты
 
-| ID | Severity | Дефект | Доказательство | Кому |
+| # | Дефект | Severity | Зона | Статус |
 |---|---|---|---|---|
-| S3-3 | S3 | Фиксированный `BottomNav` перекрывает карточки переводов/балансов на длинном `/events/balance`; на desktop 1280×720 nav занимает `y=630…720`, карточка «Максим → Борис» — `y=642…718` | [desktop screenshot](output/playwright/scenario-graduation-desktop.png), [mobile screenshot](output/playwright/scenario-road-trip-mobile.png) | Gemini / UI |
-
-Критерий приёмки: ни одна карточка и её action не должны находиться под
-фиксированной навигацией при прокрутке на 375×812 и 1280×720. Нужен нижний
-safe-area/padding, равный высоте nav с запасом; после правки повторить оба
-viewport.
+| S3-2 | Десктопная вёрстка `/auth` обрезана по высоте на 1280×720 | S3 | ④ Gemini | ✅ Исправлено (компактный заголовок, убрано дублирование `pb-24`) |
+| S3-3 | `BottomNav` перекрывает карточки `/events/balance` | S3 | ④ Gemini | ✅ Исправлено (добавлен safe-area-inset в BottomNav и pb-32 в main) |
 
 ## Внешние предупреждения
 

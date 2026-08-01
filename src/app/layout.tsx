@@ -68,7 +68,7 @@ export default function RootLayout({
         </header>
 
         {/* Main Content Container with Fixed Width Guard */}
-        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-24 space-y-4">
+        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-32 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] space-y-4">
           {children}
         </main>
 
