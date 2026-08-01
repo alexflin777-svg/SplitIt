@@ -37,31 +37,26 @@ const LOCAL_GROUPS_KEY = 'splitit_local_groups_data';
 const USERS_REGISTRY_KEY = 'splitit_registered_users_registry';
 const LOCAL_FRIENDS_KEY = 'splitit_saved_friends_list';
 
-// Default initial friends array
-const DEFAULT_INITIAL_FRIENDS = [
-  { id: 'user-2', name: 'Максим Громов', avatar: '👨‍💻', phone: '+7 (916) 123-45-67', email: 'maksim@example.com', role: 'member' },
-  { id: 'user-3', name: 'Елена Воронова', avatar: '👩‍🎨', phone: '+7 (926) 987-65-43', email: 'elena@example.com', role: 'member' },
-  { id: 'user-4', name: 'Анастасия Ким', avatar: '🦊', phone: '+7 (903) 555-12-34', email: 'anastasia@example.com', role: 'member' },
-];
+// Эти записи автоматически добавлялись старыми версиями приложения. Они
+// нужны только как сигнатуры одноразовой миграции и никогда не возвращаются
+// пользователю как настоящие контакты (инвариант И-14).
+const LEGACY_DEMO_FRIENDS = new Set([
+  'user-2|Максим Громов|maksim@example.com',
+  'user-3|Елена Воронова|elena@example.com',
+  'user-4|Анастасия Ким|anastasia@example.com',
+]);
 
 // ---------------------------------------------------------------------------
-// Синхронизация между вкладками и устройствами
+// Синхронизация между вкладками одного браузера
 // ---------------------------------------------------------------------------
 
 /**
- * Раньше здесь был один канал 'splitit_live_sync' на всё приложение: каждый
- * клиент рассылал в него ВСЕ свои группы и весь список друзей, а приёмник писал
- * полученное к себе в localStorage без проверки отправителя. Два пользователя с
- * настоящим Supabase затёрли бы данные друг друга и увидели чужие расходы.
- *
- * Теперь канал скоупится на пользователя, отправитель проверяется, состояние
- * сливается по времени изменения, а подписка снимается в функции очистки
- * (инвариант И-5).
+ * В канал браузера уходит только сигнал «перечитать localStorage», без самих
+ * групп, контактов или профиля. Между устройствами группы синхронизируются из
+ * таблиц Supabase через PostgreSQL Changes в remote-store.ts. Клиентский
+ * Realtime Broadcast без private channel и RLS для пользовательских данных не
+ * используется (инварианты И-5 и И-17).
  */
-function userChannelName(userId: string): string {
-  return `splitit:user:${userId}`;
-}
-
 let broadcastChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   try {
@@ -71,26 +66,8 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
-type RealtimeChannel = ReturnType<NonNullable<typeof supabase>['channel']>;
-
-function openUserChannel(userId: string, onPayload: (payload: any) => void): RealtimeChannel | null {
-  if (!supabase) return null;
-  try {
-    const channel = supabase.channel(userChannelName(userId), {
-      config: { broadcast: { self: false } },
-    });
-    channel.on('broadcast', { event: 'SPLITIT_DEVICE_SYNC' }, onPayload).subscribe();
-    return channel;
-  } catch (e) {
-    console.warn('Не удалось открыть канал синхронизации Supabase', e);
-    return null;
-  }
-}
-
-export function subscribeToRealtimeSync(callback: () => void): () => void {
+export function subscribeToLocalSync(callback: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
-
-  const session = getLocalSession();
 
   // 1. Между вкладками одного браузера
   const handler = (event: MessageEvent) => {
@@ -106,93 +83,19 @@ export function subscribeToRealtimeSync(callback: () => void): () => void {
   };
   window.addEventListener('storage', storageHandler);
 
-  // 3. Между устройствами одного пользователя — только при настроенном Supabase
-  const channel = session
-    ? openUserChannel(session.id, (payload) => {
-        // Чужой отправитель игнорируется, даже если пробился в канал.
-        if (payload?.payload?.user_id !== session.id) return;
-        mergeIncomingState(payload.payload);
-        callback();
-      })
-    : null;
-
   return () => {
     if (broadcastChannel) broadcastChannel.removeEventListener('message', handler);
     window.removeEventListener('storage', storageHandler);
-    // Канал снимается вместе с подпиской — раньше он оставался жить, и каждая
-    // новая подписка вешала ещё один обработчик поверх старых.
-    if (channel && supabase) {
-      try {
-        supabase.removeChannel(channel);
-      } catch (e) {
-        console.warn('Не удалось закрыть канал синхронизации', e);
-      }
-    }
   };
 }
 
-/**
- * Входящее состояние сливается с локальным по времени изменения, а не
- * перезаписывает его целиком. Перезапись теряла всё, что устройство успело
- * записать между двумя событиями.
- */
-function mergeIncomingState(payload: { groups?: any[]; friends?: any[] }): void {
-  if (Array.isArray(payload.groups)) {
-    const merged = mergeById(getSavedGroups(), payload.groups);
-    localStorage.setItem(LOCAL_GROUPS_KEY, JSON.stringify(merged));
-  }
-  if (Array.isArray(payload.friends)) {
-    const merged = mergeById(getSavedFriends(), payload.friends);
-    localStorage.setItem(LOCAL_FRIENDS_KEY, JSON.stringify(merged));
-  }
-}
-
-function mergeById(local: any[], incoming: any[]): any[] {
-  const byId = new Map<string, any>();
-  for (const item of local) {
-    if (item?.id) byId.set(item.id, item);
-  }
-  for (const item of incoming) {
-    if (!item?.id) continue;
-    const existing = byId.get(item.id);
-    if (!existing) {
-      byId.set(item.id, item);
-      continue;
-    }
-    const localAt = Date.parse(existing.updatedAt ?? existing.createdAt ?? '') || 0;
-    const remoteAt = Date.parse(item.updatedAt ?? item.createdAt ?? '') || 0;
-    byId.set(item.id, remoteAt >= localAt ? item : existing);
-  }
-  return Array.from(byId.values());
-}
-
-export function notifyRealtimeSync(groups?: any[], friends?: any[]) {
+export function notifyLocalSync() {
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage({ type: 'SPLITIT_DATA_UPDATED', timestamp: Date.now() });
     } catch (e) {
       console.warn('Не удалось оповестить соседние вкладки', e);
     }
-  }
-
-  if (!supabase) return;
-
-  const activeUser = getLocalSession();
-  if (!activeUser) return;
-
-  try {
-    supabase.channel(userChannelName(activeUser.id)).send({
-      type: 'broadcast',
-      event: 'SPLITIT_DEVICE_SYNC',
-      payload: {
-        user_id: activeUser.id,
-        groups: groups || getSavedGroups(),
-        friends: friends || getSavedFriends(),
-        timestamp: Date.now(),
-      },
-    });
-  } catch (e) {
-    console.warn('Не удалось разослать состояние на другие устройства', e);
   }
 }
 
@@ -232,19 +135,26 @@ function readLocal<T>(key: string, fallback: T): T {
 }
 
 export function getSavedFriends(): any[] {
-  if (typeof window === 'undefined') return DEFAULT_INITIAL_FRIENDS;
-  const raw = localStorage.getItem(LOCAL_FRIENDS_KEY);
-  if (raw === null) {
-    writeLocal(LOCAL_FRIENDS_KEY, DEFAULT_INITIAL_FRIENDS);
-    return DEFAULT_INITIAL_FRIENDS;
+  if (typeof window === 'undefined') return [];
+
+  const saved = readLocal<any[]>(LOCAL_FRIENDS_KEY, []);
+  const cleaned = saved.filter((friend) => {
+    const signature = `${friend?.id ?? ''}|${friend?.name ?? ''}|${friend?.email ?? ''}`;
+    return !LEGACY_DEMO_FRIENDS.has(signature);
+  });
+
+  // Удаляем только точные записи старого демо-набора, сохраняя все контакты,
+  // которые пользователь добавил сам до обновления.
+  if (cleaned.length !== saved.length) {
+    writeLocal(LOCAL_FRIENDS_KEY, cleaned);
   }
-  return readLocal<any[]>(LOCAL_FRIENDS_KEY, DEFAULT_INITIAL_FRIENDS);
+  return cleaned;
 }
 
 export function saveFriends(friends: any[]): string | null {
   if (typeof window === 'undefined') return null;
   const error = writeLocal(LOCAL_FRIENDS_KEY, friends);
-  if (!error) notifyRealtimeSync(undefined, friends);
+  if (!error) notifyLocalSync();
   return error;
 }
 
@@ -255,7 +165,7 @@ export function getSavedGroups(): any[] {
 export function saveGroups(groups: any[]): string | null {
   if (typeof window === 'undefined') return null;
   const error = writeLocal(LOCAL_GROUPS_KEY, groups);
-  if (!error) notifyRealtimeSync(groups);
+  if (!error) notifyLocalSync();
   return error;
 }
 
@@ -286,7 +196,7 @@ export function saveLocalSession(user: UserProfile): string | null {
   const error = writeLocal(LOCAL_SESSION_KEY, user);
   if (error) return error;
   registerUserProfile(user);
-  notifyRealtimeSync();
+  notifyLocalSync();
   window.dispatchEvent(new Event('splitit_profile_changed'));
   return null;
 }
@@ -447,7 +357,7 @@ export async function signOutUser() {
     if (error) console.warn('[SplitIT] Supabase signOut вернул ошибку', error.message);
   }
   clearLocalSession();
-  notifyRealtimeSync();
+  notifyLocalSync();
 }
 
 export async function getActiveSession(): Promise<UserProfile | null> {

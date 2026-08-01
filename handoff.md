@@ -1,9 +1,67 @@
 # Handoff — SplitIT
 
 **Обновлён:** 2026-08-01
-**Роль, сдающая работу:** ① Claude Code (логика бэкенда и API)
-**Роль, принимающая работу:** ② CODEX → ③ Чекер → ④ Gemini в Antigravity
-**Правила конвейера:** `.agents/rules/antigravity2_core.md`
+**Роль, сдающая работу:** ③ CODEX / Чекер
+**Роль, принимающая работу:** ④ Gemini в Antigravity
+**Правила конвейера:** `.agents/rules/antigravity2_core.md`, `.agents/rules/collaboration.md`
+
+---
+
+## 2026-08-01 — ③ CODEX/Чекер → ④ Gemini в Antigravity
+
+> Эта передача — текущая. Старые разделы ниже сохранены как история и не
+> являются источником актуального статуса; факты текущего среза находятся здесь
+> и в `bug_report.md`.
+
+**Ветка:** `fix/local-contacts-realtime-integrity`, база `origin/main` @
+`814de5e`.
+
+**Что сделано:** закрыта передача локальных групп/контактов через незащищённый
+Supabase Broadcast; межвкладочный Browser BroadcastChannel теперь отправляет
+только сигнал без payload. Удалены автоматически посеянные демо-друзья,
+выдуманные phone/email/статус активности и неработающая ссылка
+`/auth?invite=friend`. Legacy demo-записи мигрируются точечно, реальные контакты
+сохраняются.
+
+**Изменённые файлы:**
+
+- `src/lib/supabase.ts` — локальная синхронизация без remote payload и миграция
+  демо-контактов;
+- `src/app/friends/page.tsx` — честное локальное состояние, отсутствие
+  фиктивных данных/ссылки, обработка ошибки сохранения;
+- `e2e/integrity.spec.ts` — три регрессии на пустой список, ручной контакт и
+  legacy migration;
+- `.agents/rules/antigravity2_core.md` — уточнён И-5 и устранено противоречие
+  `npm test` / `npx playwright test`;
+- `bug_report.md`, `bug_reports/2026-07-31-round-5.md`, `progress.md`, `todo.md`,
+  `handoff_codex.md` — отчёт и состояние;
+- `output/playwright/round7-friends-mobile.png`,
+  `output/playwright/round7-friends-desktop.png`,
+  `output/playwright/round7-auth-desktop.png` — доказательства.
+
+**Новые/уточнённые инварианты:**
+
+- И-5: общий browser channel допустим только как уведомление без групп,
+  контактов, профиля и токенов;
+- И-14: отсутствие контактов не заменяется демо-пользователями;
+- И-15: ссылка или статус не показываются рабочими без реализованного действия.
+
+**Что проверил Чекер:** `npm run lint` — 0; `npx tsc --noEmit` — 0;
+`npm run test:rls` — 28/28; `npm run build` — 15 страниц; `npm test` — 78/78;
+живой `out/` на 375×812 и 1280×720 — console errors 0. Все процессы
+`serve:out` остановлены. Live Supabase: пять миграций, Security Advisor
+`lints: []`, Auth users 0.
+
+**Задача Gemini:** исправить S3-2 — на `/auth` при 1280×720 fixed BottomNav
+перекрывает форму, кнопка регистрации не попадает в первый viewport. До:
+`output/playwright/round7-auth-desktop.png`. После правки приложить снимки
+375×812 и 1280×720, не менять `src/lib/**`, Auth/RLS или маршрутизацию.
+
+**Осознанно не сделано:** production-flow с двумя аккаунтами не симулировался —
+в Supabase Auth 0 пользователей; URL Configuration и SMTP не менялись; OAuth
+для `antimetal`/Gemini Supabase MCP и ADC/параметры AlloyDB не выдавались;
+OCR, валютные расчёты, PDF и offline network не расширялись. Публичный Vercel
+canary выполняется после push/deploy этой ветки.
 
 ---
 
