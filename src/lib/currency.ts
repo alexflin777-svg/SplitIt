@@ -149,11 +149,32 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
   return getRatesObject();
 }
 
-function applyRatesToCurrencies(rates: Record<string, number>) {
+/**
+ * Курс сохраняется как есть, без округления до копеек.
+ *
+ * Раньше здесь стояло `Math.round(rateToRub * 100) / 100`. Округляли не ту
+ * величину: до копеек имеет смысл округлять итоговую сумму, а не курс, по
+ * которому её считают. Последствия было два, и оба тихие.
+ *
+ * Потеря точности. Тенге ходит около 0.166 ₽; после округления до 0.17 каждый
+ * расход в тенге считался с ошибкой 2.4%, и она уезжала прямо в баланс.
+ *
+ * Деление на ноль. Курс мельче 0.005 округлялся в 0, и `convertCurrency`
+ * возвращал `Infinity`. В списке валют сейчас таких нет, но добавление рупии,
+ * донга или сума сломало бы расчёт долгов у всей группы без единого сообщения
+ * об ошибке.
+ *
+ * Некорректные значения отбрасываются: лучше остаться на прежнем курсе, чем
+ * принять ноль или NaN из ответа API.
+ */
+export function applyRatesToCurrencies(rates: Record<string, number>) {
   for (const [code, rateToRub] of Object.entries(rates)) {
-    if (CURRENCIES[code]) {
-      CURRENCIES[code].rateToRub = Math.round(rateToRub * 100) / 100;
+    if (!CURRENCIES[code]) continue;
+    if (!Number.isFinite(rateToRub) || rateToRub <= 0) {
+      console.warn(`[SplitIT] Курс ${code} пришёл некорректным (${rateToRub}), оставляю прежний`);
+      continue;
     }
+    CURRENCIES[code].rateToRub = rateToRub;
   }
 }
 
