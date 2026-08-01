@@ -24,7 +24,7 @@
 | `npx tsc --noEmit` | 0 |
 | `npm run test:unit` | 54 passed |
 | `npm run test:rls` | 34 passed на настоящем PostgreSQL |
-| `npm test` | 70 Playwright passed, mobile + desktop |
+| `npm test` | 84 passed, mobile + desktop |
 
 ---
 
