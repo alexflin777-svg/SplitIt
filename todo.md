@@ -24,7 +24,8 @@
 | `npx tsc --noEmit` | 0 |
 | `npm run test:unit` | 54 passed |
 | `npm run test:rls` | 34 passed на настоящем PostgreSQL |
-| `npm test` | 84 passed, mobile + desktop |
+| `npm test` | 92 passed, mobile + desktop |
+| `npm run canary` | 18/18 на боевом адресе |
 
 ---
 
@@ -33,9 +34,11 @@
 - [x] **Прогон двумя аккаунтами на проде.** `npm run verify:prod`: 24/24;
   подтверждены GoTrue, PostgREST, RPC и RLS. После прогона независимый SQL-аудит
   подтвердил нулевой остаток тестовых пользователей, групп и расходов.
-- [ ] **Live Realtime WebSocket.** Production verifier не открывает подписку и
-  не доказывает доставку Postgres Changes между двумя сессиями. Нужен отдельный
-  сценарий с ожиданием INSERT/DELETE события. *(🔍 CODEX / Claude Code)*
+- [ ] **Live Realtime WebSocket.** Сценарий написан — `npm run verify:realtime`:
+  три живых клиента supabase-js, доставка между сессиями, тишина у постороннего,
+  снятие подписки. **Живого прогона ещё не было**: аккаунты в боевом проекте
+  заводит Чекер, как и в случае с `verify:prod`. До прогона Realtime остаётся
+  непроверенным слоем. *(🔍 CODEX/Чекер)*
 - [ ] **Supabase → Authentication → URL Configuration.** Site URL и
   `https://split-it-ere9.vercel.app/auth` в Redirect URLs. Без этого письма со
   сбросом пароля ведут на localhost. *(🎨 Gemini или владелец)*
@@ -86,11 +89,14 @@
   что проверка паролей по базе утечек отключена. Включить в настройках Auth
   после решения владельца.
 
-- [ ] **Canary после деплоя.** Сейчас после `git push` никто не проверяет, что
-  прод жив и в нужном режиме. Ошибка этого круга — деплой без переменных
-  Supabase — ловится одним `curl`.
-- [ ] **GitHub Actions на гейт** (`lint`, `tsc`, `test:rls`, `test`), чтобы
-  красная ветка не вливалась в `main`.
+- [x] **Canary после деплоя.** `npm run canary` — читающая проверка прода
+  снаружи: маршруты, чанки, режим сборки, живой GoTrue, наличие всех таблиц и
+  RPC, закрытость данных для анонима. На боевом адресе **18/18**. Проверен на
+  обратимость: на сборке без ключей Supabase краснеет и возвращает 1.
+- [x] **GitHub Actions на гейт** (`lint`, `tsc`, `test:unit`, `test:rls`,
+  `test`) — `.github/workflows/gate.yml`, на каждый push и PR в `main`.
+  Файл проходит схему GitHub Actions; **живого прогона ещё не было** — с
+  машины ① нет доступа на push, см. `handoff.md`.
 - [ ] **Канал обновлений.** `NEXT_PUBLIC_UPDATE_MANIFEST_URL` не задан, экран
   честно об этом сообщает. Нужен либо манифест, либо решение убрать экран.
 
