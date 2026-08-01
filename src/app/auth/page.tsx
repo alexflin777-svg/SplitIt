@@ -155,17 +155,17 @@ function AuthForm() {
   };
 
   return (
-    <div className="space-y-5 max-w-md mx-auto px-1 pb-24">
+    <div className="space-y-4 max-w-md mx-auto px-1">
       {/* Header */}
-      <div className="text-center space-y-2">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20 overflow-hidden">
+      <div className="text-center space-y-1.5">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20 overflow-hidden">
           {customAvatarPreview ? (
             <img src={customAvatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-2xl" />
           ) : (
             <span>S</span>
           )}
         </div>
-        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           {mode === 'login' && 'Вход в ваш профиль'}
           {mode === 'register' && 'Регистрация аккаунта'}
           {mode === 'reset' && 'Восстановление пароля'}
