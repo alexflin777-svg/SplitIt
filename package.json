@@ -14,7 +14,8 @@
     "test:rls": "node --test test/rls.test.mjs test/realistic-rls.test.mjs",
     "build:test": "NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= NEXT_PUBLIC_APP_URL= VERCEL_PROJECT_PRODUCTION_URL= next build",
     "test:unit": "node --test test/debt-simplification.test.mjs test/currency.test.mjs test/ocr.test.mjs test/realistic-scenarios.test.mjs",
-    "verify:prod": "node scripts/verify-production.mjs"
+    "verify:prod": "node scripts/verify-production.mjs",
+    "verify:realtime": "node scripts/verify-realtime.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
