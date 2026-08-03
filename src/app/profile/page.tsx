@@ -41,7 +41,7 @@ export default function ProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // App updater state
-  const [currentVersion, setCurrentVersion] = useState<string>('v2.3.0');
+  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
 
@@ -100,6 +100,7 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
+    if (!window.confirm('Вы уверены, что хотите выйти?')) return;
     await signOutUser();
     router.push('/auth');
   };
@@ -132,6 +133,12 @@ export default function ProfilePage() {
       sendInAppNotification('Уведомления включены!', 'Вы будете получать оповещения о новых транзакциях и обновлениях.');
     } else {
       alert('Запрос на push-уведомления был отклонен браузером.');
+    }
+  };
+
+  const handleOpenUpdateDownload = () => {
+    if (updateResult?.downloadUrl) {
+      window.open(updateResult.downloadUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -380,18 +387,14 @@ export default function ProfilePage() {
               )}
 
               {updateResult.status === 'available' && updateResult.downloadUrl && (
-                <a
-                  href={updateResult.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={handleOpenUpdateDownload}
                   className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
                 >
                   <Download className="w-4 h-4" />
-                  <span>
-                    Скачать {updateResult.latestVersion}
-                    {updateResult.downloadSize ? ` (${updateResult.downloadSize})` : ''}
-                  </span>
-                </a>
+                  <span>Открыть страницу загрузки {updateResult.latestVersion}</span>
+                </button>
               )}
 
               {updateResult.status === 'available' && !updateResult.downloadUrl && (

@@ -51,7 +51,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     });
   }, [groupId]);
 
-  const parsedAmount = parseFloat(amount) || 0;
+  const parsedAmount = parseAmount(amount).value || 0;
   const { convertedAmount } = convertCurrency(parsedAmount, currency, group?.currency || 'RUB');
   const rateDisclosure = ratesLoaded
     ? getRateDisclosure(currency, group?.currency || 'RUB')

@@ -5,9 +5,12 @@
 приложение считает, кто кому сколько должен, и сводит долги к минимальному
 числу переводов.
 
-**Статус:** многопользовательский режим готов по коду, но требует подключения
-Supabase. Без него приложение работает локально на одном устройстве и прямо
-сообщает об этом на экранах.
+**Статус:** кандидат `1.0 (build 1)` для закрытой беты. Production-конфигурация
+Supabase используется в web и внутренних мобильных сборках. Новая миграция
+`group_participants` проверена локально, но должна быть применена к production
+до публикации соответствующего клиента. Добавлены удаление событий и честная
+проверка обновлений по прямой ссылке из манифеста; небезопасного объединения
+аккаунтов по совпадению имени нет.
 
 Развёртывание: [SUPABASE_SETUP.md](SUPABASE_SETUP.md) — база и миграции,
 [VERCEL_SETUP.md](VERCEL_SETUP.md) — хостинг и публичный адрес. Порядок важен:
@@ -42,6 +45,22 @@ npm run build         # статический экспорт в out/
 npm test              # Playwright по out/, mobile + desktop
 ```
 
+## Сборка мобильных приложений (Capacitor)
+
+Для внутреннего Android APK нужен JDK 21 (например, из Android Studio):
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+npm run build
+npx cap sync
+cd android && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ../SplitIT.apk && cd ..
+```
+
+Debug-подпись подходит только для sideload-тестирования и не подходит Google
+Play. Для физического iPhone нельзя превращать unsigned `.app` в «IPA»:
+нужны Apple Developer Team, provisioning profile и Archive/Export из Xcode
+(Ad Hoc или TestFlight). Без них можно собрать только Simulator `.app`.
+
 Тесты гоняются по собранному `out/`, а не по `next dev`: часть дефектов
 существует только в статическом экспорте, то есть ровно в том, что уезжает
 пользователю.
@@ -66,9 +85,8 @@ test/             харнесс PostgreSQL и проверки RLS
 
 ## Разработка
 
-Проект ведётся конвейером из четырёх ролей с разделёнными зонами
-ответственности. Правила, инварианты и определение готовности —
-[.agents/rules/antigravity2_core.md](.agents/rules/antigravity2_core.md).
+Правила, роли, инварианты и определение готовности находятся в
+[AGENTS.md](AGENTS.md).
 
 Текущее состояние и открытые дефекты — [bug_report.md](bug_report.md).
 Передача между ролями — [handoff.md](handoff.md).

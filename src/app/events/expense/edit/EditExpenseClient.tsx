@@ -64,7 +64,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
     );
   }
 
-  const parsedAmount = parseFloat(amount) || 0;
+  const parsedAmount = parseAmount(amount).value || 0;
   const { convertedAmount } = convertCurrency(parsedAmount, currency, group.currency || 'RUB');
   const rateDisclosure = ratesLoaded
     ? getRateDisclosure(currency, group?.currency || 'RUB')

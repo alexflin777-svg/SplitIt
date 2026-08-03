@@ -131,6 +131,23 @@ export async function setGroupStatus(groupId: string, status: string): Promise<R
   return error ? { data: null, error } : ok(true);
 }
 
+export async function deleteGroup(groupId: string): Promise<RemoteResult<true>> {
+  if (isMultiUser()) {
+    const { error } = await remote.deleteGroup(groupId);
+    if (error) return { data: null, error };
+    return ok(true);
+  }
+
+  const groups = localGroups();
+  const idx = groups.findIndex((g) => g.id === groupId);
+  if (idx !== -1) {
+    groups.splice(idx, 1);
+    const error = writeLocal(groups);
+    if (error) return { data: null, error };
+  }
+  return ok(true);
+}
+
 export async function addExpense(
   groupId: string,
   expense: {

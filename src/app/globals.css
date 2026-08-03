@@ -37,6 +37,15 @@
   }
 }
 
+/* Capacitor's WKWebView can report a zero safe-area inset while still
+   drawing below the iOS status bar. Keep the fallback WebKit-only so the
+   desktop and Android headers retain their compact spacing. */
+@supports (-webkit-touch-callout: none) {
+  .app-header {
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 3.5rem);
+  }
+}
+
 /* Utility: hide scrollbar on horizontal scroll containers */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

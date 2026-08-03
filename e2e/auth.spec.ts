@@ -79,6 +79,7 @@ test.describe('Авторизация (инвариант И-1)', () => {
     await page.getByRole('button', { name: /Быстрый демо-вход/ }).click();
     await expect(page).toHaveURL(/\/$|\/index/);
 
+    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Выйти' }).click();
     await expect(page).toHaveURL(/\/auth\?mode=login/);
     expect(await readSession(page)).toBeNull();

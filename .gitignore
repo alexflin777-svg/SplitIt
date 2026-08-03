@@ -16,6 +16,9 @@ blob-report/
 
 # Служебное
 tsconfig.tsbuildinfo
+.idea/
+.hermes/
+.mcp.json
 
 # Мобильные артефакты
 *.apk
@@ -24,8 +27,9 @@ tsconfig.tsbuildinfo
 android/app/build/
 ios/App/build/
 ios/App/Pods/
+ios/build_physical/
 
-# Окружение — секреты не коммитятся (см. .agents/rules/antigravity2_core.md §8)
+# Окружение — секреты не коммитятся (см. AGENTS.md)
 .env
 .env.local
 .env*.local

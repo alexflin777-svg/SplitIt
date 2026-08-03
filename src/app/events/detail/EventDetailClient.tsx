@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
@@ -9,6 +10,7 @@ import {
   renameGroup,
   setGroupStatus,
   deleteExpense as deleteExpenseFromStore,
+  deleteGroup,
   createInvite,
   subscribeToGroup,
   isMultiUser,
@@ -78,10 +80,12 @@ function EventNotFound({ groupId }: { groupId: string }) {
 }
 
 export default function EventDetailClient({ groupId }: { groupId: string }) {
+  const router = useRouter();
   const [group, setGroup] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -95,6 +99,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const [showPhonebookModal, setShowPhonebookModal] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
 
   // Phonebook manual entry
   const [contactNameInput, setContactNameInput] = useState('');
@@ -249,26 +254,28 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     setShowPhonebookModal(true);
   };
 
-  const addMemberByName = (nameStr: string) => {
+  const addMemberByName = async (nameStr: string) => {
     if (!nameStr.trim()) return;
     const isExists = (group.members || []).some(
       (m: any) => m.name.toLowerCase().trim() === nameStr.toLowerCase().trim()
     );
     if (isExists) return;
 
+    // В сетевом режиме финансовые участники без аккаунта появятся только после
+    // завершения participant-модели. Имя не используется как идентификатор.
+    if (isMultiUser()) {
+      setInviteError('В общем событии участники добавляются по ссылке-приглашению.');
+      setIsAddingMember(false);
+      return;
+    }
+
+    // Локальный режим
     const newMember = {
       id: `m-${Date.now()}`,
       name: nameStr.trim(),
       avatar: '👤',
       role: 'member',
     };
-    // В сетевом режиме участник появляется только через приглашение: строка
-    // без настоящего пользователя сломала бы расчёт долгов и RLS.
-    if (isMultiUser()) {
-      setInviteError('В общем событии участники добавляются по ссылке-приглашению.');
-      setIsAddingMember(false);
-      return;
-    }
 
     const updated = { ...group, members: [...(group.members || []), newMember] };
     setGroup(updated);
@@ -292,7 +299,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     const idx = saved.findIndex((g: any) => g.id === updated.id);
     if (idx !== -1) saved[idx] = updated;
     const error = saveGroups(idx !== -1 ? saved : [updated, ...saved]);
-    if (error) setInviteError(error);
+    if (error) setActionError(error);
   };
 
   const handleSaveGroupName = async () => {
@@ -301,7 +308,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
     const { error } = await renameGroup(group.id, editedName.trim());
     if (error) {
-      setInviteError(error);
+      setActionError(error);
       return;
     }
     await loadGroup();
@@ -314,10 +321,20 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
     const { error } = await deleteExpenseFromStore(group.id, target.id);
     if (error) {
-      setInviteError(error);
+      setActionError(error);
       return;
     }
     await loadGroup();
+  };
+
+  const handleDeleteEventConfirmed = async () => {
+    setShowDeleteEventModal(false);
+    const { error } = await deleteGroup(group.id);
+    if (error) {
+      setActionError(error);
+      return;
+    }
+    router.push(routes.home());
   };
 
   const handleToggleCompleteEvent = async (targetStatus: 'completed' | 'active') => {
@@ -325,7 +342,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
     const { error } = await setGroupStatus(group.id, targetStatus);
     if (error) {
-      setInviteError(error);
+      setActionError(error);
       return;
     }
     await loadGroup();
@@ -345,6 +362,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
   return (
     <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
+      {actionError && (
+        <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
+          <p className="text-xs font-bold text-rose-700">{actionError}</p>
+          <button onClick={() => setActionError(null)} className="text-rose-500 hover:text-rose-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Header Nav */}
       <div className="flex items-center justify-between">
         <Link
@@ -387,6 +412,15 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           >
             <Share2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </button>
+          {(!isMultiUser() || userProfile?.id === group.createdBy) && (
+            <button
+              onClick={() => setShowDeleteEventModal(true)}
+              className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-xs"
+              title="Удалить событие"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -824,6 +858,40 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-500/20 transition-all"
               >
                 Завершить расчет
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Event Modal */}
+      {showDeleteEventModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Удаление события</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                Вы уверены, что хотите безвозвратно удалить событие «<span className="font-bold text-slate-900 dark:text-white">{group.name}</span>»?
+                Все участники, расходы и долги будут удалены.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteEventModal(false)}
+                className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteEventConfirmed}
+                className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 transition-all"
+              >
+                Удалить
               </button>
             </div>
           </div>

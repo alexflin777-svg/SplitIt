@@ -27,7 +27,10 @@ export default function BottomNav() {
   ];
 
   const handleAuthAction = async () => {
-    if (isAuthenticated) await signOutUser();
+    if (isAuthenticated) {
+      if (!window.confirm('Вы уверены, что хотите выйти?')) return;
+      await signOutUser();
+    }
     router.push('/auth?mode=login');
   };
 

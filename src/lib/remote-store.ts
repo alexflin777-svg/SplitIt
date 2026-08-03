@@ -220,6 +220,13 @@ export async function renameGroupStatus(groupId: string, status: string): Promis
   return data ? { data: true, error: null } : fail('Событие не найдено или менять его статус может только владелец.');
 }
 
+export async function deleteGroup(groupId: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  const { data, error } = await supabase.from('groups').delete().eq('id', groupId).select('id').maybeSingle();
+  if (error) return fail(translate(error));
+  return data ? { data: true, error: null } : fail('Событие не найдено или вы не можете его удалить (только создатель может удалить).');
+}
+
 export async function addExpense(
   groupId: string,
   expense: {

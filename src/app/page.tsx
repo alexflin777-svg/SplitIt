@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatMoney } from '@/lib/currency';
+import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
 import { listGroups, isMultiUser } from '@/lib/store';
 import {
@@ -108,7 +108,8 @@ export default function HomePage() {
 
   const totalSpent = groups.reduce((acc, g) => {
     const groupSum = (g.expenses || []).reduce((eAcc: number, e: any) => eAcc + (e.amountInGroupCurrency || e.amount || 0), 0);
-    return acc + groupSum;
+    const { convertedAmount } = convertCurrency(groupSum, g.currency || 'RUB', userProfile?.preferred_currency || 'RUB');
+    return acc + convertedAmount;
   }, 0);
 
   if (!isLoaded) {
