@@ -29,8 +29,10 @@ Realtime) · Capacitor для APK и IPA · Tesseract.js для распозна
 
 ## Запуск
 
+**Требование:** Node.js 24 (см. `.nvmrc`; допустимый диапазон — Node 22–24). Он нужен Capacitor и совпадает с GitHub Actions. Тесты TypeScript запускаются через закреплённый `tsx`, поэтому не зависят от неявного Node loader.
+
 ```bash
-npm install
+npm ci
 cp .env.example .env.local   # пусто = локальный режим, это рабочее состояние
 npm run dev
 ```
