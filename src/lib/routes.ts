@@ -30,7 +30,8 @@ function withQuery(pathname: string, params: Record<string, QueryValue>): string
 
 export const routes = {
   home: () => '/',
-  auth: () => '/auth',
+  auth: (mode?: 'register' | 'login' | 'reset' | 'update-password', next?: string) =>
+    withQuery('/auth', { mode, next }),
   friends: () => '/friends',
   profile: () => '/profile',
 

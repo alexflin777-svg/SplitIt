@@ -3,14 +3,14 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
-import { signUpUser, signInUser, resetPassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
+import { signUpUser, signInUser, resetPassword, updatePassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
 import { getConfigProblem } from '@/lib/env';
 import { processAvatarFile } from '@/lib/avatar';
 import { routes } from '@/lib/routes';
 
-type AuthMode = 'register' | 'login' | 'reset';
+type AuthMode = 'register' | 'login' | 'reset' | 'update-password';
 
-const AUTH_MODES: AuthMode[] = ['register', 'login', 'reset'];
+const AUTH_MODES: AuthMode[] = ['register', 'login', 'reset', 'update-password'];
 
 function AuthForm() {
   const router = useRouter();
@@ -26,6 +26,7 @@ function AuthForm() {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('👤');
   const [customAvatarPreview, setCustomAvatarPreview] = useState<string | null>(null);
@@ -128,6 +129,22 @@ function AuthForm() {
         return;
       }
       setStatusMessage(res.message);
+    } else if (mode === 'update-password') {
+      if (password !== passwordConfirmation) {
+        setLoading(false);
+        setErrorMessage('Пароли не совпадают');
+        return;
+      }
+      const res = await updatePassword(password);
+      setLoading(false);
+      if (!res.success) {
+        setErrorMessage(res.message);
+        return;
+      }
+      setStatusMessage(res.message);
+      setPassword('');
+      setPasswordConfirmation('');
+      setMode('login');
     }
   };
 
@@ -290,20 +307,15 @@ function AuthForm() {
           </>
         )}
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Электронная почта (Email)</label>
-          <div className="relative flex items-center">
-            <Mail className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
-            <input
-              type="email"
-              required
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
+        {mode !== 'update-password' && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Электронная почта (Email)</label>
+            <div className="relative flex items-center">
+              <Mail className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
+              <input type="email" required placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+            </div>
           </div>
-        </div>
+        )}
 
         {mode !== 'reset' && (
           <div className="space-y-1.5">
@@ -322,6 +334,16 @@ function AuthForm() {
           </div>
         )}
 
+        {mode === 'update-password' && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Повторите новый пароль</label>
+            <div className="relative flex items-center">
+              <Lock className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
+              <input type="password" required value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+            </div>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={loading}
@@ -334,7 +356,9 @@ function AuthForm() {
               ? 'Зарегистрироваться и Войти'
               : mode === 'login'
               ? 'Войти в аккаунт'
-              : 'Отправить ссылку для сброса'}
+              : mode === 'reset'
+              ? 'Отправить ссылку для сброса'
+              : 'Сохранить новый пароль'}
           </span>
           <ArrowRight className="w-4 h-4" />
         </button>

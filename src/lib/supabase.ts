@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfMisconfigured } from './env';
+import { APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfMisconfigured } from './env';
 import { createCredential, verifyCredential, validatePassword, StoredCredential } from './credentials';
 
 /**
@@ -345,10 +345,24 @@ export async function resetPassword(email: string): Promise<ResetResult> {
     };
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(normEmail);
+  // Recovery-ссылка должна возвращать именно на экран установки нового пароля.
+  // Без redirectTo Supabase отправляет на Site URL: пользователь попадал на
+  // главную/в уже открытую сессию и не видел способа сменить пароль.
+  const redirectTo = APP_URL ? `${APP_URL}/auth?mode=update-password` : undefined;
+  const { error } = await supabase.auth.resetPasswordForEmail(normEmail, { redirectTo });
   if (error) return { success: false, message: translateAuthError(error.message) };
 
   return { success: true, message: `Инструкция по сбросу пароля отправлена на ${normEmail}` };
+}
+
+export async function updatePassword(password: string): Promise<ResetResult> {
+  const weak = validatePassword(password);
+  if (weak) return { success: false, message: weak };
+  if (!supabase) return { success: false, message: 'Смена пароля по email недоступна: бэкенд не настроен.' };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { success: false, message: translateAuthError(error.message) };
+  return { success: true, message: 'Пароль изменён. Теперь войдите с новым паролем.' };
 }
 
 export async function signOutUser() {

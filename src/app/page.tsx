@@ -126,7 +126,7 @@ export default function HomePage() {
   // ----------------------------------------------------------------------
   if (!userProfile) {
     return (
-      <div className="space-y-6 max-w-md mx-auto px-1 pb-20 animate-in fade-in duration-300">
+      <div className="space-y-6 max-w-md mx-auto px-1 pb-28 animate-in fade-in duration-300">
         {/* Welcome Banner Card */}
         <div className="stitch-card p-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-900 text-white shadow-xl relative overflow-hidden text-center space-y-4">
           <div className="absolute -right-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
@@ -233,8 +233,8 @@ export default function HomePage() {
   // ----------------------------------------------------------------------
   // AUTHENTICATED USER WORKSPACE FEED
   // ----------------------------------------------------------------------
-  return (
-    <div className="space-y-5 max-w-md mx-auto px-1 pb-24">
+    return (
+      <div className="space-y-5 max-w-md mx-auto px-1 pb-28">
       {/* User Greeting Bar */}
       <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
         <div className="flex items-center gap-3">

@@ -23,6 +23,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'SplitIt — Совместные расходы и сплит-чеки',
   description: 'Удобное приложение для разделения чеков, отслеживания совместных расходов и оптимизации долгов в поездках и компаниях.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -68,7 +73,7 @@ export default function RootLayout({
         </header>
 
         {/* Main Content Container with Fixed Width Guard */}
-        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))] space-y-4">
+        <main className="flex-1 max-w-md w-full mx-auto p-4 pb-[calc(10rem+env(safe-area-inset-bottom,0px))] space-y-4">
           {children}
         </main>
 
