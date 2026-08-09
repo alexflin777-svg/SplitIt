@@ -328,6 +328,20 @@ export async function signInUser(email: string, password: string): Promise<AuthR
   return saveError ? { data: null, error: saveError } : { data: profile, error: null };
 }
 
+export async function signInWithGoogle(): Promise<{ error: string | null }> {
+  if (!supabase) return { error: 'Синхронизация отключена: бэкенд не настроен.' };
+  
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+  
+  if (error) return { error: translateAuthError(error.message) };
+  return { error: null };
+}
+
 export interface ResetResult {
   success: boolean;
   message: string;
