@@ -8,15 +8,17 @@ import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, getSavedFriends, UserProfile } from '@/lib/supabase';
 import { createGroup, isMultiUser } from '@/lib/store';
 import { routes } from '@/lib/routes';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function NewEventPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<'trip' | 'restaurant' | 'home' | 'party' | 'other'>('trip');
   const [currency, setCurrency] = useState('RUB');
   const [memberInput, setMemberInput] = useState('');
-  const [members, setMembers] = useState<string[]>(['Вы']);
+  const [members, setMembers] = useState<string[]>([t('eventNew.defaultYou')]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [savedFriends, setSavedFriends] = useState<any[]>([]);
@@ -26,19 +28,19 @@ export default function NewEventPage() {
     getActiveSession().then((u) => {
       if (u) {
         setUserProfile(u);
-        setMembers([u.full_name || 'Вы']);
+        setMembers([u.full_name || t('eventNew.defaultYou')]);
         if (u.preferred_currency) setCurrency(u.preferred_currency);
       }
     });
 
     if (!multiUser) setSavedFriends(getSavedFriends());
-  }, [multiUser]);
+  }, [multiUser, t]);
 
   const categories = [
-    { id: 'trip', label: 'Поездка / Путешествие', icon: Plane, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60' },
-    { id: 'restaurant', label: 'Ресторан / Бары', icon: Utensils, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/60' },
-    { id: 'home', label: 'Совместное жилье', icon: Home, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60' },
-    { id: 'party', label: 'Вечеринка / Праздник', icon: Sparkles, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/60' },
+    { id: 'trip', label: t('eventNew.category.trip'), icon: Plane, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60' },
+    { id: 'restaurant', label: t('eventNew.category.restaurant'), icon: Utensils, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/60' },
+    { id: 'home', label: t('eventNew.category.home'), icon: Home, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60' },
+    { id: 'party', label: t('eventNew.category.party'), icon: Sparkles, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/60' },
   ];
 
   const handleAddMember = () => {
@@ -69,7 +71,7 @@ export default function NewEventPage() {
     setIsCreating(true);
 
     const { data, error } = await createGroup({
-      name: name.trim() || 'Новое событие',
+      name: name.trim() || t('eventNew.defaultEventName'),
       category,
       currency,
       memberNames: multiUser ? undefined : members,
@@ -77,7 +79,7 @@ export default function NewEventPage() {
 
     setIsCreating(false);
     if (error || !data) {
-      setCreateError(error ?? 'Не удалось создать событие');
+      setCreateError(error ?? t('eventNew.errorCreateFailed'));
       return;
     }
     router.push(routes.eventDetail(data.id));
@@ -90,7 +92,7 @@ export default function NewEventPage() {
         <Link href="/" className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">Создание события</h2>
+        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventNew.title')}</h2>
         <div className="w-9" />
       </div>
 
@@ -98,12 +100,12 @@ export default function NewEventPage() {
         {/* Event Name Card */}
         <div className="stitch-card p-5 space-y-3 bg-white dark:bg-slate-800">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Название события или группы
+            {t('eventNew.nameLabel')}
           </label>
           <input
             type="text"
             required
-            placeholder="Например: Алтай 2026, Ресторан, Аренда Дома"
+            placeholder={t('eventNew.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
@@ -113,7 +115,7 @@ export default function NewEventPage() {
         {/* Category Choice */}
         <div className="stitch-card p-5 space-y-3 bg-white dark:bg-slate-800">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Категория события
+            {t('eventNew.categoryLabel')}
           </label>
           <div className="grid grid-cols-2 gap-2.5">
             {categories.map((cat) => {
@@ -145,7 +147,7 @@ export default function NewEventPage() {
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-blue-500" />
-              <span>Базовая валюта группы</span>
+              <span>{t('eventNew.currency')}</span>
             </label>
           </div>
           <select
@@ -166,7 +168,7 @@ export default function NewEventPage() {
         {!multiUser && (
           <div className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-            Участники события ({members.length})
+            {t('eventNew.membersLabel', { count: members.length })}
           </label>
 
           {/* Quick Friend Selection Chips */}
@@ -174,7 +176,7 @@ export default function NewEventPage() {
             <div className="space-y-2">
               <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Users className="w-3.5 h-3.5 text-blue-500" />
-                <span>Быстрый выбор из сохраненных друзей:</span>
+                <span>{t('eventNew.quickPickFriends')}</span>
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {savedFriends.map((friend) => {
@@ -203,7 +205,7 @@ export default function NewEventPage() {
           <div className="flex items-center gap-2">
             <input
               type="text"
-              placeholder="Имя участника..."
+              placeholder={t('eventNew.memberPlaceholder')}
               value={memberInput}
               onChange={(e) => setMemberInput(e.target.value)}
               onKeyDown={(e) => {
@@ -220,7 +222,7 @@ export default function NewEventPage() {
               className="px-4 h-11 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Добавить</span>
+              <span>{t('eventNew.add')}</span>
             </button>
           </div>
 
@@ -259,8 +261,7 @@ export default function NewEventPage() {
 
         {multiUser && (
           <div className="stitch-card p-4 bg-blue-50 border-blue-200 text-[11px] text-blue-900 mb-3">
-            Событие общее: участники присоединяются по ссылке-приглашению, которую вы отправите
-            после создания.
+            {t('eventNew.multiUserNote')}
           </div>
         )}
 
@@ -271,7 +272,7 @@ export default function NewEventPage() {
           disabled={isCreating}
           className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
         >
-          {isCreating ? 'Создаём…' : 'Создать событие и перейти'}
+          {isCreating ? t('eventNew.creating') : t('eventNew.createAndOpen')}
         </button>
       </div>
     </div>
