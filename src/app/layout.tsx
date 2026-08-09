@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { PlusCircle } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import { routes } from '@/lib/routes';
+import { I18nProvider } from '@/lib/i18n/provider';
+import HeaderNavLabel from '@/components/HeaderNavLabel';
 
 /**
  * Шрифт вшивается в сборку, а не тянется с fonts.googleapis.com.
@@ -21,8 +23,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'SplitIt — Совместные расходы и сплит-чеки',
-  description: 'Удобное приложение для разделения чеков, отслеживания совместных расходов и оптимизации долгов в поездках и компаниях.',
+  title: 'SplitIt — Split Bills & Shared Expenses',
+  description: 'The easy way to split bills, track shared expenses, and settle up with friends on trips and in groups.',
   icons: {
     icon: '/icon.svg',
     shortcut: '/icon.svg',
@@ -36,11 +38,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" className={`light ${inter.variable}`}>
+    <html lang="en" className={`light ${inter.variable}`}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
+        <I18nProvider>
         {/* Top Navbar with Responsive Mobile Safe Area Support */}
         <header className="app-header sticky top-0 z-40 w-full glass-panel border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-3">
           <div className="max-w-md mx-auto flex items-center justify-between">
@@ -66,7 +69,7 @@ export default function RootLayout({
                 className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Событие</span>
+                <span><HeaderNavLabel /></span>
               </Link>
             </div>
           </div>
@@ -79,6 +82,7 @@ export default function RootLayout({
 
         {/* Bottom Navigation Bar */}
         <BottomNav />
+        </I18nProvider>
       </body>
     </html>
   );

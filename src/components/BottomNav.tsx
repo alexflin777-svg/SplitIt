@@ -5,10 +5,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Home, Users, User, LogIn, LogOut } from 'lucide-react';
 import { getActiveSession, signOutUser } from '@/lib/supabase';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useI18n();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -21,14 +23,14 @@ export default function BottomNav() {
   }, []);
 
   const navItems = [
-    { href: '/', label: 'События', icon: Home },
-    { href: '/friends', label: 'Друзья', icon: Users },
-    { href: '/profile', label: 'Профиль', icon: User },
+    { href: '/', label: t('nav.home'), icon: Home },
+    { href: '/friends', label: t('nav.friends'), icon: Users },
+    { href: '/profile', label: t('nav.profile'), icon: User },
   ];
 
   const handleAuthAction = async () => {
     if (isAuthenticated) {
-      if (!window.confirm('Вы уверены, что хотите выйти?')) return;
+      if (!window.confirm(t('common.confirmSignOut'))) return;
       await signOutUser();
     }
     router.push('/auth?mode=login');
@@ -67,7 +69,7 @@ export default function BottomNav() {
           }`}
         >
           {isAuthenticated ? <LogOut className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-          <span>{isAuthenticated ? 'Выйти' : 'Войти'}</span>
+          <span>{isAuthenticated ? t('profile.signOut') : t('auth.signIn')}</span>
         </button>
       </div>
     </nav>

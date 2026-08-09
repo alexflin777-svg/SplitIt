@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
 import { listGroups, isMultiUser } from '@/lib/store';
+import { useI18n } from '@/lib/i18n/provider';
 import {
   Plus,
   Plane,
@@ -31,6 +32,7 @@ import { routes } from '@/lib/routes';
 
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [groups, setGroups] = useState<any[]>([]);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -83,7 +85,7 @@ export default function HomePage() {
     const demoUser: UserProfile = {
       id: 'demo-user-' + Date.now(),
       email: 'demo@splitit.app',
-      full_name: 'Алексей (Демо)',
+      full_name: 'Demo User',
       avatar_url: '👨‍💻',
       preferred_currency: 'RUB',
     };
@@ -116,7 +118,7 @@ export default function HomePage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
         <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-slate-500 font-semibold">Загрузка данных...</p>
+        <p className="text-xs text-slate-500 font-semibold">{t('home.loading')}</p>
       </div>
     );
   }
@@ -135,12 +137,12 @@ export default function HomePage() {
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
-              Делите чеки и расходы без путаницы и долгов
+              {t('home.welcomeHeadline')}
             </h1>
             <p className="text-xs text-blue-100/90 max-w-xs mx-auto leading-relaxed">
               {isMultiUser()
-                ? 'Удобный сервис для совместных поездок, ресторанов и компаний. Синхронизация между несколькими устройствами в реальном времени.'
-                : 'Удобный сервис для совместных поездок, ресторанов и компаний. Сейчас данные хранятся локально на этом устройстве.'}
+                ? t('home.welcomeBodyMultiUser')
+                : t('home.welcomeBodyLocal')}
             </p>
           </div>
 
@@ -151,7 +153,7 @@ export default function HomePage() {
               className="w-full py-3.5 rounded-xl bg-white text-blue-700 font-extrabold text-sm shadow-md hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-98"
             >
               <UserCheck className="w-4 h-4" />
-              <span>Создать аккаунт</span>
+              <span>{t('home.createAccount')}</span>
             </Link>
 
             <Link
@@ -159,7 +161,7 @@ export default function HomePage() {
               className="w-full py-3 rounded-xl bg-blue-800/80 hover:bg-blue-800 border border-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
             >
               <KeyRound className="w-4 h-4" />
-              <span>Войти в свой профиль</span>
+              <span>{t('home.signIn')}</span>
             </Link>
 
             {!isMultiUser() && (
@@ -168,7 +170,7 @@ export default function HomePage() {
                 className="w-full py-2.5 text-xs text-blue-200 font-semibold hover:text-white flex items-center justify-center gap-1 transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Попробовать быстрый демо-вход</span>
+                <span>{t('home.demoLogin')}</span>
               </button>
             )}
           </div>
@@ -177,7 +179,7 @@ export default function HomePage() {
         {/* Key Features Cards */}
         <div className="space-y-3">
           <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">
-            Основные возможности SplitIt:
+            {t('home.featuresTitle')}
           </h3>
 
           <div className="grid grid-cols-1 gap-2.5">
@@ -187,12 +189,12 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
-                  Синхронизация в реальном времени
+                  {t('home.feature.sync.title')}
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   {isMultiUser()
-                    ? 'Заходите с двух или более устройств под своим аккаунтом — изменения приходят через Supabase Realtime.'
-                    : 'Локальный режим синхронизирует соседние вкладки. Для нескольких устройств подключите Supabase.'}
+                    ? t('home.feature.sync.bodyMultiUser')
+                    : t('home.feature.sync.bodyLocal')}
                 </p>
               </div>
             </div>
@@ -203,10 +205,10 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
-                  Сканирование чеков по фото (OCR)
+                  {t('home.feature.ocr.title')}
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Сфотографируйте чек из ресторана или магазина — нейросеть автоматически распознает сумму и позиции.
+                  {t('home.feature.ocr.body')}
                 </p>
               </div>
             </div>
@@ -217,10 +219,10 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-extrabold text-slate-900 dark:text-white text-xs">
-                  Нативные приложения iOS и Android
+                  {t('home.feature.native.title')}
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Готовые мобильные приложения с темной темой, встроенным сканером и поддержкой всех устройств.
+                  {t('home.feature.native.body')}
                 </p>
               </div>
             </div>
@@ -247,7 +249,7 @@ export default function HomePage() {
           </div>
           <div>
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block">
-              Вы вошли как
+              {t('home.loggedInAs')}
             </span>
             <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">{userProfile.full_name}</h3>
           </div>
@@ -256,7 +258,7 @@ export default function HomePage() {
           href="/auth"
           className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all"
         >
-          Сменить
+          {t('home.switchProfile')}
         </Link>
       </div>
 
@@ -267,7 +269,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Общие расходы по событиям
+              {t('home.totalSpentLabel')}
             </span>
             <h2 className="text-3xl font-extrabold tracking-tight mt-0.5 text-white">
               {formatMoney(totalSpent, userProfile?.preferred_currency || 'RUB')}
@@ -284,7 +286,7 @@ export default function HomePage() {
               <ArrowDownLeft className="w-4 h-4" />
             </div>
             <div>
-              <span className="block text-[11px] text-slate-400 font-medium">Активных групп</span>
+              <span className="block text-[11px] text-slate-400 font-medium">{t('home.activeGroups')}</span>
               <span className="text-sm font-bold text-emerald-400">{groups.length}</span>
             </div>
           </div>
@@ -294,7 +296,7 @@ export default function HomePage() {
               <ArrowUpRight className="w-4 h-4" />
             </div>
             <div>
-              <span className="block text-[11px] text-slate-400 font-medium">Баланс</span>
+              <span className="block text-[11px] text-slate-400 font-medium">{t('home.balance')}</span>
               <span className="text-sm font-bold text-amber-400">0 ₽</span>
             </div>
           </div>
@@ -307,7 +309,7 @@ export default function HomePage() {
           <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Поиск событий или групп..."
+            placeholder={t('home.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-400 shadow-sm"
@@ -316,10 +318,10 @@ export default function HomePage() {
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           {[
-            { id: 'all', label: 'Все события' },
-            { id: 'trip', label: 'Поездки' },
-            { id: 'home', label: 'Дом' },
-            { id: 'restaurant', label: 'Рестораны' },
+            { id: 'all', label: t('home.filter.all') },
+            { id: 'trip', label: t('home.filter.trip') },
+            { id: 'home', label: t('home.filter.home') },
+            { id: 'restaurant', label: t('home.filter.restaurant') },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -339,7 +341,7 @@ export default function HomePage() {
       {/* Events List Header */}
       <div className="flex items-center justify-between pt-1">
         <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-          <span>Мои группы и события</span>
+          <span>{t('home.myGroups')}</span>
           <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
             {filteredGroups.length}
           </span>
@@ -348,7 +350,7 @@ export default function HomePage() {
           href={routes.eventNew()}
           className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
         >
-          <span>Создать</span>
+          <span>{t('home.create')}</span>
           <Plus className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -374,9 +376,9 @@ export default function HomePage() {
                     <h4 className="font-bold text-slate-900 dark:text-white text-sm">{group.name}</h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                       <Users className="w-3 h-3 text-slate-400" />
-                      <span>{group.members?.length || 1} участн.</span>
+                      <span>{t('home.membersCount', { count: group.members?.length || 1 })}</span>
                       <span>•</span>
-                      <span>{expenseCount} расходов</span>
+                      <span>{t('home.expensesCount', { count: expenseCount })}</span>
                     </p>
                   </div>
                 </div>
@@ -386,7 +388,7 @@ export default function HomePage() {
                     <span className="block font-extrabold text-slate-900 dark:text-white text-sm">
                       {formatMoney(groupSum, group.currency || 'RUB')}
                     </span>
-                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Открыть ➔</span>
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">{t('home.openEvent')}</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </div>
@@ -401,10 +403,10 @@ export default function HomePage() {
           </div>
           <div className="space-y-1">
             <h4 className="font-extrabold text-slate-900 dark:text-white text-base">
-              У вас пока нет активных событий
+              {t('home.noEventsTitle')}
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-              Создайте первое совместное событие для разделения расходов с друзьями.
+              {t('home.noEventsBody')}
             </p>
           </div>
           
@@ -414,7 +416,7 @@ export default function HomePage() {
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Создать событие</span>
+              <span>{t('home.createEvent')}</span>
             </Link>
           </div>
         </div>

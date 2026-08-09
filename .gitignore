@@ -35,6 +35,9 @@ ios/build_physical/
 .env*.local
 !.env.example
 
+# Supabase CLI local link cache — machine-specific, not for version control.
+supabase/.temp/
+
 # Прочее
 .DS_Store
 *.log
