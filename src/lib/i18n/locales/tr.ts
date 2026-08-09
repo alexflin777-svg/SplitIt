@@ -383,4 +383,8 @@ export const messages: Record<string, string> = {
   'eventRoute.loading': 'Etkinlik yükleniyor',
   'eventRoute.missingParamTitle': 'Etkinlik belirtilmedi',
   'eventRoute.missingParamBody': 'Bağlantıda {what} parametresi eksik. Kesilmiş olabilir.',
+
+  'currency.rateLoadedApi': 'Kur bugün {time} saatinde yüklendi',
+  'currency.rateLoadedCache': 'Önbellekten kur, güncellenme: {time}',
+  'currency.rateFallback': 'Canlı kurlar mevcut değil — hesaplama yedek değerlere dayanıyor, tutar değişebilir.',
 };

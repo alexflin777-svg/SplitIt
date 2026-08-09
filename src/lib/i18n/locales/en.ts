@@ -395,4 +395,8 @@ export const messages: Record<string, string> = {
   'eventRoute.loading': 'Loading event',
   'eventRoute.missingParamTitle': 'Event not specified',
   'eventRoute.missingParamBody': 'The parameter {what} is missing from the link. It may have been truncated.',
+
+  'currency.rateLoadedApi': 'Rate loaded today at {time}',
+  'currency.rateLoadedCache': 'Rate from cache, updated at {time}',
+  'currency.rateFallback': 'Live rates unavailable — calculation based on fallback values, amount may differ.',
 };

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Check, Calendar, Tag, Trash2 } from 'lucide-react';
-import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosure, isRateStale } from '@/lib/currency';
+import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosureContext, isRateStale } from '@/lib/currency';
 import { getGroup, updateExpense, deleteExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
@@ -68,8 +68,8 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
 
   const parsedAmount = parseAmount(amount).value || 0;
   const { convertedAmount } = convertCurrency(parsedAmount, currency, group.currency || 'RUB');
-  const rateDisclosure = ratesLoaded
-    ? getRateDisclosure(currency, group?.currency || 'RUB')
+  const rateDisclosureCtx = ratesLoaded
+    ? getRateDisclosureContext(currency, group?.currency || 'RUB')
     : null;
 
   const categories = [
@@ -268,14 +268,14 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
                   ≈ {formatMoney(convertedAmount, group.currency || 'RUB')}
                 </span>
               </div>
-              {rateDisclosure && (
+              {rateDisclosureCtx && (
                 <p
                   data-testid="rate-disclosure"
                   className={`text-[11px] font-medium ${
                     isRateStale() ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  {rateDisclosure}
+                  {t(rateDisclosureCtx.key, rateDisclosureCtx.params)}
                 </p>
               )}
             </div>

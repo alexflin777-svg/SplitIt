@@ -383,4 +383,8 @@ export const messages: Record<string, string> = {
   'eventRoute.loading': 'Загрузка события',
   'eventRoute.missingParamTitle': 'Событие не указано',
   'eventRoute.missingParamBody': 'В ссылке нет параметра {what}. Похоже, ссылка обрезана при пересылке.',
+
+  'currency.rateLoadedApi': 'Курс загружен сегодня в {time}',
+  'currency.rateLoadedCache': 'Курс из кэша, обновлён в {time}',
+  'currency.rateFallback': 'Курс не загружен — расчёт по резервным значениям, сумма может отличаться от фактической.',
 };

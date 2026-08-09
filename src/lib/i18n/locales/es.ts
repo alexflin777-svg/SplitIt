@@ -383,4 +383,8 @@ export const messages: Record<string, string> = {
   'eventRoute.loading': 'Cargando evento',
   'eventRoute.missingParamTitle': 'Evento no especificado',
   'eventRoute.missingParamBody': 'Falta el parámetro {what} en el enlace. Es posible que esté truncado.',
+
+  'currency.rateLoadedApi': 'Tasa cargada hoy a las {time}',
+  'currency.rateLoadedCache': 'Tasa de caché, actualizada a las {time}',
+  'currency.rateFallback': 'Tasas en vivo no disponibles — cálculo basado en valores de reserva, el importe puede variar.',
 };

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Camera, Upload, Sparkles, Check, Globe, RefreshCw, UserCheck, Calendar, DollarSign, Tag } from 'lucide-react';
-import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosure, isRateStale } from '@/lib/currency';
+import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosureContext, isRateStale } from '@/lib/currency';
 import { parseReceiptImage } from '@/lib/ocr';
 import { getGroup, addExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
@@ -55,8 +55,8 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
 
   const parsedAmount = parseAmount(amount).value || 0;
   const { convertedAmount } = convertCurrency(parsedAmount, currency, group?.currency || 'RUB');
-  const rateDisclosure = ratesLoaded
-    ? getRateDisclosure(currency, group?.currency || 'RUB')
+  const rateDisclosureCtx = ratesLoaded
+    ? getRateDisclosureContext(currency, group?.currency || 'RUB')
     : null;
 
   const categories = [
@@ -305,14 +305,14 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
 
           {/* Качество курса больше не скрыто: раньше getExchangeRateStatus()
               не вызывался ни в одном файле интерфейса. */}
-          {rateDisclosure && (
+          {rateDisclosureCtx && (
             <p
               data-testid="rate-disclosure"
               className={`text-[11px] font-medium ${
                 isRateStale() ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              {rateDisclosure}
+              {t(rateDisclosureCtx.key, rateDisclosureCtx.params)}
             </p>
           )}
         </div>

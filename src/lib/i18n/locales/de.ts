@@ -383,4 +383,8 @@ export const messages: Record<string, string> = {
   'eventRoute.loading': 'Ereignis wird geladen',
   'eventRoute.missingParamTitle': 'Ereignis nicht angegeben',
   'eventRoute.missingParamBody': 'Der Parameter {what} fehlt im Link. Er wurde möglicherweise abgeschnitten.',
+
+  'currency.rateLoadedApi': 'Kurs heute geladen um {time}',
+  'currency.rateLoadedCache': 'Kurs aus Cache, aktualisiert um {time}',
+  'currency.rateFallback': 'Aktuelle Kurse nicht verfügbar — Berechnung basiert auf Fallback-Werten, Betrag kann abweichen.',
 };

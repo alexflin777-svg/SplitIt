@@ -11,13 +11,26 @@ export interface CurrencyInfo {
 }
 
 export const CURRENCIES: Record<string, CurrencyInfo> = {
-  RUB: { code: 'RUB', symbol: '₽', name: 'Российский рубль', rateToRub: 1.0 },
-  USD: { code: 'USD', symbol: '$', name: 'Доллар США', rateToRub: 88.5 },
-  EUR: { code: 'EUR', symbol: '€', name: 'Евро', rateToRub: 96.2 },
-  KZT: { code: 'KZT', symbol: '₸', name: 'Казахстанский тенге', rateToRub: 0.18 },
-  GEL: { code: 'GEL', symbol: '₾', name: 'Грузинский лари', rateToRub: 32.5 },
-  AED: { code: 'AED', symbol: 'د.إ', name: 'Дирхам ОАЭ', rateToRub: 24.1 },
-  TRY: { code: 'TRY', symbol: '₺', name: 'Турецкая лира', rateToRub: 2.7 },
+  USD: { code: 'USD', symbol: '$', name: 'US Dollar', rateToRub: 90.0 },
+  EUR: { code: 'EUR', symbol: '€', name: 'Euro', rateToRub: 98.0 },
+  GBP: { code: 'GBP', symbol: '£', name: 'British Pound', rateToRub: 115.0 },
+  RUB: { code: 'RUB', symbol: '₽', name: 'Russian Ruble', rateToRub: 1.0 },
+  TRY: { code: 'TRY', symbol: '₺', name: 'Turkish Lira', rateToRub: 2.7 },
+  KZT: { code: 'KZT', symbol: '₸', name: 'Kazakhstani Tenge', rateToRub: 0.19 },
+  UZS: { code: 'UZS', symbol: 'soʻm', name: 'Uzbekistani Som', rateToRub: 0.0071 },
+  AED: { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', rateToRub: 24.5 },
+  CNY: { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', rateToRub: 12.4 },
+  JPY: { code: 'JPY', symbol: '¥', name: 'Japanese Yen', rateToRub: 0.58 },
+  KRW: { code: 'KRW', symbol: '₩', name: 'South Korean Won', rateToRub: 0.065 },
+  INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', rateToRub: 1.08 },
+  CHF: { code: 'CHF', symbol: 'Fr', name: 'Swiss Franc', rateToRub: 101.0 },
+  CAD: { code: 'CAD', symbol: '$', name: 'Canadian Dollar', rateToRub: 65.0 },
+  AUD: { code: 'AUD', symbol: '$', name: 'Australian Dollar', rateToRub: 58.0 },
+  PLN: { code: 'PLN', symbol: 'zł', name: 'Polish Zloty', rateToRub: 22.8 },
+  SEK: { code: 'SEK', symbol: 'kr', name: 'Swedish Krona', rateToRub: 8.5 },
+  NOK: { code: 'NOK', symbol: 'kr', name: 'Norwegian Krone', rateToRub: 8.4 },
+  DKK: { code: 'DKK', symbol: 'kr', name: 'Danish Krone', rateToRub: 13.1 },
+  CZK: { code: 'CZK', symbol: 'Kč', name: 'Czech Koruna', rateToRub: 3.8 },
 };
 
 const RATES_CACHE_KEY = 'splitit_live_exchange_rates_v1';
@@ -39,24 +52,19 @@ export function getExchangeRateStatus(): LiveRateStatus {
 
 /**
  * Текст о качестве курса для показа рядом со сконвертированной суммой.
- *
- * Раньше `getExchangeRateStatus()` не вызывался ни в одном файле интерфейса:
- * при недоступном API приложение молча считало по курсам, зашитым в код
- * (USD 88.5, EUR 96.2, TRY 2.7), и пользователь не мог отличить свежий
- * пересчёт от устаревшего. Возвращает null, если пересчёта нет — когда валюта
- * расхода совпадает с валютой события, сообщать не о чем.
+ * Возвращает ключ локализации и параметры.
  */
-export function getRateDisclosure(fromCurrency: string, toCurrency: string): string | null {
+export function getRateDisclosureContext(fromCurrency: string, toCurrency: string): { key: string; params?: any } | null {
   if (fromCurrency === toCurrency) return null;
 
   switch (currentStatus.source) {
     case 'api':
-      return `Курс загружен сегодня в ${currentStatus.lastUpdated}`;
+      return { key: 'currency.rateLoadedApi', params: { time: currentStatus.lastUpdated } };
     case 'cache':
-      return `Курс из кэша, обновлён в ${currentStatus.lastUpdated}`;
+      return { key: 'currency.rateLoadedCache', params: { time: currentStatus.lastUpdated } };
     case 'fallback':
     default:
-      return 'Курс не загружен — расчёт по резервным значениям, сумма может отличаться от фактической';
+      return { key: 'currency.rateFallback' };
   }
 }
 
