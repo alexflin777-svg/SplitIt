@@ -387,4 +387,8 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Kurs heute geladen um {time}',
   'currency.rateLoadedCache': 'Kurs aus Cache, aktualisiert um {time}',
   'currency.rateFallback': 'Aktuelle Kurse nicht verfügbar — Berechnung basiert auf Fallback-Werten, Betrag kann abweichen.',
+  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.waitlistPlaceholder': 'Enter your email',
+  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistError': 'Please enter a valid email.',
 };

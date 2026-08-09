@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
-import { listGroups, isMultiUser } from '@/lib/store';
+import { listGroups, isMultiUser, joinWaitlist } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import {
   Plus,
@@ -27,6 +27,8 @@ import {
   UserCheck,
   KeyRound,
   LogOut,
+  Activity,
+  Download,
 } from 'lucide-react';
 import { routes } from '@/lib/routes';
 
@@ -39,6 +41,35 @@ export default function HomePage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Waitlist State
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistStatus, setWaitlistStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [waitlistMsg, setWaitlistMsg] = useState('');
+
+  const handleJoinWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail || !waitlistEmail.includes('@')) {
+      setWaitlistStatus('error');
+      setWaitlistMsg(t('home.waitlistError'));
+      return;
+    }
+    setWaitlistStatus('loading');
+    
+    // Save to DB
+    await joinWaitlist(waitlistEmail);
+    
+    setWaitlistStatus('success');
+    setWaitlistMsg(t('home.waitlistSuccess'));
+    
+    // Trigger APK download
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = '/SplitIT-Beta.apk';
+      a.download = 'SplitIT-Beta.apk';
+      a.click();
+    }, 1500);
+  };
 
   const refreshGroups = useCallback(async () => {
     const { data, error } = await listGroups();
@@ -148,31 +179,45 @@ export default function HomePage() {
 
           {/* Welcome Action Buttons */}
           <div className="pt-2 space-y-2.5 max-w-xs mx-auto">
-            <Link
-              href="/auth?mode=register"
-              className="w-full py-3.5 rounded-xl bg-white text-blue-700 font-extrabold text-sm shadow-md hover:bg-blue-50 transition-all flex items-center justify-center gap-2 active:scale-98"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>{t('home.createAccount')}</span>
-            </Link>
+            <form onSubmit={handleJoinWaitlist} className="w-full flex flex-col sm:flex-row gap-2 mt-4">
+              <input 
+                type="email" 
+                value={waitlistEmail}
+                onChange={e => setWaitlistEmail(e.target.value)}
+                placeholder={t('home.waitlistPlaceholder')}
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:border-blue-500 shadow-sm"
+              />
+              <button
+                type="submit"
+                disabled={waitlistStatus === 'loading' || waitlistStatus === 'success'}
+                className="w-full sm:w-auto py-3 px-5 rounded-xl bg-blue-600 text-white text-sm font-extrabold shadow-md shadow-blue-500/30 transition-all hover:bg-blue-700 active:scale-98 disabled:opacity-70 flex items-center justify-center gap-2"
+              >
+                {waitlistStatus === 'loading' ? (
+                  <Activity className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{t('home.joinWaitlistBtn')}</span>
+              </button>
+            </form>
+
+            {waitlistStatus === 'success' && (
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 text-center w-full mt-2">
+                {waitlistMsg}
+              </p>
+            )}
+            {waitlistStatus === 'error' && (
+              <p className="text-xs font-bold text-rose-600 dark:text-rose-400 text-center w-full mt-2">
+                {waitlistMsg}
+              </p>
+            )}
 
             <Link
               href="/auth?mode=login"
-              className="w-full py-3 rounded-xl bg-blue-800/80 hover:bg-blue-800 border border-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl border border-white/20 bg-blue-800/80 text-white text-sm font-bold text-center mt-3 shadow-xs transition-all hover:bg-blue-800"
             >
-              <KeyRound className="w-4 h-4" />
-              <span>{t('home.signIn')}</span>
+              {t('home.signIn')}
             </Link>
-
-            {!isMultiUser() && (
-              <button
-                onClick={handleDemoLogin}
-                className="w-full py-2.5 text-xs text-blue-200 font-semibold hover:text-white flex items-center justify-center gap-1 transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>{t('home.demoLogin')}</span>
-              </button>
-            )}
           </div>
         </div>
 

@@ -387,4 +387,8 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Kur bugün {time} saatinde yüklendi',
   'currency.rateLoadedCache': 'Önbellekten kur, güncellenme: {time}',
   'currency.rateFallback': 'Canlı kurlar mevcut değil — hesaplama yedek değerlere dayanıyor, tutar değişebilir.',
+  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.waitlistPlaceholder': 'Enter your email',
+  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistError': 'Please enter a valid email.',
 };

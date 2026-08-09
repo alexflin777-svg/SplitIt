@@ -387,4 +387,8 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': '汇率于今日 {time} 加载',
   'currency.rateLoadedCache': '汇率来自缓存，于 {time} 更新',
   'currency.rateFallback': '无法获取实时汇率 — 使用备用汇率计算，金额可能有所不同。',
+  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.waitlistPlaceholder': 'Enter your email',
+  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistError': 'Please enter a valid email.',
 };

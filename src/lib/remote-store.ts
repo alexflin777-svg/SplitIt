@@ -435,3 +435,15 @@ export function subscribeToGroup(groupId: string, onChange: () => void): () => v
     client.removeChannel(channel);
   };
 }
+
+export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(NO_BACKEND);
+  
+  const { error } = await supabase.from('waitlist').insert({ email });
+  
+  if (error && error.code !== '23505') {
+    return fail(translate(error));
+  }
+  
+  return { data: true, error: null };
+}

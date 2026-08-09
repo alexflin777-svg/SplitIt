@@ -327,3 +327,7 @@ export function subscribeToGroup(groupId: string, onChange: () => void): () => v
   window.addEventListener('storage', handler);
   return () => window.removeEventListener('storage', handler);
 }
+
+export async function joinWaitlist(email: string) {
+  return remote.joinWaitlist(email);
+}

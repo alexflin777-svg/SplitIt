@@ -399,4 +399,8 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Rate loaded today at {time}',
   'currency.rateLoadedCache': 'Rate from cache, updated at {time}',
   'currency.rateFallback': 'Live rates unavailable — calculation based on fallback values, amount may differ.',
+  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.waitlistPlaceholder': 'Enter your email',
+  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistError': 'Please enter a valid email.',
 };

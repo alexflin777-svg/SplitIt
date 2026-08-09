@@ -387,4 +387,8 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'レートは本日 {time} に読み込まれました',
   'currency.rateLoadedCache': 'キャッシュからのレート、更新日: {time}',
   'currency.rateFallback': 'ライブレートは利用できません — フォールバック値に基づく計算のため、金額が異なる場合があります。',
+  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.waitlistPlaceholder': 'Enter your email',
+  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistError': 'Please enter a valid email.',
 };
