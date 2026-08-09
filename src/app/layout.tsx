@@ -7,12 +7,7 @@ import BottomNav from '@/components/BottomNav';
 import { routes } from '@/lib/routes';
 import { I18nProvider } from '@/lib/i18n/provider';
 import HeaderNavLabel from '@/components/HeaderNavLabel';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
-
-function PushInit() {
-  usePushNotifications();
-  return null;
-}
+import { PushInit } from '@/components/PushInit';
 
 /**
  * Шрифт вшивается в сборку, а не тянется с fonts.googleapis.com.
