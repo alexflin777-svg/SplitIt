@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { routes, absoluteInviteLink, hasPublicInviteOrigin } from '@/lib/routes';
 import { getConfigProblem } from '@/lib/env';
+import { useI18n } from '@/lib/i18n/provider';
 
 /**
  * Экран «события нет на этом устройстве».
@@ -53,26 +54,27 @@ import { getConfigProblem } from '@/lib/env';
  * показать выдуманное событие.
  */
 function EventNotFound({ groupId }: { groupId: string }) {
+  const { t } = useI18n();
   const configProblem = getConfigProblem();
 
   return (
     <div className="max-w-md mx-auto px-1 pb-24 pt-6">
       <div role="alert" className="stitch-card p-6 text-center space-y-3 bg-white dark:bg-slate-800">
         <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" aria-hidden="true" />
-        <h1 className="text-lg font-bold text-slate-900 dark:text-white">Событие недоступно</h1>
+        <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('eventDetail.notFoundTitle')}</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          События <code className="font-mono text-xs">{groupId}</code> нет на этом устройстве.
+          {t('eventDetail.notFoundBody', { groupId })}
         </p>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {configProblem
-            ? 'Приложение работает локально: события хранятся на том устройстве, где были созданы, и по ссылке не передаются. Совместный доступ появится, когда будет подключён бэкенд.'
-            : 'Возможно, приглашение отозвано или у вас нет доступа к этому событию. Попросите владельца прислать ссылку заново.'}
+            ? t('eventDetail.notFoundLocal')
+            : t('eventDetail.notFoundNoAccess')}
         </p>
         <Link
           href={routes.home()}
           className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700"
         >
-          К списку событий
+          {t('eventDetail.backToEvents')}
         </Link>
       </div>
     </div>
@@ -81,6 +83,7 @@ function EventNotFound({ groupId }: { groupId: string }) {
 
 export default function EventDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [group, setGroup] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -141,7 +144,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   }, [groupId, loadGroup]);
 
   if (status === 'loading') {
-    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка события...</div>;
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('eventDetail.loading')}</div>;
   }
 
   if (status === 'not-found' || !group) {
@@ -159,11 +162,11 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
   // Category Colors and Breakdown Diagram Math
   const categoryConfig: Record<string, { label: string; color: string; bg: string; emoji: string }> = {
-    food: { label: 'Еда', color: 'bg-emerald-400', bg: 'text-emerald-300', emoji: '🍱' },
-    transport: { label: 'Транспорт', color: 'bg-sky-400', bg: 'text-sky-300', emoji: '🚖' },
-    lodging: { label: 'Жилье', color: 'bg-purple-400', bg: 'text-purple-300', emoji: '🏨' },
-    entertainment: { label: 'Развлечения', color: 'bg-amber-400', bg: 'text-amber-300', emoji: '🎟️' },
-    other: { label: 'Другое', color: 'bg-rose-400', bg: 'text-rose-300', emoji: '🛍️' },
+    food: { label: t('eventDetail.category.food'), color: 'bg-emerald-400', bg: 'text-emerald-300', emoji: '🍱' },
+    transport: { label: t('eventDetail.category.transport'), color: 'bg-sky-400', bg: 'text-sky-300', emoji: '🚖' },
+    lodging: { label: t('eventDetail.category.lodging'), color: 'bg-purple-400', bg: 'text-purple-300', emoji: '🏨' },
+    entertainment: { label: t('eventDetail.category.entertainment'), color: 'bg-amber-400', bg: 'text-amber-300', emoji: '🎟️' },
+    other: { label: t('eventDetail.category.other'), color: 'bg-rose-400', bg: 'text-rose-300', emoji: '🛍️' },
   };
 
   const categoryTotals: Record<string, number> = {};
@@ -181,7 +184,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   }));
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://splitit.app';
-  const inviteText = `Привет! Присоединяйся к совместным расходам "${group.name}" в SplitIT:`;
+  const inviteText = t('eventDetail.inviteShareText', { name: group.name });
 
   /**
    * Ссылка выдаётся базой: одноразовый код с сроком жизни. Раньше в ссылку
@@ -191,18 +194,18 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const ensureInviteLink = async (): Promise<string | null> => {
     if (inviteLink) return inviteLink;
     if (!hasPublicInviteOrigin()) {
-      setInviteError('Не задан публичный HTTPS-адрес приложения (NEXT_PUBLIC_APP_URL), поэтому внешнюю ссылку создать нельзя.');
+      setInviteError(t('eventDetail.noPublicUrlError'));
       return null;
     }
 
     const { data: code, error } = await createInvite(group.id);
     if (error || !code) {
-      setInviteError(error ?? 'Не удалось создать приглашение');
+      setInviteError(error ?? t('eventDetail.errorCreateInviteFailed'));
       return null;
     }
     const link = absoluteInviteLink(code);
     if (!link) {
-      setInviteError('Не задан публичный HTTPS-адрес приложения (NEXT_PUBLIC_APP_URL), поэтому внешнюю ссылку создать нельзя.');
+      setInviteError(t('eventDetail.noPublicUrlError'));
       return null;
     }
     setInviteLink(link);
@@ -216,7 +219,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Приглашение в SplitIT: ${group.name}`,
+          title: t('eventDetail.inviteShareTitle', { name: group.name }),
           text: inviteText,
           url: link,
         });
@@ -242,7 +245,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       try {
         const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: false });
         if (contacts && contacts.length > 0) {
-          const cName = contacts[0].name?.[0] || contacts[0].tel?.[0] || 'Контакт';
+          const cName = contacts[0].name?.[0] || contacts[0].tel?.[0] || t('eventDetail.contacts');
           addMemberByName(cName);
           setShowPhonebookModal(false);
           return;
@@ -264,7 +267,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     // В сетевом режиме финансовые участники без аккаунта появятся только после
     // завершения participant-модели. Имя не используется как идентификатор.
     if (isMultiUser()) {
-      setInviteError('В общем событии участники добавляются по ссылке-приглашению.');
+      setInviteError(t('eventDetail.multiUserAddNote'));
       setIsAddingMember(false);
       return;
     }
@@ -408,7 +411,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               void ensureInviteLink();
             }}
             className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
-            title="Пригласить участников"
+            title={t('eventDetail.invitePeople')}
           >
             <Share2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </button>
@@ -416,7 +419,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             <button
               onClick={() => setShowDeleteEventModal(true)}
               className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-xs"
-              title="Удалить событие"
+              title={t('eventDetail.deleteEvent')}
             >
               <Trash2 className="w-5 h-5" />
             </button>
@@ -430,18 +433,18 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-100" />
-              <span className="font-extrabold text-sm">Событие и взаиморасчеты завершены!</span>
+              <span className="font-extrabold text-sm">{t('eventDetail.completedBanner')}</span>
             </div>
             <button
               onClick={() => handleToggleCompleteEvent('active')}
               className="text-[10px] font-bold bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Возобновить</span>
+              <span>{t('eventDetail.resume')}</span>
             </button>
           </div>
           <p className="text-xs text-emerald-100 font-medium">
-            Все долги между участниками полностью рассчитаны и закрыты в 0 ₽.
+            {t('eventDetail.completedNote')}
           </p>
         </div>
       )}
@@ -452,14 +455,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-blue-300">
-                Общие расходы события
+                {t('eventDetail.totalSpent')}
               </span>
               <span
                 className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                   isCompleted ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'bg-blue-500/30 text-blue-200 border border-blue-400/30'
                 }`}
               >
-                {isCompleted ? 'Завершено ✅' : 'Активное 🟢'}
+                {isCompleted ? t('eventDetail.statusCompleted') : t('eventDetail.statusActive')}
               </span>
             </div>
             <h3 className="text-3xl font-extrabold mt-1">
@@ -475,8 +478,8 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         {totalExpenses > 0 && (
           <div className="space-y-2 pt-2 border-t border-white/10">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-              <span>Диаграмма категорий</span>
-              <span>{categorySegments.length} кат.</span>
+              <span>{t('eventDetail.categoryChartTitle')}</span>
+              <span>{t('eventDetail.categoryCount', { count: categorySegments.length })}</span>
             </div>
 
             <div className="h-3 w-full rounded-full bg-slate-800/80 overflow-hidden flex shadow-inner border border-white/10">
@@ -514,7 +517,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
           >
             <PlusCircle className="w-5 h-5 text-blue-400" />
-            <span className="text-[10px] font-bold">Расход</span>
+            <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
           </Link>
 
           <Link
@@ -522,7 +525,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
           >
             <Scale className="w-5 h-5 text-emerald-400" />
-            <span className="text-[10px] font-bold">Баланс</span>
+            <span className="text-[10px] font-bold">{t('eventDetail.actionBalance')}</span>
           </Link>
 
           <Link
@@ -530,7 +533,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
           >
             <CreditCard className="w-5 h-5 text-amber-400" />
-            <span className="text-[10px] font-bold">Расчет</span>
+            <span className="text-[10px] font-bold">{t('eventDetail.actionSettle')}</span>
           </Link>
 
           <Link
@@ -538,7 +541,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
           >
             <FileText className="w-5 h-5 text-purple-400" />
-            <span className="text-[10px] font-bold">Отчет</span>
+            <span className="text-[10px] font-bold">{t('eventDetail.actionReport')}</span>
           </Link>
         </div>
 
@@ -549,7 +552,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs border border-emerald-400/40 flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Завершить событие и итоговый расчет</span>
+              <span>{t('eventDetail.finishEvent')}</span>
             </button>
           </div>
         )}
@@ -559,23 +562,23 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       <div className="stitch-card p-4 space-y-2 bg-white dark:bg-slate-800">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Участники ({group.members?.length || 0})
+            {t('eventDetail.membersCount', { count: group.members?.length || 0 })}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={handleSelectFromPhonebook}
               className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800"
-              title="Выбрать из телефонной книги"
+              title={t('eventDetail.pickFromContacts')}
             >
               <Phone className="w-3 h-3" />
-              <span>Контакты</span>
+              <span>{t('eventDetail.contacts')}</span>
             </button>
             <button
               onClick={() => setIsAddingMember(true)}
               className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800"
             >
               <UserPlus className="w-3 h-3" />
-              <span>Добавить</span>
+              <span>{t('eventNew.add')}</span>
             </button>
           </div>
         </div>
@@ -584,7 +587,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           <div className="flex items-center gap-2 pt-1 pb-2">
             <input
               type="text"
-              placeholder="Имя нового участника..."
+              placeholder={t('eventDetail.newMemberPlaceholder')}
               value={newMemberName}
               onChange={(e) => setNewMemberName(e.target.value)}
               className="flex-1 px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none dark:bg-slate-900 dark:text-white"
@@ -593,7 +596,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               onClick={() => addMemberByName(newMemberName)}
               className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold"
             >
-              ОК
+              {t('eventDetail.ok')}
             </button>
             <button onClick={() => setIsAddingMember(false)} className="text-slate-400">
               <X className="w-4 h-4" />
@@ -618,20 +621,20 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-            Лента транзакций ({(group.expenses || []).length})
+            {t('eventDetail.transactionsFeed', { count: (group.expenses || []).length })}
           </h4>
           <Link
             href={routes.expenseNew(group.id)}
             className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Добавить</span>
+            <span>{t('eventNew.add')}</span>
           </Link>
         </div>
 
         {(group.expenses || []).length === 0 ? (
           <div className="stitch-card p-6 text-center text-slate-500 dark:text-slate-400 text-xs bg-white dark:bg-slate-800">
-            Транзакции пока не добавлены. Нажмите «Добавить», чтобы зафиксировать первый расход!
+            {t('eventDetail.noExpensesYet')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -649,8 +652,8 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                       <div>
                         <h5 className="font-bold text-slate-900 dark:text-white text-sm">{expense.title}</h5>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                          Оплатил(а){' '}
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || 'Участник'}</span>
+                          {t('eventDetail.paidByName')}{' '}
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
                         </p>
                       </div>
                     </div>
@@ -671,14 +674,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         <Link
                           href={routes.expenseEdit(group.id, expense.id)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-all"
-                          title="Редактировать расход"
+                          title={t('eventDetail.editExpense')}
                         >
                           <Pencil className="w-4 h-4" />
                         </Link>
                         <button
                           onClick={() => setExpenseToDelete(expense)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-all"
-                          title="Удалить расход"
+                          title={t('eventDetail.deleteExpenseTitle')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -689,14 +692,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase">
-                        {expense.splitType === 'equal' ? 'Поровну' : 'Доли'}
+                        {expense.splitType === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}
                       </span>
-                      <span>• {(expense.splits || []).length} участников</span>
+                      <span>• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
                     </div>
 
                     <span className="text-[11px] text-slate-400 flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-slate-400" />
-                      {new Date(expense.createdAt || Date.now()).toLocaleDateString('ru-RU', {
+                      {new Date(expense.createdAt || Date.now()).toLocaleDateString(undefined, {
                         day: 'numeric',
                         month: 'short',
                       })}
@@ -716,7 +719,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             <div className="flex items-center justify-between">
               <h3 className="font-extrabold text-slate-900 dark:text-white text-base flex items-center gap-2">
                 <Phone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <span>Телефонная книга контактов</span>
+                <span>{t('eventDetail.phonebookTitle')}</span>
               </h3>
               <button onClick={() => setShowPhonebookModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -727,7 +730,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             {savedFriends.length > 0 && (
               <div className="space-y-2">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Выбрать из сохраненных друзей:
+                  {t('eventDetail.pickFromSavedFriends')}
                 </label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                   {savedFriends.map((f) => {
@@ -756,7 +759,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                               : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
                           }`}
                         >
-                          {isAlreadyIn ? 'В событии' : '+ Добавить'}
+                          {isAlreadyIn ? t('eventDetail.alreadyIn') : t('eventDetail.addChip')}
                         </button>
                       </div>
                     );
@@ -768,19 +771,19 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             {/* Manual Contact Entry */}
             <form onSubmit={handleAddFromPhonebookSubmit} className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Или введите контакт вручную:
+                {t('eventDetail.orManualEntry')}
               </label>
               <input
                 type="text"
                 required
-                placeholder="Имя контакта"
+                placeholder={t('eventDetail.contactNamePlaceholder')}
                 value={contactNameInput}
                 onChange={(e) => setContactNameInput(e.target.value)}
                 className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
               />
               <input
                 type="tel"
-                placeholder="+7 (999) 000-00-00"
+                placeholder={t('friends.phonePlaceholder')}
                 value={contactPhoneInput}
                 onChange={(e) => setContactPhoneInput(e.target.value)}
                 className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
@@ -790,7 +793,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 type="submit"
                 className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md transition-all"
               >
-                Сохранить контакт в событие
+                {t('eventDetail.saveContactToEvent')}
               </button>
             </form>
           </div>
@@ -805,10 +808,12 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               <Trash2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Удаление расхода</h3>
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventDetail.deleteExpenseTitle')}</h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                Удалить «<span className="font-bold text-slate-900 dark:text-white">{expenseToDelete.title}</span>» на сумму{' '}
-                <span className="font-extrabold text-slate-900 dark:text-white">{formatMoney(expenseToDelete.amount, expenseToDelete.currency)}</span>?
+                {t('eventDetail.deleteExpenseConfirm', {
+                  title: expenseToDelete.title,
+                  amount: formatMoney(expenseToDelete.amount, expenseToDelete.currency),
+                })}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -817,14 +822,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 onClick={() => setExpenseToDelete(null)}
                 className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
               >
-                Отмена
+                {t('eventDetail.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleDeleteExpenseConfirmed}
                 className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 transition-all"
               >
-                Да, удалить
+                {t('eventDetail.yesDelete')}
               </button>
             </div>
           </div>
@@ -839,9 +844,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Завершить событие?</h3>
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventDetail.completeEventTitle')}</h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                Все взаиморасчеты будут зафиксированы как выровненные в 0 ₽. Статус события изменится на «Завершено».
+                {t('eventDetail.completeEventBody')}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -850,14 +855,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 onClick={() => setShowCompleteModal(false)}
                 className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
               >
-                Отмена
+                {t('eventDetail.cancel')}
               </button>
               <button
                 type="button"
                 onClick={() => handleToggleCompleteEvent('completed')}
                 className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-500/20 transition-all"
               >
-                Завершить расчет
+                {t('eventDetail.finishSettlement')}
               </button>
             </div>
           </div>
@@ -872,10 +877,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               <AlertTriangle className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Удаление события</h3>
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventDetail.deleteEventTitle')}</h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                Вы уверены, что хотите безвозвратно удалить событие «<span className="font-bold text-slate-900 dark:text-white">{group.name}</span>»?
-                Все участники, расходы и долги будут удалены.
+                {t('eventDetail.deleteEventBody', { name: group.name })}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -884,14 +888,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 onClick={() => setShowDeleteEventModal(false)}
                 className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
               >
-                Отмена
+                {t('eventDetail.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleDeleteEventConfirmed}
                 className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 transition-all"
               >
-                Удалить
+                {t('eventDetail.delete')}
               </button>
             </div>
           </div>
@@ -903,14 +907,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Пригласить участников</h3>
+              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventDetail.inviteModalTitle')}</h3>
               <button onClick={() => setShowInviteModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-              Отправьте приглашение друзьям в удобном мессенджере или добавьте из телефонной книги:
+              {t('eventDetail.inviteModalBody')}
             </p>
 
             {inviteError && (
@@ -920,7 +924,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             )}
 
             {!inviteLink && !inviteError && (
-              <p className="text-xs text-slate-400 font-medium">Готовим ссылку-приглашение…</p>
+              <p className="text-xs text-slate-400 font-medium">{t('eventDetail.preparingLink')}</p>
             )}
 
             <div className={`grid grid-cols-2 gap-2.5 pt-1 ${inviteLink ? '' : 'opacity-40 pointer-events-none'}`}>
@@ -957,7 +961,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 className="flex items-center justify-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 font-bold text-xs transition-all"
               >
                 <Share2 className="w-4 h-4 text-blue-600" />
-                <span>Системный</span>
+                <span>{t('eventDetail.systemShare')}</span>
               </button>
             </div>
 
@@ -967,13 +971,13 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-500/20 transition-all"
               >
                 <Phone className="w-4 h-4" />
-                <span>Выбрать из телефонной книги</span>
+                <span>{t('eventDetail.pickFromPhonebook')}</span>
               </button>
             </div>
 
             {copiedInvite && (
               <p className="text-[11px] font-bold text-center text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 p-2 rounded-lg">
-                Ссылка скопирована в буфер обмена!
+                {t('eventDetail.linkCopied')}
               </p>
             )}
           </div>
