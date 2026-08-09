@@ -7,6 +7,7 @@ import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
 import { listGroups, isMultiUser, joinWaitlist } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
+import { OnboardingTour } from '@/components/OnboardingTour';
 import {
   Plus,
   Plane,
@@ -281,6 +282,14 @@ export default function HomePage() {
   // AUTHENTICATED USER WORKSPACE FEED
   // ----------------------------------------------------------------------
     return (
+      <>
+      {!userProfile.has_completed_onboarding && (
+        <OnboardingTour 
+          onComplete={() => {
+            setUserProfile(prev => prev ? { ...prev, has_completed_onboarding: true } : prev);
+          }} 
+        />
+      )}
       <div className="space-y-5 max-w-md mx-auto px-1 pb-28">
       {/* User Greeting Bar */}
       <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
@@ -467,5 +476,6 @@ export default function HomePage() {
         </div>
       )}
     </div>
+    </>
   );
 }

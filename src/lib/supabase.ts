@@ -22,6 +22,7 @@ export interface UserProfile {
   avatar_url?: string;
   phone?: string;
   preferred_currency?: string;
+  has_completed_onboarding?: boolean;
   created_at?: string;
 }
 
@@ -403,12 +404,13 @@ export async function getActiveSession(): Promise<UserProfile | null> {
   const sameUser = cached?.id === data.user.id ? cached : null;
   const { data: remoteProfile } = await supabase
     .from('profiles')
-    .select('full_name, avatar_url, phone, default_currency')
+    .select('full_name, avatar_url, phone, default_currency, has_completed_onboarding')
     .eq('id', data.user.id)
     .maybeSingle();
   const profile: UserProfile = {
     id: data.user.id,
     email: data.user.email ?? sameUser?.email ?? '',
+    has_completed_onboarding: remoteProfile?.has_completed_onboarding ?? sameUser?.has_completed_onboarding ?? false,
     full_name:
       remoteProfile?.full_name ||
       data.user.user_metadata?.full_name ||
@@ -436,4 +438,23 @@ function translateAuthError(message: string): string {
   if (m.includes('rate limit') || m.includes('too many')) return 'Слишком много попыток. Подождите минуту.';
   if (m.includes('fetch') || m.includes('network')) return 'Нет связи с сервером. Проверьте подключение.';
   return message;
+}
+
+export async function completeOnboarding(): Promise<{ error: string | null }> {
+  const session = getLocalSession();
+  if (!session) return { error: 'No active session' };
+
+  // Update local session immediately
+  const updatedSession = { ...session, has_completed_onboarding: true };
+  saveLocalSession(updatedSession);
+
+  if (!supabase) return { error: null }; // Silent success for local-only
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ has_completed_onboarding: true })
+    .eq('id', session.id);
+
+  if (error) return { error: translateAuthError(error.message) };
+  return { error: null };
 }
