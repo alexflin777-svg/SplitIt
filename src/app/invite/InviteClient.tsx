@@ -7,6 +7,7 @@ import { AlertTriangle, Loader2, UserPlus } from 'lucide-react';
 import { redeemInvite, isMultiUser } from '@/lib/store';
 import { getActiveSession, UserProfile } from '@/lib/supabase';
 import { routes } from '@/lib/routes';
+import { useI18n } from '@/lib/i18n/provider';
 
 type State =
   | { kind: 'loading' }
@@ -29,20 +30,20 @@ export default function InviteClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get('code');
+  const { t } = useI18n();
 
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (!code) {
-      setState({ kind: 'error', message: 'В ссылке нет кода приглашения. Похоже, она обрезана при пересылке.' });
+      setState({ kind: 'error', message: t('invite.errorNoCode') });
       return;
     }
     if (!isMultiUser()) {
       setState({
         kind: 'error',
-        message:
-          'Приглашения работают только с подключённым бэкендом. Сейчас приложение хранит события на одном устройстве.',
+        message: t('invite.errorLocalOnly'),
       });
       return;
     }
@@ -51,7 +52,7 @@ export default function InviteClient() {
       setProfile(session);
       setState(session ? { kind: 'confirm' } : { kind: 'need-auth' });
     });
-  }, [code]);
+  }, [code, t]);
 
   const handleJoin = async () => {
     if (!code) return;
@@ -59,7 +60,7 @@ export default function InviteClient() {
 
     const { data: groupId, error } = await redeemInvite(code);
     if (error || !groupId) {
-      setState({ kind: 'error', message: error ?? 'Не удалось принять приглашение' });
+      setState({ kind: 'error', message: error ?? t('invite.errorRedeemFailed') });
       return;
     }
     router.push(routes.eventDetail(groupId));
@@ -71,22 +72,22 @@ export default function InviteClient() {
         {state.kind === 'loading' && (
           <>
             <Loader2 className="w-7 h-7 mx-auto text-slate-400 animate-spin" aria-hidden="true" />
-            <p className="text-sm text-slate-500">Проверяем приглашение…</p>
+            <p className="text-sm text-slate-500">{t('invite.loading')}</p>
           </>
         )}
 
         {state.kind === 'need-auth' && (
           <>
             <UserPlus className="w-8 h-8 mx-auto text-blue-600" aria-hidden="true" />
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">Вас пригласили в событие</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.needAuthTitle')}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Войдите или зарегистрируйтесь, чтобы присоединиться. Ссылка останется рабочей.
+              {t('invite.needAuthBody')}
             </p>
             <Link
               href={`${routes.auth()}?mode=login&next=${encodeURIComponent(routes.invite(code ?? ''))}`}
               className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700"
             >
-              Войти в аккаунт
+              {t('invite.signInButton')}
             </Link>
           </>
         )}
@@ -94,10 +95,9 @@ export default function InviteClient() {
         {(state.kind === 'confirm' || state.kind === 'joining') && (
           <>
             <UserPlus className="w-8 h-8 mx-auto text-blue-600" aria-hidden="true" />
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">Присоединиться к событию</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.confirmTitle')}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Вы войдёте как {profile?.full_name} и попадёте в расчёт долгов вместе с остальными
-              участниками.
+              {t('invite.confirmBody', { name: profile?.full_name || profile?.email || '' })}
             </p>
             <button
               type="button"
@@ -105,7 +105,7 @@ export default function InviteClient() {
               disabled={state.kind === 'joining'}
               className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700 disabled:opacity-60"
             >
-              {state.kind === 'joining' ? 'Присоединяемся…' : 'Присоединиться'}
+              {state.kind === 'joining' ? t('invite.joiningButton') : t('invite.joinButton')}
             </button>
           </>
         )}
@@ -113,13 +113,13 @@ export default function InviteClient() {
         {state.kind === 'error' && (
           <div role="alert" data-testid="invite-error" className="space-y-3">
             <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" aria-hidden="true" />
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">Приглашение не сработало</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.errorTitle')}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">{state.message}</p>
             <Link
               href={routes.home()}
               className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700"
             >
-              К списку событий
+              {t('invite.backToEvents')}
             </Link>
           </div>
         )}

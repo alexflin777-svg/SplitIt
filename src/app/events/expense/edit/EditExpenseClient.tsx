@@ -8,9 +8,11 @@ import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRa
 import { getGroup, updateExpense, deleteExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function EditExpenseClient({ groupId, expenseId }: { groupId: string; expenseId: string }) {
   const router = useRouter();
+  const { t } = useI18n();
 
   const [group, setGroup] = useState<any>(null);
   const [expense, setExpense] = useState<any>(null);
@@ -56,9 +58,9 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
   if (!group || !expense) {
     return (
       <div className="p-8 text-center space-y-4">
-        <p className="text-sm font-bold text-slate-500">Загрузка расхода...</p>
+        <p className="text-sm font-bold text-slate-500">{t('expenseEdit.loading')}</p>
         <Link href={routes.eventDetail(groupId)} className="text-xs font-bold text-blue-600 underline">
-          Вернуться к событию
+          {t('expenseEdit.backToEvent')}
         </Link>
       </div>
     );
@@ -71,11 +73,11 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
     : null;
 
   const categories = [
-    { id: 'food', label: 'Еда & Рестораны', emoji: '🍱' },
-    { id: 'transport', label: 'Транспорт & Такси', emoji: '🚖' },
-    { id: 'lodging', label: 'Жилье & Отель', emoji: '🏨' },
-    { id: 'entertainment', label: 'Развлечения', emoji: '🎟️' },
-    { id: 'other', label: 'Другое', emoji: '🛍️' },
+    { id: 'food', label: t('expenseNew.cat.food'), emoji: '🍱' },
+    { id: 'transport', label: t('expenseNew.cat.transport'), emoji: '🚖' },
+    { id: 'lodging', label: t('expenseNew.cat.lodging'), emoji: '🏨' },
+    { id: 'entertainment', label: t('expenseNew.cat.entertainment'), emoji: '🎟️' },
+    { id: 'other', label: t('expenseNew.cat.other'), emoji: '🛍️' },
   ];
 
   const toggleMember = (id: string) => {
@@ -93,7 +95,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
     setAmountError(null);
 
     if (!title) {
-      setAmountError('Укажите название расхода');
+      setAmountError(t('expenseNew.titleError'));
       return;
     }
 
@@ -157,11 +159,11 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 text-base">Редактирование расхода</h2>
+        <h2 className="font-extrabold text-slate-900 text-base">{t('expenseEdit.pageTitle')}</h2>
         <button
           onClick={() => setShowDeleteModal(true)}
           className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition-all shadow-xs"
-          title="Удалить расход"
+          title={t('expenseEdit.deleteExpenseTitle')}
         >
           <Trash2 className="w-5 h-5" />
         </button>
@@ -171,12 +173,12 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         {/* Title Card */}
         <div className="stitch-card p-5 space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Название расхода
+            {t('expenseNew.titleLabel')}
           </label>
           <input
             type="text"
             required
-            placeholder="Например: Ужин в ресторане, Такси"
+            placeholder={t('expenseEdit.titlePlaceholder')}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
@@ -188,7 +190,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
           <div className="stitch-card p-4 space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              <span>Дата расхода</span>
+              <span>{t('expenseNew.dateLabel')}</span>
             </label>
             <input
               type="date"
@@ -202,7 +204,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
           <div className="stitch-card p-4 space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Tag className="w-3.5 h-3.5 text-amber-500" />
-              <span>Категория</span>
+              <span>{t('expenseNew.categoryLabel')}</span>
             </label>
             <select
               value={category}
@@ -223,7 +225,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Сумма платежа
+                {t('expenseNew.amountLabel')}
               </label>
               <input
                 type="number"
@@ -238,7 +240,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Валюта
+                {t('expenseNew.currencyLabel')}
               </label>
               <select
                 value={currency}
@@ -260,7 +262,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium text-slate-500 dark:text-slate-400">
-                  Пересчёт в валюту события
+                  {t('expenseEdit.conversionNotice')}
                 </span>
                 <span className="font-extrabold text-blue-700">
                   ≈ {formatMoney(convertedAmount, group.currency || 'RUB')}
@@ -284,7 +286,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         {/* Who paid */}
         <div className="stitch-card p-5 space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Кто оплатил?
+            {t('expenseNew.paidByLabel')}
           </label>
           <select
             value={paidById}
@@ -302,7 +304,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         {/* Split members */}
         <div className="stitch-card p-5 space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Между кем делить? ({selectedMembers.length})
+            {t('expenseNew.splitLabel', { count: selectedMembers.length })}
           </label>
 
           <div className="space-y-2">
@@ -366,14 +368,14 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
             type="submit"
             className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
           >
-            Сохранить изменения
+            {t('expenseEdit.saveChangesButton')}
           </button>
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
             className="w-full py-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs border border-rose-200 transition-all"
           >
-            Удалить этот расход
+            {t('expenseEdit.deleteThisExpenseButton')}
           </button>
         </div>
       </form>
@@ -386,10 +388,9 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
               <Trash2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 text-base">Подтверждение удаления</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">{t('expenseEdit.deleteConfirmTitle')}</h3>
               <p className="text-xs text-slate-600 font-medium">
-                Вы действительно хотите удалить расход «<span className="font-bold text-slate-900">{title}</span>» на сумму{' '}
-                <span className="font-extrabold text-slate-900">{formatMoney(parsedAmount, currency)}</span>?
+                {t('expenseEdit.deleteConfirmBody', { title, amount: formatMoney(parsedAmount, currency) })}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -398,14 +399,14 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
                 onClick={() => setShowDeleteModal(false)}
                 className="py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all"
               >
-                Отмена
+                {t('eventDetail.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleDeleteConfirmed}
                 className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 transition-all"
               >
-                Да, удалить
+                {t('eventDetail.yesDelete')}
               </button>
             </div>
           </div>

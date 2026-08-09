@@ -18,8 +18,10 @@ import {
   FileText,
 } from 'lucide-react';
 import { routes } from '@/lib/routes';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function ExportReportClient({ groupId }: { groupId: string }) {
+  const { t } = useI18n();
   const [group, setGroup] = useState<any>(null);
   const [downloaded, setDownloaded] = useState<string | null>(null);
 
@@ -28,7 +30,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
   }, [groupId]);
 
   if (!group) {
-    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка отчета...</div>;
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('export.loading')}</div>;
   }
 
   const totalExpenses = (group.expenses || []).reduce(
@@ -51,19 +53,19 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
     a.href = url;
     a.download = `splitit_report_${group.name.replace(/\s+/g, '_')}.csv`;
     a.click();
-    setDownloaded('CSV отчет сохранен!');
+    setDownloaded(t('export.csvDownloaded'));
   };
 
   const handlePrintPdf = () => {
     triggerPrintPdf();
-    setDownloaded('Печать / Сохранение PDF запущено!');
+    setDownloaded(t('export.pdfStarted'));
   };
 
   const handleShareReport = async () => {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Финансовый отчет: ${group.name}`,
+          title: t('export.shareTitle', { name: group.name }),
           text: reportText,
         });
       } catch (err) {
@@ -71,7 +73,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
       }
     } else {
       navigator.clipboard.writeText(reportText);
-      setDownloaded('Текст отчета скопирован в буфер обмена!');
+      setDownloaded(t('export.reportCopied'));
     }
   };
 
@@ -85,7 +87,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 text-base">Экспорт отчета события</h2>
+        <h2 className="font-extrabold text-slate-900 text-base">{t('export.pageTitle')}</h2>
         <div className="w-9 print:hidden" />
       </div>
 
@@ -103,7 +105,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
           className="p-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
         >
           <Printer className="w-4 h-4" />
-          <span>Выгрузить / Печать PDF</span>
+          <span>{t('export.printPdfButton')}</span>
         </button>
 
         <button
@@ -111,14 +113,14 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
           className="p-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
         >
           <Share2 className="w-4 h-4" />
-          <span>Поделиться отчетом</span>
+          <span>{t('export.shareReportButton')}</span>
         </button>
       </div>
 
       {/* Messengers Sharing Quick Bar */}
       <div className="stitch-card p-4 space-y-2 print:hidden">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Отправить выписку в мессенджеры
+          {t('export.sendToMessengers')}
         </span>
         <div className="grid grid-cols-3 gap-2 pt-1">
           <a
@@ -157,11 +159,11 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
         <div className="flex items-center justify-between pb-4 border-b border-slate-200">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Официальный финансовый отчет SplitIT
+              {t('export.officialReport')}
             </span>
             <h3 className="text-xl font-extrabold text-slate-900">{group.name}</h3>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Сформирован: {new Date().toLocaleDateString('ru-RU')}
+              {t('export.generatedAt', { date: new Date().toLocaleDateString(undefined) })}
             </p>
           </div>
 
@@ -173,11 +175,11 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
         {/* Report Summary */}
         <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
           <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Участников:</span>
-            <p className="font-extrabold text-slate-800 text-sm">{(group.members || []).length} человек</p>
+            <span className="text-[10px] text-slate-400 font-bold uppercase">{t('export.membersCountLabel')}</span>
+            <p className="font-extrabold text-slate-800 text-sm">{t('export.membersCountValue', { count: (group.members || []).length })}</p>
           </div>
           <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Итого расходов:</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase">{t('export.totalExpensesLabel')}</span>
             <p className="font-extrabold text-blue-600 text-sm">
               {formatMoney(totalExpenses, group.currency || 'RUB')}
             </p>
@@ -187,12 +189,12 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
         {/* Expenses List Table */}
         <div className="space-y-2">
           <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-            Реестр транзакций
+            {t('export.transactionsRegistry')}
           </h4>
 
           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
             {(group.expenses || []).length === 0 ? (
-              <div className="p-4 text-center text-slate-400 font-medium">Транзакции отсутствуют</div>
+              <div className="p-4 text-center text-slate-400 font-medium">{t('export.noTransactions')}</div>
             ) : (
               (group.expenses || []).map((expense: any) => {
                 const paidByMember = (group.members || []).find((m: any) => m.id === expense.paidById);
@@ -201,7 +203,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
                     <div>
                       <span className="font-bold text-slate-900 block">{expense.title}</span>
                       <span className="text-[11px] text-slate-500">
-                        Оплатил: {paidByMember?.name || 'Участник'}
+                        {t('export.paidBy', { name: paidByMember?.name || t('export.defaultMember') })}
                       </span>
                     </div>
 
@@ -218,7 +220,7 @@ export default function ExportReportClient({ groupId }: { groupId: string }) {
         {/* Footer Seal */}
         <div className="pt-4 border-t border-slate-100 text-center text-[10px] text-slate-400 flex items-center justify-center gap-1">
           <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-          <span>Подтверждено сервисом SplitIT (splitit.app)</span>
+          <span>{t('export.footerSeal')}</span>
         </div>
       </div>
     </div>

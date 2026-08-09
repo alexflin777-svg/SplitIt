@@ -9,9 +9,11 @@ import { parseReceiptImage } from '@/lib/ocr';
 import { getGroup, addExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function NewExpenseClient({ groupId }: { groupId: string }) {
   const router = useRouter();
+  const { t } = useI18n();
 
   const [group, setGroup] = useState<any>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -58,11 +60,11 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     : null;
 
   const categories = [
-    { id: 'food', label: 'Еда & Рестораны', emoji: '🍱' },
-    { id: 'transport', label: 'Транспорт & Такси', emoji: '🚖' },
-    { id: 'lodging', label: 'Жилье & Отель', emoji: '🏨' },
-    { id: 'entertainment', label: 'Развлечения', emoji: '🎟️' },
-    { id: 'other', label: 'Другое', emoji: '🛍️' },
+    { id: 'food', label: t('expenseNew.cat.food'), emoji: '🍱' },
+    { id: 'transport', label: t('expenseNew.cat.transport'), emoji: '🚖' },
+    { id: 'lodging', label: t('expenseNew.cat.lodging'), emoji: '🏨' },
+    { id: 'entertainment', label: t('expenseNew.cat.entertainment'), emoji: '🎟️' },
+    { id: 'other', label: t('expenseNew.cat.other'), emoji: '🛍️' },
   ];
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +73,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
 
     setIsScanning(true);
     setOcrFailed(false);
-    setOcrStatus('Сканирование чека с помощью Tesseract OCR...');
+    setOcrStatus(t('expenseNew.ocrScanningMsg'));
 
     // parseReceiptImage не бросает: исход возвращается полем status. Раньше
     // сбой приходил сюда замаскированным под обычный результат, статус не
@@ -94,8 +96,8 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     }
     setOcrStatus(
       result.suggestedTotal !== null
-        ? `Сумма ${result.suggestedTotal} ${currency} распознана из чека. Проверьте её перед сохранением.`
-        : 'Чек распознан, но сумму найти не удалось. Введите её вручную.',
+        ? t('expenseNew.ocrSuccessMsg', { total: result.suggestedTotal, currency })
+        : t('expenseNew.ocrNoAmountMsg')
     );
   };
 
@@ -114,7 +116,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     setAmountError(null);
 
     if (!title) {
-      setAmountError('Укажите название расхода');
+      setAmountError(t('expenseNew.titleError'));
       return;
     }
 
@@ -149,7 +151,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
   };
 
   if (!group) {
-    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка события...</div>;
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('expenseNew.loadingEvent')}</div>;
   }
 
   return (
@@ -162,7 +164,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 text-base">Добавление расхода</h2>
+        <h2 className="font-extrabold text-slate-900 text-base">{t('expenseNew.pageTitle')}</h2>
         <div className="w-9" />
       </div>
 
@@ -171,16 +173,16 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-bold text-indigo-950">
             <Sparkles className="w-4 h-4 text-indigo-600 animate-pulse" />
-            <span>AI Сканер чека (Tesseract OCR)</span>
+            <span>{t('expenseNew.scannerTitle')}</span>
           </div>
           <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-2.5 py-0.5 rounded-full shadow-xs">
-            Умный ввод
+            {t('expenseNew.smartInput')}
           </span>
         </div>
 
         <label className="flex items-center justify-center gap-2.5 p-3.5 rounded-xl bg-white border-2 border-dashed border-indigo-300 text-indigo-700 text-xs font-bold cursor-pointer hover:bg-indigo-50/70 transition-all shadow-xs">
           <Camera className="w-4 h-4 text-indigo-600" />
-          <span>{isScanning ? 'Идет сканирование...' : 'Загрузить / Сфотографировать чек'}</span>
+          <span>{isScanning ? t('expenseNew.scanLoading') : t('expenseNew.uploadPrompt')}</span>
           <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
         </label>
 
@@ -203,12 +205,12 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
         {/* Title Card */}
         <div className="stitch-card p-5 space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Название расхода
+            {t('expenseNew.titleLabel')}
           </label>
           <input
             type="text"
             required
-            placeholder="Например: Ужин в ресторане, Такси в отель"
+            placeholder={t('expenseNew.titlePlaceholder')}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
@@ -221,7 +223,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
           <div className="stitch-card p-4 space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              <span>Дата расхода</span>
+              <span>{t('expenseNew.dateLabel')}</span>
             </label>
             <input
               type="date"
@@ -236,7 +238,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
           <div className="stitch-card p-4 space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Tag className="w-3.5 h-3.5 text-amber-500" />
-              <span>Категория</span>
+              <span>{t('expenseNew.categoryLabel')}</span>
             </label>
             <select
               value={category}
@@ -257,7 +259,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Сумма платежа
+                {t('expenseNew.amountLabel')}
               </label>
               <input
                 type="number"
@@ -272,7 +274,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Валюта
+                {t('expenseNew.currencyLabel')}
               </label>
               <select
                 value={currency}
@@ -293,7 +295,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
             <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
                 <Globe className="w-4 h-4 text-blue-600" />
-                <span>Пересчет в валюту группы:</span>
+                <span>{t('expenseNew.conversionNotice')}</span>
               </div>
               <span className="font-extrabold text-blue-700">
                 ≈ {formatMoney(convertedAmount, group?.currency || 'RUB')}
@@ -318,7 +320,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
         {/* Who paid */}
         <div className="stitch-card p-5 space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Кто оплатил?
+            {t('expenseNew.paidByLabel')}
           </label>
           <select
             value={paidById}
@@ -336,7 +338,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
         {/* Split options */}
         <div className="stitch-card p-5 space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Между кем делить? ({selectedMembers.length})
+            {t('expenseNew.splitLabel', { count: selectedMembers.length })}
           </label>
 
           <div className="space-y-2">
@@ -403,7 +405,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
           type="submit"
           className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
         >
-          Сохранить расход ({date})
+          {t('expenseNew.saveButton', { date: new Date(date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) })}
         </button>
       </form>
     </div>
