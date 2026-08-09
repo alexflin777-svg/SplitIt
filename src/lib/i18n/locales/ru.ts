@@ -391,4 +391,6 @@ export const messages: Record<string, string> = {
   'home.waitlistPlaceholder': 'Ваш email',
   'home.waitlistSuccess': 'Спасибо! Скачивание начнется сейчас.',
   'home.waitlistError': 'Введите корректный email.',
+  'auth.googleLogin': 'Войти через Google',
+  'auth.orEmail': 'Или по email',
 };

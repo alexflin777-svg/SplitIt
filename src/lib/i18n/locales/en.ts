@@ -403,4 +403,6 @@ export const messages: Record<string, string> = {
   'home.waitlistPlaceholder': 'Enter your email',
   'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
   'home.waitlistError': 'Please enter a valid email.',
+  'auth.googleLogin': 'Continue with Google',
+  'auth.orEmail': 'Or continue with email',
 };
