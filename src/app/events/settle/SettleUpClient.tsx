@@ -10,10 +10,12 @@ import { getActiveSession } from '@/lib/supabase';
 import { formatMoney } from '@/lib/currency';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
+import { useI18n } from '@/lib/i18n/provider';
 
 function SettleUpForm({ groupId }: { groupId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
 
   const [group, setGroup] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
     // выдуманная «Совместная поездка» с двумя вымышленными участниками.
     void Promise.all([getGroup(groupId), getActiveSession()]).then(([result, session]) => {
       if (result.error || !result.data) {
-        setLoadError(result.error ?? 'Событие недоступно');
+        setLoadError(result.error ?? t('settle.errorEventUnavailable'));
         return;
       }
 
@@ -46,7 +48,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
       setPayeeId(nextPayee);
       setGroup(loadedGroup);
     });
-  }, [groupId, searchParams]);
+  }, [groupId, searchParams, t]);
 
   const defaultAmount = searchParams.get('amount') || '5000';
 
@@ -62,7 +64,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   }
 
   if (!group) {
-    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка взаиморасчетов...</div>;
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('settle.loading')}</div>;
   }
 
   const payerMember = (group.members || []).find((m: any) => m.id === payerId) || group.members[0];
@@ -80,7 +82,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
     }
 
     if (payerId === payeeId) {
-      setAmountError('Плательщик и получатель должны различаться');
+      setAmountError(t('settle.errorPayerEqualsPayee'));
       return;
     }
 
@@ -157,7 +159,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 text-base">Фиксация оплаты долга</h2>
+        <h2 className="font-extrabold text-slate-900 text-base">{t('settle.pageTitle')}</h2>
         <div className="w-9" />
       </div>
 
@@ -166,9 +168,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto text-white">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <h3 className="text-xl font-extrabold">Оплата успешно зарегистрирована!</h3>
+          <h3 className="text-xl font-extrabold">{t('settle.successTitle')}</h3>
           <p className="text-xs text-emerald-100 max-w-xs mx-auto font-medium">
-            Перевод между {payerMember?.name} и {payeeMember?.name} учтен в итоговом балансе группы.
+            {t('settle.successBody', { payer: payerMember?.name, payee: payeeMember?.name })}
           </p>
         </div>
       )}
@@ -178,7 +180,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
         <div className="stitch-card p-5 space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Кто переводит деньги? (Должник)
+              {t('settle.payerLabel')}
             </label>
             <select
               value={payerId}
@@ -193,13 +195,13 @@ function SettleUpForm({ groupId }: { groupId: string }) {
               ))}
             </select>
             {isMultiUser() && (
-              <p className="text-[11px] text-slate-500">В общем событии перевод фиксирует сам плательщик.</p>
+              <p className="text-[11px] text-slate-500">{t('settle.multiUserPayerNote')}</p>
             )}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Кому переводит? (Получатель)
+              {t('settle.payeeLabel')}
             </label>
             <select
               value={payeeId}
@@ -218,7 +220,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
         {/* Amount Input */}
         <div className="stitch-card p-5 space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Сумма перевода ({group.currency || 'RUB'})
+            {t('settle.amountLabel', { currency: group.currency || 'RUB' })}
           </label>
           <input
             type="number"
@@ -234,14 +236,14 @@ function SettleUpForm({ groupId }: { groupId: string }) {
         {/* Payment Method Choice */}
         <div className="stitch-card p-5 space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Способ перевода
+            {t('settle.methodLabel')}
           </label>
 
           <div className="grid grid-cols-3 gap-2.5">
             {[
-              { id: 'sbp', label: 'СБП (Телефон)', icon: Smartphone },
-              { id: 'card', label: 'Карта', icon: CreditCard },
-              { id: 'cash', label: 'Наличные', icon: Banknote },
+              { id: 'sbp', label: t('settle.method.sbp'), icon: Smartphone },
+              { id: 'card', label: t('settle.method.card'), icon: CreditCard },
+              { id: 'cash', label: t('settle.method.cash'), icon: Banknote },
             ].map((method) => {
               const Icon = method.icon;
               const isSelected = paymentMethod === method.id;
@@ -280,7 +282,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             type="submit"
             className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md shadow-emerald-500/20 transition-all active:scale-98"
           >
-            Подтвердить перевод
+            {t('settle.confirmTransfer')}
           </button>
 
           <button
@@ -289,7 +291,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Завершить все взаиморасчеты и закрыть событие</span>
+            <span>{t('settle.finishAll')}</span>
           </button>
         </div>
       </form>
@@ -298,8 +300,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
 }
 
 export default function SettleUpClient({ groupId }: { groupId: string }) {
+  const { t } = useI18n();
   return (
-    <Suspense fallback={<div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка формы...</div>}>
+    <Suspense fallback={<div className="p-4 text-xs font-bold text-slate-500 text-center">{t('settle.formLoading')}</div>}>
       <SettleUpForm groupId={groupId} />
     </Suspense>
   );

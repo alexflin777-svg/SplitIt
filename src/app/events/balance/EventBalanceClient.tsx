@@ -17,8 +17,10 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { routes } from '@/lib/routes';
+import { useI18n } from '@/lib/i18n/provider';
 
 export default function EventBalanceClient({ groupId }: { groupId: string }) {
+  const { t } = useI18n();
   const [group, setGroup] = useState<any>(null);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
   }, [groupId]);
 
   if (!group) {
-    return <div className="p-4 text-xs font-bold text-slate-500 text-center">Загрузка баланса...</div>;
+    return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('balance.loading')}</div>;
   }
 
   // Calculate Net Balances for each member
@@ -112,7 +114,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">Баланс & Итоговый расчет</h2>
+        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{t('balance.pageTitle')}</h2>
         <div className="w-9" />
       </div>
 
@@ -124,17 +126,19 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
               <Zap className="w-4 h-4" />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
-              Алгоритм минимизации долгов
+              {t('balance.algorithmTitle')}
             </span>
           </div>
           <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold border border-blue-400/30">
-            Оптимизировано
+            {t('balance.optimizedBadge')}
           </span>
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed">
-          Вместо {(group.members || []).length * ((group.members || []).length - 1)} переводов между всеми участниками,
-          алгоритм свел все взаиморасчеты к <strong className="text-white font-extrabold">{optimizedTransactions.length} оптимальным транзакциям</strong>.
+          {t('balance.algorithmBody', {
+            total: (group.members || []).length * ((group.members || []).length - 1),
+            count: optimizedTransactions.length,
+          })}
         </p>
 
         <Link
@@ -142,14 +146,14 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
           className="inline-flex items-center gap-2 w-full justify-center py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-md transition-all active:scale-98"
         >
           <CreditCard className="w-4 h-4" />
-          <span>Перейти к гашению долгов</span>
+          <span>{t('balance.goToSettle')}</span>
         </Link>
       </div>
 
       {/* Optimized Transactions Graph List */}
       <div className="space-y-3">
         <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-          <span>Оптимальные переводы для закрытия долгов</span>
+          <span>{t('balance.optimalTransfers')}</span>
           <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold">
             {optimizedTransactions.length}
           </span>
@@ -157,12 +161,12 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
         {optimizedTransactions.length === 0 ? (
           <div className="stitch-card p-5 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800">
-            Все расчеты выполнены. Никто никому не должен! 🎉
+            {t('balance.allSettled')}
           </div>
         ) : (
           optimizedTransactions.map((tx, idx) => {
-            const fromMember = (group.members || []).find((m: any) => m.id === tx.fromId) || { name: 'Участник', avatar: '👤' };
-            const toMember = (group.members || []).find((m: any) => m.id === tx.toId) || { name: 'Участник', avatar: '👤' };
+            const fromMember = (group.members || []).find((m: any) => m.id === tx.fromId) || { name: t('balance.defaultMember'), avatar: '👤' };
+            const toMember = (group.members || []).find((m: any) => m.id === tx.toId) || { name: t('balance.defaultMember'), avatar: '👤' };
 
             return (
               <div
@@ -185,7 +189,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                       <span>{toMember?.name?.split(' ')[0]}</span>
                     </div>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Перевод через СБП / Карту</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('balance.transferMethod')}</span>
                   </div>
                 </div>
 
@@ -197,7 +201,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                     href={routes.eventSettle(group.id, { from: tx.fromId, to: tx.toId, amount: tx.amount })}
                     className="block text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 mt-0.5"
                   >
-                    Оплатить ➔
+                    {t('balance.pay')}
                   </Link>
                 </div>
               </div>
@@ -208,7 +212,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
       {/* Individual Net Balances List */}
       <div className="space-y-3 pt-2">
-        <h3 className="font-bold text-slate-900 dark:text-white text-sm">Итоговые балансы участников</h3>
+        <h3 className="font-bold text-slate-900 dark:text-white text-sm">{t('balance.finalBalances')}</h3>
 
         <div className="space-y-2.5">
           {Object.entries(memberBalances).map(([id, data]) => {
@@ -224,7 +228,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-white text-xs">{data.name}</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Оплатил(а): {formatMoney(data.paid, group.currency || 'RUB')}
+                      {t('balance.paidLabel')} {formatMoney(data.paid, group.currency || 'RUB')}
                     </p>
                   </div>
                 </div>
@@ -239,7 +243,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                     {formatMoney(data.netAmount, group.currency || 'RUB')}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-semibold">
-                    {isOwed ? 'Ему должны' : owes ? 'Должен' : 'В расчете'}
+                    {isOwed ? t('balance.owedToThem') : owes ? t('balance.theyOwe') : t('balance.settledUp')}
                   </span>
                 </div>
               </div>
