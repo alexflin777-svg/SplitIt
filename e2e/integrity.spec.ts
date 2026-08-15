@@ -224,7 +224,7 @@ test.describe('Локальные контакты (инварианты И-14 �
     await seed(page, []);
     await page.goto('/friends');
 
-    await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+    await page.getByRole('button', { name: 'Добавить друга', exact: true }).click();
     await page.getByPlaceholder('Имя и фамилия').fill('Иван Петров');
     await page.getByRole('button', { name: 'Сохранить друга' }).click();
 

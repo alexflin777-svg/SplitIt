@@ -21,18 +21,41 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
+    locale: 'ru-RU',
     screenshot: 'only-on-failure',
   },
 
+  /**
+   * Три проекта, из них два по умолчанию.
+   *
+   * `mobile safari` (WebKit, iPhone 13) — единственное покрытие браузерного
+   * движка iOS. Он был молча потерян при переходе mobile → Pixel 5, ровно
+   * когда P1-4 в todo.md обсуждает web/PWA-бету на iPhone. Возвращён, но
+   * включается флагом PW_WEBKIT=1: WebKit требует системных библиотек
+   * (libgtk-4, libgraphene), которых нет на машине разработчика, а ставить
+   * их молча в чужую систему нельзя. В CI флаг выставлен всегда — см.
+   * .github/workflows/gate.yml, там же ставится сам браузер.
+   *
+   * Если локально нужен полный набор:
+   *   npx playwright install --with-deps webkit && PW_WEBKIT=1 npm test
+   */
   projects: [
     {
-      name: 'mobile',
-      use: { ...devices['iPhone 13'] },
+      name: 'mobile chromium',
+      use: { ...devices['Pixel 5'] },
     },
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
     },
+    ...(process.env.PW_WEBKIT === '1'
+      ? [
+          {
+            name: 'mobile safari',
+            use: { ...devices['iPhone 13'] },
+          },
+        ]
+      : []),
   ],
 
   /**

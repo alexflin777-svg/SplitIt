@@ -37,6 +37,26 @@ jobs:
           node-version: '24'
           cache: npm
 
+      # Первая проверка — что проверки на месте.
+      # 2026-08-10 скрипт lint был заменён на `echo "Lint disabled..."`, и шаг
+      # «lint» ниже оставался зелёным при любом коде. Заглушку видно только
+      # тем, кто откроет package.json. Теперь её видно гейту.
+      - name: Гейт не подменён заглушкой
+        run: |
+          node -e "
+            const s = require('./package.json').scripts || {};
+            const required = ['lint', 'test:unit', 'test:rls', 'test'];
+            const stub = /^\s*(echo|true|exit\s+0|:)\b/;
+            let bad = 0;
+            for (const k of required) {
+              if (!s[k]) { console.error('Нет обязательного скрипта: ' + k); bad++; continue; }
+              if (stub.test(s[k])) { console.error('Скрипт ' + k + ' подменён заглушкой: ' + s[k]); bad++; }
+            }
+            if (!/eslint/.test(s.lint || '')) { console.error('Скрипт lint не вызывает eslint: ' + s.lint); bad++; }
+            if (bad) process.exit(1);
+            console.log('Скрипты гейта на месте.');
+          "
+
       - name: Установить зависимости
         run: npm ci
 
@@ -52,15 +72,21 @@ jobs:
       - name: RLS на настоящем PostgreSQL
         run: npm run test:rls
 
-      # Проекты Playwright: mobile — iPhone 13 (webkit), desktop — Chrome (chromium).
-      # Ставим ровно эти два браузера, а не все.
+      # Проекты Playwright: mobile chromium (Pixel 5), desktop (Chrome) и
+      # mobile safari (iPhone 13, WebKit). WebKit включается флагом PW_WEBKIT=1
+      # — см. комментарий в playwright.config.ts. Ставим ровно эти движки.
       - name: Браузеры Playwright
         run: npx playwright install --with-deps chromium webkit
 
-      # pretest пересобирает out/ с пустыми внешними ключами — E2E не зависят от
-      # окружения и проверяют ровно тот артефакт, что уезжает в APK.
+      # pretest пересобирает out/ с ПУСТЫМИ NEXT_PUBLIC_SUPABASE_* — то есть
+      # E2E проверяют локальный/офлайн-режим и не зависят от окружения. Это
+      # осознанный размен, но и его граница: сетевой режим (Supabase, Realtime,
+      # приглашения между устройствами) здесь не покрыт вообще и проверяется
+      # только verify:prod / verify:realtime / canary на живом проекте.
       - name: E2E на статическом экспорте
         run: npm test
+        env:
+          PW_WEBKIT: '1'
 
       - name: Отчёт Playwright
         if: failure()
