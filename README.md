@@ -29,7 +29,9 @@ Realtime) · Capacitor для APK и IPA · Tesseract.js для распозна
 
 ## Запуск
 
-**Требование:** Node.js 24 (см. `.nvmrc`; допустимый диапазон — Node 22–24). Он нужен Capacitor и совпадает с GitHub Actions. Тесты TypeScript запускаются через закреплённый `tsx`, поэтому не зависят от неявного Node loader.
+**Требование:** каноническая версия — **Node.js 24** (`.nvmrc`, GitHub Actions). Допустимый диапазон — **22–24**, он же в `engines` package.json: на 22 проект собирается и проходит гейт, но CI и Capacitor сверяются с 24. Одна цифра во всех четырёх местах — `.nvmrc`, `engines`, этот README, `gate.yml`; расхождение считается дефектом (P1-2 в `todo.md`).
+
+Тесты TypeScript запускаются через закреплённый `tsx`, поэтому не зависят от неявного Node loader.
 
 ```bash
 npm ci
@@ -40,11 +42,13 @@ npm run dev
 ## Проверки
 
 ```bash
-npm run lint          # ESLint, падает на предупреждениях
+npm run lint          # ESLint, падает на предупреждениях (подменять на echo запрещено, см. AGENTS.md)
 npx tsc --noEmit      # типы
 npm run test:rls      # политики RLS на настоящем PostgreSQL (PGlite, без Docker)
 npm run build         # статический экспорт в out/
-npm test              # Playwright по out/, mobile + desktop
+npm test              # Playwright по out/: mobile chromium + desktop
+PW_WEBKIT=1 npm test  # плюс mobile safari (iPhone 13, WebKit) — как в CI;
+                      # локально нужен: npx playwright install --with-deps webkit
 ```
 
 ## Сборка мобильных приложений (Capacitor)

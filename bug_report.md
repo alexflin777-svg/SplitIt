@@ -1,12 +1,43 @@
 # SplitIT — Bug Report
 
-**Дата:** 2026-08-03 (release audit + mobile smoke)
+**Дата последнего круга:** 2026-08-15 (внешнее ревью процесса и публичной поверхности)
+
+**Архив прошлых кругов:** [bug_reports/2026-07-31-round-5.md](bug_reports/2026-07-31-round-5.md), раздел «Release audit — 2026-08-03» ниже.
+
+---
+
+## Круг 2026-08-15 — ревью-судья
+
+Проверено на дереве `50945f3` (ветка `fix/review-2026-08-15`), Node 22.23.2.
+Полный вывод гейта: lint 0, tsc 0, unit 54/54, RLS **90/90**, `npm test` **96 passed**.
+
+| # | Дефект | Severity | Как найден | Статус |
+|---|---|---|---|---|
+| S1-4 | Скрипт `lint` в `package.json` заменён на `echo "Lint disabled due to next 16 flat config issue"` (`c49bf3c`). Шаг «lint» в `gate.yml` был зелёным при любом коде с 10.08 по 15.08. | S1 | чтение `git show HEAD:package.json` | ✅ Исправлено в `4de8d1f`: линт возвращён, добавлен шаг CI «Гейт не подменён заглушкой» |
+| S1-5 | `e2e/integrity.spec.ts` искал кнопку «Добавить», переименованную в «Добавить друга» коммитом i18n `9b95860`. E2E на `main` падал, никто не заметил. | S1 | сверка `git show HEAD:src/lib/i18n/locales/ru.ts` с тестом | ✅ Исправлено в `4de8d1f` |
+| S1-6 | Публично раздавалась debug-сборка: `public/SplitIT-Beta.apk` = `SplitIT-debug.apk` (md5 `701e9b0c206be78286dbe44eba04663d`), подписана общеизвестным отладочным ключом, старше сайта на день функциональности, `versionCode` = 1. Файл был force-добавлен в обход `.gitignore`. | S1 | `md5sum`, `git log`, `android/app/build.gradle` без `signingConfigs` | ✅ Раздача убрана в `50945f3`, файл удалён из индекса в `4de8d1f`. Release-подпись — P1-3 |
+| S1-7 | `waitlist` принимала `INSERT` от `anon` с `WITH CHECK (true)`: запись без ограничений формата и длины. `email UNIQUE` + прямой INSERT работали как оракул «есть ли адрес в списке» (код 23505). | S1 | чтение `20260809000000_create_waitlist_table.sql` | ✅ Исправлено миграцией `20260815000000_harden_waitlist.sql` + RPC `join_waitlist`; покрыто `test/waitlist-rls.test.mjs` |
+| S1-8 | Форма waitlist показывала «Спасибо!» безусловно: результат `joinWaitlist` игнорировался, при ошибке RLS или отсутствии бэкенда пользователь видел успех. Нарушение инварианта «ошибка не маскируется под успех». | S1 | чтение `src/app/page.tsx` | ✅ Исправлено в `50945f3` |
+| S2-5 | `EventDetailClient` рисовал дату расхода как `new Date(expense.createdAt \|\| Date.now())`: у расхода без даты показывалось сегодняшнее число (выдуманное значение + расхождение гидратации). | S2 | правило `react-hooks/purity` после его включения обратно | ✅ Исправлено в `d091c45` |
+| S2-6 | `HeaderNavLabel` мутировал `document.documentElement.lang` в теле компонента — побочный эффект в рендере. | S2 | правило `react-hooks/immutability` | ✅ Исправлено в `d091c45` |
+| S2-7 | `SettleUpClient` вызывал сеттеры состояния, объявленные ниже по файлу. | S2 | правило `react-hooks/immutability` | ✅ Исправлено в `d091c45` |
+| S2-8 | Из E2E пропал WebKit: проект `mobile` переведён с iPhone 13 (webkit) на Pixel 5 (chromium), при этом `gate.yml` продолжал ставить webkit и утверждать в комментарии обратное. Движок браузера iOS не проверялся. | S2 | сверка `playwright.config.ts` и `gate.yml` | ✅ Проект `mobile safari` возвращён под `PW_WEBKIT=1`, в CI флаг выставлен |
+| S3-4 | i18n «на 10 языков»: строки waitlist были английскими заглушками в 9 локалях из 10. | S3 | `grep` по `src/lib/i18n/locales/` | ✅ Эти строки переведены; полный аудит ключей — P1-7 |
+| S3-5 | Документы разошлись с фактами: «нет прав на push» при синхронной `origin/main`, «Next.js 14» в инвариантах при `next@16.3.0`, четыре источника версии Node с тремя ответами. | S3 | `git rev-list`, `package.json`, `.nvmrc` | ✅ `todo.md`, `handoff.md`, `AGENTS.md`, `README.md` приведены к факту; старые handoff'ы — в `docs/archive/` |
+
+### Открыто по итогам круга
+
+- **Push-уведомления не работают на Android:** `android/app/google-services.json` отсутствует, gradle логирует это и не применяет плагин. Код приехал 09.08 вне backlog. Решение — P2.
+- **Сетевой режим не покрыт E2E:** `pretest` собирает `out/` с пустыми `NEXT_PUBLIC_SUPABASE_*`, все 96 тестов проверяют локальный режим. P2.
+- **`react-hooks/set-state-in-effect` выключен** до P1-6, крайний срок пересмотра 2026-09-15.
+- **Живые проверки** `verify:prod` / `verify:realtime` / `canary` не запускались с 01.08 — то есть до Next 16, i18n, OAuth и push. Повторить после P0-4.
+- **Supabase Security Advisor:** `auth_leaked_password_protection` отключён с 01.08. Задача владельца, P0-3.
+
+---
+
+## Release audit — 2026-08-03 (архивный круг)
 
 **Роль:** CODEX / Checker
-
-**Архив прошлого круга:** [bug_reports/2026-07-31-round-5.md](bug_reports/2026-07-31-round-5.md)
-
-## Release audit — 2026-08-03
 
 Текущий candidate проходит локальный гейт: ESLint без предупреждений,
 TypeScript без ошибок, unit **54/54**, RLS **84/84**, Playwright **92/92**,
