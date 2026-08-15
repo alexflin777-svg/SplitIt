@@ -16,7 +16,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // Сторож ./e2e/reporters/expect-all-tests.ts подключён всегда: он валит прогон,
+  // если выполнились не все собранные тесты. Наблюдалось 15.08 под нагрузкой —
+  // сводка печатала «95 passed» из 96 без единого failed.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }], ['./e2e/reporters/expect-all-tests.ts']]
+    : [['list'], ['./e2e/reporters/expect-all-tests.ts']],
 
   use: {
     baseURL: `http://localhost:${PORT}`,
