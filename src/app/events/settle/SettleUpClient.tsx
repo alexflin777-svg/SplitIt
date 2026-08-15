@@ -17,8 +17,19 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   const searchParams = useSearchParams();
   const { t } = useI18n();
 
+  const defaultAmount = searchParams.get('amount') || '5000';
+
+  // Все useState объявлены до эффекта, который их использует: раньше эффект
+  // вызывал setPayerId/setPayeeId, объявленные ниже по файлу, и правило
+  // react-hooks/immutability законно на это ругалось.
   const [group, setGroup] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [payerId, setPayerId] = useState('');
+  const [payeeId, setPayeeId] = useState('');
+  const [amount, setAmount] = useState(defaultAmount);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'cash'>('sbp');
+  const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
     // Ничего не подставляем: раньше при отсутствии события показывалась
@@ -49,15 +60,6 @@ function SettleUpForm({ groupId }: { groupId: string }) {
       setGroup(loadedGroup);
     });
   }, [groupId, searchParams, t]);
-
-  const defaultAmount = searchParams.get('amount') || '5000';
-
-  const [payerId, setPayerId] = useState('');
-  const [payeeId, setPayeeId] = useState('');
-  const [amount, setAmount] = useState(defaultAmount);
-  const [amountError, setAmountError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'cash'>('sbp');
-  const [isSuccess, setIsSuccess] = useState(false);
 
   if (loadError) {
     return <div role="alert" className="p-4 text-xs font-bold text-rose-700 text-center">{loadError}</div>;

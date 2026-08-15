@@ -54,7 +54,7 @@ export default function BottomNav() {
               }`}
             >
               <Icon className={`w-5 h-5 ${isActive ? 'text-white' : ''}`} />
-              <span>{item.label}</span>
+              <span className="truncate max-w-xs">{item.label}</span>
             </Link>
           );
         })}

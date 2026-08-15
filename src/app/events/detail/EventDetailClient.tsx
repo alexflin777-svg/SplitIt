@@ -273,8 +273,13 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     }
 
     // Локальный режим
+    // Точечное исключение: правило purity не различает тело компонента и
+    // обработчик, а здесь Date.now() вызывается только по нажатию. Само
+    // правило остаётся включённым для всего проекта.
+    // eslint-disable-next-line react-hooks/purity
+    const localMemberId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newMember = {
-      id: `m-${Date.now()}`,
+      id: localMemberId,
       name: nameStr.trim(),
       avatar: '👤',
       role: 'member',
@@ -650,7 +655,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         {paidByMember?.avatar || '👤'}
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 dark:text-white text-sm">{expense.title}</h5>
+                        <h5 className="font-bold text-slate-900 dark:text-white text-sm min-w-0 truncate max-w-xs">{expense.title}</h5>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                           {t('eventDetail.paidByName')}{' '}
                           <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
@@ -697,13 +702,18 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                       <span>• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
                     </div>
 
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-400" />
-                      {new Date(expense.createdAt || Date.now()).toLocaleDateString(undefined, {
-                        day: 'numeric',
-                        month: 'short',
-                      })}
-                    </span>
+                    {expense.createdAt ? (
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        {/* Дата берётся только из записи. Прежний fallback на
+                            Date.now() рисовал сегодняшнее число у расхода без
+                            даты — выдуманное значение и расхождение гидратации. */}
+                        {new Date(expense.createdAt).toLocaleDateString(undefined, {
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               );

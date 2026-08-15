@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 
 /**
@@ -10,11 +11,13 @@ import { useI18n } from '@/lib/i18n/provider';
 export default function HeaderNavLabel() {
   const { t, locale } = useI18n();
 
-  // Keep <html lang> in sync with the active locale for accessibility/SEO;
-  // harmless no-op during export/SSR since document isn't available there.
-  if (typeof document !== 'undefined') {
+  // Keep <html lang> in sync with the active locale for accessibility/SEO.
+  // Раньше присваивание стояло прямо в теле компонента — это побочный эффект
+  // во время рендера: он выполняется при каждом рендере, в том числе
+  // прерванном, и ломает гидратацию статического экспорта.
+  useEffect(() => {
     document.documentElement.lang = locale;
-  }
+  }, [locale]);
 
   return <>{t('nav.newEvent')}</>;
 }

@@ -366,7 +366,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
                       {isSelected && <Check className="w-3.5 h-3.5" />}
                     </div>
                     <span className="text-base">{member.avatar || '👤'}</span>
-                    <span className="text-xs font-bold text-slate-900">{member.name}</span>
+                    <span className="text-xs font-bold text-slate-900 min-w-0 truncate max-w-xs">{member.name}</span>
                   </div>
 
                   {isSelected && parsedAmount > 0 && (

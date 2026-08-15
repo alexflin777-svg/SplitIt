@@ -184,10 +184,10 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white">
-                      <span>{fromMember?.name?.split(' ')[0]}</span>
+                    <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white min-w-0">
+                      <span className="truncate max-w-xs">{fromMember?.name?.split(' ')[0]}</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{toMember?.name?.split(' ')[0]}</span>
+                      <span className="truncate max-w-xs">{toMember?.name?.split(' ')[0]}</span>
                     </div>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('balance.transferMethod')}</span>
                   </div>
@@ -226,7 +226,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
                     {data.avatar}
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">{data.name}</h4>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-xs min-w-0 truncate max-w-xs">{data.name}</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {t('balance.paidLabel')} {formatMoney(data.paid, group.currency || 'RUB')}
                     </p>
