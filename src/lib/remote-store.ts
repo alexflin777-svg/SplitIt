@@ -438,12 +438,16 @@ export function subscribeToGroup(groupId: string, onChange: () => void): () => v
 
 export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
   if (!supabase) return fail(NO_BACKEND);
-  
-  const { error } = await supabase.from('waitlist').insert({ email });
-  
-  if (error && error.code !== '23505') {
+
+  // Запись идёт через RPC, а не прямым INSERT: политика анонимной записи снята
+  // миграцией 20260815000000_harden_waitlist.sql. Функция сама нормализует и
+  // проверяет адрес и не различает вставку и дубликат, поэтому по её ответу
+  // нельзя узнать, был ли адрес уже в списке.
+  const { error } = await supabase.rpc('join_waitlist', { p_email: email });
+
+  if (error) {
     return fail(translate(error));
   }
-  
+
   return { data: true, error: null };
 }

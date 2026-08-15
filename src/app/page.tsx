@@ -29,7 +29,7 @@ import {
   KeyRound,
   LogOut,
   Activity,
-  Download,
+  Mail,
 } from 'lucide-react';
 import { routes } from '@/lib/routes';
 
@@ -56,20 +56,29 @@ export default function HomePage() {
       return;
     }
     setWaitlistStatus('loading');
-    
-    // Save to DB
-    await joinWaitlist(waitlistEmail);
-    
+
+    // Результат записи больше не игнорируется. Раньше здесь стоял голый
+    // `await joinWaitlist(...)`, после которого статус безусловно становился
+    // 'success': без бэкенда или при ошибке RLS пользователь видел «Спасибо!»,
+    // хотя его email никуда не попал. Это прямое нарушение инварианта
+    // «ошибка не маскируется под успех» из AGENTS.md.
+    const { error } = await joinWaitlist(waitlistEmail);
+
+    if (error) {
+      setWaitlistStatus('error');
+      setWaitlistMsg(t('home.waitlistFailed', { error }));
+      return;
+    }
+
     setWaitlistStatus('success');
     setWaitlistMsg(t('home.waitlistSuccess'));
-    
-    // Trigger APK download
-    setTimeout(() => {
-      const a = document.createElement('a');
-      a.href = '/SplitIT-Beta.apk';
-      a.download = 'SplitIT-Beta.apk';
-      a.click();
-    }, 1500);
+
+    // Автоскачивание APK убрано 2026-08-15.
+    // Раздавалась debug-сборка (public/SplitIT-Beta.apk был байт в байт равен
+    // SplitIT-debug.apk): подписана общеизвестным отладочным ключом, старше
+    // сайта на день функциональности, версия не отличима от следующей.
+    // Раздача сборок вернётся только release-подписью, с checksum и SHA —
+    // задача P1-3 в todo.md.
   };
 
   const refreshGroups = useCallback(async () => {
@@ -196,7 +205,7 @@ export default function HomePage() {
                 {waitlistStatus === 'loading' ? (
                   <Activity className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Download className="w-4 h-4" />
+                  <Mail className="w-4 h-4" />
                 )}
                 <span>{t('home.joinWaitlistBtn')}</span>
               </button>

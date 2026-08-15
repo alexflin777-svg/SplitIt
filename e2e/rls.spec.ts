@@ -108,6 +108,43 @@ test.describe('Миграции Supabase (инвариант И-9)', () => {
     expect(insertPolicy![1]).toContain('is_group_owner');
   });
 
+  test('нет действующей анонимной записи с WITH CHECK (true)', () => {
+    // Регрессия на waitlist (09.08): таблица с персональными данными
+    // принимала INSERT от anon с `WITH CHECK (true)` — запись без единого
+    // ограничения. Такая политика допустима только если её снимает более
+    // поздняя миграция; иначе это дыра, открытая наружу.
+    const migrations = readMigrations();
+    const all = migrations.map((m) => stripComments(m.sql)).join('\n');
+
+    const created = new Set<string>();
+    const pattern = /CREATE\s+POLICY\s+"([^"]+)"[\s\S]*?FOR\s+INSERT[\s\S]*?TO\s+([^\n;]*)[\s\S]*?WITH\s+CHECK\s*\(\s*true\s*\)/gi;
+
+    for (const match of all.matchAll(pattern)) {
+      if (/\banon\b/i.test(match[2])) created.add(match[1]);
+    }
+
+    const dropped = new Set(
+      [...all.matchAll(/DROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?"([^"]+)"/gi)].map((m) => m[1]),
+    );
+
+    const offenders = [...created].filter((name) => !dropped.has(name));
+
+    expect(offenders, 'анонимная запись без ограничений осталась действующей').toEqual([]);
+  });
+
+  test('в waitlist пишут только через join_waitlist', () => {
+    const all = readMigrations()
+      .map((m) => stripComments(m.sql))
+      .join('\n');
+
+    expect(all).toMatch(/ALTER\s+TABLE\s+public\.waitlist\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i);
+    expect(all).toMatch(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.join_waitlist/i);
+    expect(all).toMatch(/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.join_waitlist\(TEXT\)\s+TO\s+anon,\s*authenticated/i);
+    // Дубликат не должен быть отличим от вставки, иначе функция снова
+    // работает как оракул «есть ли этот адрес в списке».
+    expect(all).toMatch(/ON\s+CONFLICT\s*\(\s*email\s*\)\s*DO\s+NOTHING/i);
+  });
+
   test('денежные величины ограничены на уровне БД', () => {
     const all = readMigrations()
       .map((m) => stripComments(m.sql))

@@ -387,10 +387,11 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Курс загружен сегодня в {time}',
   'currency.rateLoadedCache': 'Курс из кэша, обновлён в {time}',
   'currency.rateFallback': 'Курс не загружен — расчёт по резервным значениям, сумма может отличаться от фактической.',
-  'home.joinWaitlistBtn': 'В лист ожидания & Скачать APK',
+  'home.joinWaitlistBtn': 'Записаться в лист ожидания',
   'home.waitlistPlaceholder': 'Ваш email',
-  'home.waitlistSuccess': 'Спасибо! Скачивание начнется сейчас.',
+  'home.waitlistSuccess': 'Спасибо, вы в списке ожидания. Напишем, когда откроется бета.',
   'home.waitlistError': 'Введите корректный email.',
+  'home.waitlistFailed': 'Не удалось записать: {error}. Попробуйте позже.',
   'auth.googleLogin': 'Войти через Google',
   'auth.orEmail': 'Или по email',
 };

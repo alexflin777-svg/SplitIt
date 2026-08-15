@@ -399,10 +399,11 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Rate loaded today at {time}',
   'currency.rateLoadedCache': 'Rate from cache, updated at {time}',
   'currency.rateFallback': 'Live rates unavailable — calculation based on fallback values, amount may differ.',
-  'home.joinWaitlistBtn': 'Join Waitlist & Get APK',
+  'home.joinWaitlistBtn': 'Join the waitlist',
   'home.waitlistPlaceholder': 'Enter your email',
-  'home.waitlistSuccess': 'Thanks! APK download will start shortly.',
+  'home.waitlistSuccess': 'Thanks, you are on the waitlist. We will email you when the beta opens.',
   'home.waitlistError': 'Please enter a valid email.',
+  'home.waitlistFailed': 'Could not save your email: {error}. Please try again later.',
   'auth.googleLogin': 'Continue with Google',
   'auth.orEmail': 'Or continue with email',
 };
