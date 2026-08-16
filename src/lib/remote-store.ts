@@ -105,6 +105,7 @@ function translate(error: { message: string; code?: string }): string {
 const GROUP_SELECT = `
   id, name, category, default_currency, status, created_by, created_at, updated_at,
   group_members ( user_id, role, profiles ( id, full_name, avatar_url, email, phone ) ),
+  group_participants ( id, display_name, kind, profile_id, created_by ),
   expenses (
     id, title, amount, currency, amount_in_group_currency, category,
     paid_by_id, created_at,
@@ -123,14 +124,24 @@ function mapGroup(row: any): Group {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
-    members: (row.group_members ?? []).map((m: any) => ({
-      id: m.user_id,
-      name: m.profiles?.full_name ?? 'Участник',
-      avatar: m.profiles?.avatar_url ?? '👤',
-      role: m.role ?? 'member',
-      email: m.profiles?.email ?? undefined,
-      phone: m.profiles?.phone ?? undefined,
-    })),
+    members: [
+      ...(row.group_members ?? []).map((m: any) => ({
+        id: m.user_id,
+        name: m.profiles?.full_name ?? 'Участник',
+        avatar: m.profiles?.avatar_url ?? '👤',
+        role: m.role ?? 'member',
+        email: m.profiles?.email ?? undefined,
+        phone: m.profiles?.phone ?? undefined,
+      })),
+      ...(row.group_participants ?? []).filter((p: any) => p.kind === 'guest').map((p: any) => ({
+        id: p.id,
+        name: p.display_name,
+        avatar: '👤',
+        role: 'member',
+        email: undefined,
+        phone: undefined,
+      }))
+    ],
     expenses: (row.expenses ?? [])
       .map((e: any) => ({
         id: e.id,
@@ -450,4 +461,33 @@ export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
   }
 
   return { data: true, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Virtual members (guests)
+// ---------------------------------------------------------------------------
+
+export async function addGuestMember(groupId: string, name: string): Promise<RemoteResult<GroupMember>> {
+  if (!supabase) return fail(NO_BACKEND);
+
+  const { data, error } = await supabase.rpc('add_virtual_member', {
+    p_group_id: groupId,
+    p_member_name: name,
+  });
+
+  if (error) return fail(translate(error));
+  if (!data) return fail('Сервер не вернул данные участника.');
+
+  const participant = data as any;
+  return {
+    data: {
+      id: participant.id,
+      name: participant.name,
+      avatar: participant.avatar ?? '👤',
+      role: participant.role ?? 'member',
+      email: undefined,
+      phone: undefined,
+    },
+    error: null
+  };
 }

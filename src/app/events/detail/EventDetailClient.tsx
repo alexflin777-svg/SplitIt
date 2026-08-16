@@ -12,6 +12,7 @@ import {
   deleteExpense as deleteExpenseFromStore,
   deleteGroup,
   createInvite,
+  addGuestMember,
   subscribeToGroup,
   isMultiUser,
 } from '@/lib/store';
@@ -264,11 +265,37 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     );
     if (isExists) return;
 
-    // В сетевом режиме финансовые участники без аккаунта появятся только после
-    // завершения participant-модели. Имя не используется как идентификатор.
     if (isMultiUser()) {
-      setInviteError(t('eventDetail.multiUserAddNote'));
+      // Optimistic update
+      const tempId = `guest-${new Date().getTime()}`;
+      const optimisticMember = {
+        id: tempId,
+        name: nameStr.trim(),
+        avatar: '👤',
+        role: 'member',
+      };
+      
+      const previousGroup = { ...group };
+      const updated = { ...group, members: [...(group.members || []), optimisticMember] };
+      setGroup(updated);
+      setNewMemberName('');
       setIsAddingMember(false);
+
+      // Backend call
+      const { data: newMember, error } = await addGuestMember(group.id, nameStr.trim());
+      
+      if (error) {
+        setInviteError(error);
+        setGroup(previousGroup); // Rollback on error
+        return;
+      }
+
+      // Replace optimistic member with real backend member
+      setGroup((prev: any) => {
+        if (!prev) return prev;
+        const members = prev.members.map((m: any) => m.id === tempId ? newMember : m);
+        return { ...prev, members };
+      });
       return;
     }
 

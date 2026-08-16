@@ -331,3 +331,5 @@ export function subscribeToGroup(groupId: string, onChange: () => void): () => v
 export async function joinWaitlist(email: string) {
   return remote.joinWaitlist(email);
 }
+
+export const addGuestMember = remote.addGuestMember;
