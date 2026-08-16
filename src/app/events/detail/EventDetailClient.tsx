@@ -682,10 +682,10 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         {paidByMember?.avatar || '👤'}
                       </div>
                       <div>
-                        <h5 className="font-bold text-slate-900 dark:text-white text-sm min-w-0 truncate max-w-xs">{expense.title}</h5>
+                        <h5 className="font-bold text-slate-900 dark:text-white text-sm min-w-0 truncate max-w-[200px]">{expense.title}</h5>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                           {t('eventDetail.paidByName')}{' '}
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 min-w-0 truncate inline-block max-w-[120px] align-bottom">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
                         </p>
                       </div>
                     </div>

@@ -185,9 +185,9 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
                   <div>
                     <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white min-w-0">
-                      <span className="truncate max-w-xs">{fromMember?.name?.split(' ')[0]}</span>
+                      <span className="truncate inline-block align-bottom max-w-[80px]">{fromMember?.name?.split(' ')[0]}</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="truncate max-w-xs">{toMember?.name?.split(' ')[0]}</span>
+                      <span className="truncate inline-block align-bottom max-w-[80px]">{toMember?.name?.split(' ')[0]}</span>
                     </div>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('balance.transferMethod')}</span>
                   </div>
@@ -212,7 +212,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
       {/* Individual Net Balances List */}
       <div className="space-y-3 pt-2">
-        <h3 className="font-bold text-slate-900 dark:text-white text-sm">{t('balance.finalBalances')}</h3>
+        <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate min-w-0 max-w-[200px]">{t('balance.finalBalances')}</h3>
 
         <div className="space-y-2.5">
           {Object.entries(memberBalances).map(([id, data]) => {

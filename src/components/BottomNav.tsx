@@ -47,14 +47,14 @@ export default function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-xl transition-all text-xs font-bold ${
+              className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-xl transition-all text-[11px] min-w-0 font-bold ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 font-extrabold'
                   : 'text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-700/60'
               }`}
             >
               <Icon className={`w-5 h-5 ${isActive ? 'text-white' : ''}`} />
-              <span className="truncate max-w-xs">{item.label}</span>
+              <span className="truncate max-w-[70px] inline-block text-center">{item.label}</span>
             </Link>
           );
         })}
@@ -62,14 +62,14 @@ export default function BottomNav() {
         <button
           type="button"
           onClick={handleAuthAction}
-          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-xl transition-all text-xs font-bold ${
+          className={`flex flex-col items-center gap-1 py-1.5 px-3.5 rounded-xl transition-all text-[11px] min-w-0 font-bold ${
             pathname === '/auth'
               ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 font-extrabold'
               : 'text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100/80 dark:hover:bg-slate-700/60'
           }`}
         >
           {isAuthenticated ? <LogOut className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-          <span>{isAuthenticated ? t('profile.signOut') : t('auth.signIn')}</span>
+          <span className="truncate max-w-[70px] inline-block text-center">{isAuthenticated ? t('profile.signOut') : t('auth.signIn')}</span>
         </button>
       </div>
     </nav>
