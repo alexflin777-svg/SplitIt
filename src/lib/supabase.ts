@@ -1,7 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfMisconfigured } from './env';
 import { createCredential, verifyCredential, validatePassword, StoredCredential } from './credentials';
 import { t } from './i18n/t';
+
+/**
+ * Кастомная схема для deep-link обратно в приложение после OAuth на нативных
+ * платформах (Android/iOS). Должна совпадать с applicationId в
+ * capacitor.config.json и с intent-filter в AndroidManifest.xml — иначе
+ * система не знает, каким приложением открыть редирект от Supabase.
+ */
+const NATIVE_AUTH_REDIRECT_URL = 'app.splitit.mobile://auth/callback';
 
 /**
  * Клиент создаётся только при настоящей конфигурации (инвариант И-3).
@@ -10,7 +20,7 @@ import { t } from './i18n/t';
  */
 export const supabase: SupabaseClient | null = isSupabaseConfigured()
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true },
+      auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' },
     })
   : null;
 
@@ -332,15 +342,29 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 
 export async function signInWithGoogle(): Promise<{ error: string | null }> {
   if (!supabase) return { error: t('errors.syncDisabledNoBackend') };
-  
-  const { error } = await supabase.auth.signInWithOAuth({
+
+  const isNative = Capacitor.isNativePlatform();
+
+  // На вебе редирект на `${origin}/auth/callback` — реальный HTTPS-адрес.
+  // В Capacitor WebView `window.location.origin` — это `https://localhost`,
+  // недостижимый снаружи: Google и Supabase редиректят через системный
+  // браузер, а не внутри WebView. Поэтому на нативных платформах используем
+  // кастомную схему и открываем URL авторизации через @capacitor/browser;
+  // обратно приложение ловит deep link в useNativeAuthCallback.
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: isNative ? NATIVE_AUTH_REDIRECT_URL : `${window.location.origin}/auth/callback`,
+      skipBrowserRedirect: isNative,
     },
   });
-  
+
   if (error) return { error: translateAuthError(error.message) };
+
+  if (isNative && data?.url) {
+    await Browser.open({ url: data.url });
+  }
+
   return { error: null };
 }
 

@@ -15,7 +15,8 @@ export default function AuthCallbackPage() {
       try {
         if (!supabase) throw new Error('Supabase client not initialized');
         
-        // Wait for supabase to parse the URL hash (implicit flow)
+        // supabase-js обрабатывает ?code= из URL автоматически при инициализации
+        // клиента (detectSessionInUrl, PKCE-flow) — здесь просто ждём сессию.
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) throw sessionError;
