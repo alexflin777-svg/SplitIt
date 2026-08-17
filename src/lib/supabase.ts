@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfMisconfigured } from './env';
 import { createCredential, verifyCredential, validatePassword, StoredCredential } from './credentials';
+import { t } from './i18n/t';
 
 /**
  * Клиент создаётся только при настоящей конфигурации (инвариант И-3).
@@ -116,8 +117,8 @@ function writeLocal(key: string, value: unknown): string | null {
   } catch (e: any) {
     const isQuota = e?.name === 'QuotaExceededError' || e?.code === 22;
     const message = isQuota
-      ? 'Закончилось место в локальном хранилище. Уменьшите размер аватара или удалите старые события.'
-      : `Не удалось сохранить данные локально: ${e?.message ?? e}`;
+      ? t('errors.localStorageQuotaExceeded')
+      : t('errors.localSaveFailed', { message: String(e?.message ?? e) });
     console.error('[SplitIT]', message, e);
     return message;
   }
@@ -222,7 +223,7 @@ function profileFromEmail(email: string, fullName?: string, avatarUrl?: string):
   return {
     id: 'user-' + Date.now(),
     email,
-    full_name: fullName || email.split('@')[0] || 'Пользователь',
+    full_name: fullName || email.split('@')[0] || t('auth.defaultUserName'),
     avatar_url: avatarUrl || '👤',
     preferred_currency: 'RUB',
     created_at: new Date().toISOString(),
@@ -236,7 +237,7 @@ export async function signUpUser(
   avatarUrl?: string,
 ): Promise<AuthResult> {
   const normEmail = email.toLowerCase().trim();
-  if (!normEmail.includes('@')) return { data: null, error: 'Введите корректный адрес электронной почты' };
+  if (!normEmail.includes('@')) return { data: null, error: t('errors.invalidEmail') };
 
   const weak = validatePassword(password);
   if (weak) return { data: null, error: weak };
@@ -251,7 +252,7 @@ export async function signUpUser(
     // Ошибка возвращается наверх, а не проглатывается: раньше провал регистрации
     // выглядел для пользователя точно так же, как успех.
     if (error) return { data: null, error: translateAuthError(error.message) };
-    if (!data.user) return { data: null, error: 'Supabase не вернул пользователя. Попробуйте ещё раз.' };
+    if (!data.user) return { data: null, error: t('errors.noUserReturned') };
 
     const profile: UserProfile = {
       ...profileFromEmail(normEmail, fullName, avatarUrl),
@@ -272,7 +273,7 @@ export async function signUpUser(
   // Локальный режим: аккаунт заводится на устройстве, пароль хранится хешем.
   const registry = getUsersRegistry();
   if (registry[normEmail]) {
-    return { data: null, error: 'Аккаунт с таким email уже зарегистрирован на этом устройстве' };
+    return { data: null, error: t('errors.emailAlreadyRegisteredLocal') };
   }
 
   const profile = profileFromEmail(normEmail, fullName, avatarUrl);
@@ -284,12 +285,12 @@ export async function signUpUser(
 
 export async function signInUser(email: string, password: string): Promise<AuthResult> {
   const normEmail = email.toLowerCase().trim();
-  if (!normEmail || !password) return { data: null, error: 'Введите email и пароль' };
+  if (!normEmail || !password) return { data: null, error: t('errors.emailPasswordRequired') };
 
   if (supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({ email: normEmail, password });
     if (error) return { data: null, error: translateAuthError(error.message) };
-    if (!data.user) return { data: null, error: 'Неверный email или пароль' };
+    if (!data.user) return { data: null, error: t('errors.invalidCredentials') };
 
     const registry = getUsersRegistry();
     const known = registry[normEmail];
@@ -312,16 +313,16 @@ export async function signInUser(email: string, password: string): Promise<AuthR
   const registered = registry[normEmail];
 
   if (!registered) {
-    return { data: null, error: 'Аккаунт не найден на этом устройстве. Зарегистрируйтесь или войдите как гость.' };
+    return { data: null, error: t('errors.accountNotFoundLocal') };
   }
   if (!registered.credential) {
     return {
       data: null,
-      error: 'Для этого аккаунта не задан пароль. Зарегистрируйте его заново или войдите как гость.',
+      error: t('errors.noPasswordSetLocal'),
     };
   }
   if (!(await verifyCredential(registered.credential, password))) {
-    return { data: null, error: 'Неверный email или пароль' };
+    return { data: null, error: t('errors.invalidCredentials') };
   }
 
   const { credential: _omit, ...profile } = registered;
@@ -330,7 +331,7 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 }
 
 export async function signInWithGoogle(): Promise<{ error: string | null }> {
-  if (!supabase) return { error: 'Синхронизация отключена: бэкенд не настроен.' };
+  if (!supabase) return { error: t('errors.syncDisabledNoBackend') };
   
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -356,7 +357,7 @@ export async function resetPassword(email: string): Promise<ResetResult> {
   if (!supabase) {
     return {
       success: false,
-      message: 'Восстановление пароля по email недоступно: бэкенд не настроен. Войдите как гость или зарегистрируйтесь заново.',
+      message: t('errors.passwordResetUnavailable'),
     };
   }
 
@@ -367,17 +368,17 @@ export async function resetPassword(email: string): Promise<ResetResult> {
   const { error } = await supabase.auth.resetPasswordForEmail(normEmail, { redirectTo });
   if (error) return { success: false, message: translateAuthError(error.message) };
 
-  return { success: true, message: `Инструкция по сбросу пароля отправлена на ${normEmail}` };
+  return { success: true, message: t('errors.passwordResetInstructionsSent', { email: normEmail }) };
 }
 
 export async function updatePassword(password: string): Promise<ResetResult> {
   const weak = validatePassword(password);
   if (weak) return { success: false, message: weak };
-  if (!supabase) return { success: false, message: 'Смена пароля по email недоступна: бэкенд не настроен.' };
+  if (!supabase) return { success: false, message: t('errors.passwordChangeUnavailable') };
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { success: false, message: translateAuthError(error.message) };
-  return { success: true, message: 'Пароль изменён. Теперь войдите с новым паролем.' };
+  return { success: true, message: t('errors.passwordChangedSuccess') };
 }
 
 export async function signOutUser() {
@@ -416,7 +417,7 @@ export async function getActiveSession(): Promise<UserProfile | null> {
       data.user.user_metadata?.full_name ||
       sameUser?.full_name ||
       data.user.email?.split('@')[0] ||
-      'Пользователь',
+      t('auth.defaultUserName'),
     avatar_url: remoteProfile?.avatar_url || data.user.user_metadata?.avatar_url || sameUser?.avatar_url || '👤',
     phone: remoteProfile?.phone || sameUser?.phone,
     preferred_currency: remoteProfile?.default_currency || sameUser?.preferred_currency || 'RUB',
@@ -432,17 +433,17 @@ export async function getActiveSession(): Promise<UserProfile | null> {
 
 function translateAuthError(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login credentials')) return 'Неверный email или пароль';
-  if (m.includes('email not confirmed')) return 'Email не подтверждён — проверьте почту';
-  if (m.includes('user already registered')) return 'Аккаунт с таким email уже зарегистрирован';
-  if (m.includes('rate limit') || m.includes('too many')) return 'Слишком много попыток. Подождите минуту.';
-  if (m.includes('fetch') || m.includes('network')) return 'Нет связи с сервером. Проверьте подключение.';
+  if (m.includes('invalid login credentials')) return t('errors.invalidCredentials');
+  if (m.includes('email not confirmed')) return t('errors.emailNotConfirmed');
+  if (m.includes('user already registered')) return t('errors.emailAlreadyRegistered');
+  if (m.includes('rate limit') || m.includes('too many')) return t('errors.rateLimited');
+  if (m.includes('fetch') || m.includes('network')) return t('errors.noServerConnectionCheck');
   return message;
 }
 
 export async function completeOnboarding(): Promise<{ error: string | null }> {
   const session = getLocalSession();
-  if (!session) return { error: 'No active session' };
+  if (!session) return { error: t('errors.noActiveSession') };
 
   // Update local session immediately
   const updatedSession = { ...session, has_completed_onboarding: true };

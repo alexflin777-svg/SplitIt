@@ -3,6 +3,8 @@
  * Provides live API exchange rate conversions, caching, and localized formatting.
  */
 
+import { t } from './i18n/t';
+
 export interface CurrencyInfo {
   code: string;
   symbol: string;
@@ -42,7 +44,7 @@ export interface LiveRateStatus {
 }
 
 let currentStatus: LiveRateStatus = {
-  lastUpdated: 'Загрузка...',
+  lastUpdated: t('common.loading'),
   source: 'fallback',
 };
 
@@ -89,7 +91,7 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
       if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL_MS && parsed.rates) {
         applyRatesToCurrencies(parsed.rates);
         currentStatus = {
-          lastUpdated: new Date(parsed.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+          lastUpdated: new Date(parsed.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
           source: 'cache',
         };
         return parsed.rates;
@@ -117,7 +119,7 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
         const now = Date.now();
         localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ timestamp: now, rates: newRates }));
         currentStatus = {
-          lastUpdated: new Date(now).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+          lastUpdated: new Date(now).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
           source: 'api',
         };
         return newRates;
@@ -143,7 +145,7 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
         const now = Date.now();
         localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ timestamp: now, rates: newRates }));
         currentStatus = {
-          lastUpdated: new Date(now).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+          lastUpdated: new Date(now).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
           source: 'api',
         };
         return newRates;
@@ -153,7 +155,7 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
     console.warn('Failed to fetch rates from CBR backup', err);
   }
 
-  currentStatus = { lastUpdated: 'Резервные курсы', source: 'fallback' };
+  currentStatus = { lastUpdated: t('currency.fallbackRatesLabel'), source: 'fallback' };
   return getRatesObject();
 }
 
