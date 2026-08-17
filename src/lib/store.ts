@@ -22,6 +22,7 @@ import * as remote from './remote-store';
 import type { Group, RemoteResult } from './remote-store';
 import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from './supabase';
 import type { UserProfile } from './supabase';
+import { t } from './i18n/t';
 
 export type { Group, GroupMember, GroupExpense, GroupSettlement } from './remote-store';
 
@@ -57,7 +58,7 @@ export async function getGroup(groupId: string): Promise<RemoteResult<Group>> {
   // Ничего не сочиняем: событие либо есть, либо его нет.
   return found
     ? ok(found)
-    : { data: null, error: 'Событие недоступно: его нет на этом устройстве.' };
+    : { data: null, error: t('errors.eventUnavailableLocal') };
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +72,7 @@ export async function createGroup(input: {
   memberNames?: string[];
 }): Promise<RemoteResult<Group>> {
   const session = await getActiveSession();
-  if (!session) return { data: null, error: 'Войдите в аккаунт, чтобы создать событие' };
+  if (!session) return { data: null, error: t('errors.signInToCreateEvent') };
 
   if (isMultiUser()) {
     // Участников по именам в сетевом режиме не добавляют: человек попадает в

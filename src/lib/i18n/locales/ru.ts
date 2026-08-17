@@ -388,6 +388,7 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Курс загружен сегодня в {time}',
   'currency.rateLoadedCache': 'Курс из кэша, обновлён в {time}',
   'currency.rateFallback': 'Курс не загружен — расчёт по резервным значениям, сумма может отличаться от фактической.',
+  'currency.fallbackRatesLabel': 'Резервные курсы',
   'home.joinWaitlistBtn': 'Записаться в лист ожидания',
   'home.waitlistPlaceholder': 'Ваш email',
   'home.waitlistSuccess': 'Спасибо, вы в списке ожидания. Напишем, когда откроется бета.',

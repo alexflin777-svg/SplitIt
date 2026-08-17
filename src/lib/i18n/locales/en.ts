@@ -399,6 +399,7 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Rate loaded today at {time}',
   'currency.rateLoadedCache': 'Rate from cache, updated at {time}',
   'currency.rateFallback': 'Live rates unavailable — calculation based on fallback values, amount may differ.',
+  'currency.fallbackRatesLabel': 'Fallback rates',
   'home.joinWaitlistBtn': 'Join the waitlist',
   'home.waitlistPlaceholder': 'Enter your email',
   'home.waitlistSuccess': 'Thanks, you are on the waitlist. We will email you when the beta opens.',

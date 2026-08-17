@@ -14,31 +14,9 @@ import {
   Locale,
   SUPPORTED_LOCALES,
 } from './config';
-import { messages as ru } from './locales/ru';
-import { messages as en } from './locales/en';
-import { messages as es } from './locales/es';
-import { messages as de } from './locales/de';
-import { messages as fr } from './locales/fr';
-import { messages as it } from './locales/it';
-import { messages as pt } from './locales/pt';
-import { messages as tr } from './locales/tr';
-import { messages as zh } from './locales/zh';
-import { messages as ja } from './locales/ja';
+import { translateWith } from './t';
 
 const STORAGE_KEY = 'splitit_locale';
-
-const ALL_MESSAGES: Record<Locale, Record<string, string>> = {
-  ru,
-  en,
-  es,
-  de,
-  fr,
-  it,
-  pt,
-  tr,
-  zh,
-  ja,
-};
 
 type I18nContextValue = {
   locale: Locale;
@@ -102,16 +80,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string, vars?: Record<string, string | number>) => {
-      const dict = ALL_MESSAGES[locale] ?? ALL_MESSAGES[DEFAULT_LOCALE];
-      let str = dict[key] ?? ALL_MESSAGES[DEFAULT_LOCALE][key] ?? key;
-      if (vars) {
-        for (const [k, v] of Object.entries(vars)) {
-          str = str.replaceAll(`{${k}}`, String(v));
-        }
-      }
-      return str;
-    },
+    (key: string, vars?: Record<string, string | number>) => translateWith(locale, key, vars),
     [locale]
   );
 

@@ -387,6 +387,7 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Kurs heute geladen um {time}',
   'currency.rateLoadedCache': 'Kurs aus Cache, aktualisiert um {time}',
   'currency.rateFallback': 'Aktuelle Kurse nicht verfügbar — Berechnung basiert auf Fallback-Werten, Betrag kann abweichen.',
+  'currency.fallbackRatesLabel': 'Reservekurse',
   'home.joinWaitlistBtn': 'Auf die Warteliste',
   'home.waitlistPlaceholder': 'Ihre E-Mail',
   'home.waitlistSuccess': 'Danke, Sie stehen auf der Warteliste. Wir melden uns, sobald die Beta startet.',

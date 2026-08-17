@@ -387,6 +387,7 @@ export const messages: Record<string, string> = {
   'currency.rateLoadedApi': 'Taux chargé aujourd\'hui à {time}',
   'currency.rateLoadedCache': 'Taux depuis le cache, mis à jour à {time}',
   'currency.rateFallback': 'Taux en direct non disponibles — calcul basé sur des valeurs de secours, le montant peut différer.',
+  'currency.fallbackRatesLabel': 'Taux de secours',
   'home.joinWaitlistBtn': 'Rejoindre la liste d’attente',
   'home.waitlistPlaceholder': 'Votre e-mail',
   'home.waitlistSuccess': 'Merci, vous êtes sur la liste d’attente. Nous vous écrirons à l’ouverture de la bêta.',
