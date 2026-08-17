@@ -58,6 +58,7 @@ export const messages: Record<string, string> = {
 
   'friends.title': 'Друзья',
   'friends.add': 'Добавить друга',
+  'friends.import': 'Импортировать',
 
   'profile.title': 'Профиль',
   'profile.name': 'Имя',
