@@ -19,12 +19,12 @@
 
 import { isSupabaseConfigured } from './env';
 import * as remote from './remote-store';
-import type { Group, RemoteResult } from './remote-store';
+import type { FetchGroupOptions, Group, GroupRealtimeChange, RemoteResult } from './remote-store';
 import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from './supabase';
 import type { UserProfile } from './supabase';
 import { t } from './i18n/t';
 
-export type { Group, GroupMember, GroupExpense, GroupSettlement } from './remote-store';
+export type { FetchGroupOptions, Group, GroupMember, GroupExpense, GroupRealtimeChange, GroupSettlement, RemoteResult } from './remote-store';
 
 export function isMultiUser(): boolean {
   return isSupabaseConfigured();
@@ -51,8 +51,8 @@ export async function listGroups(): Promise<RemoteResult<Group[]>> {
   return ok(localGroups());
 }
 
-export async function getGroup(groupId: string): Promise<RemoteResult<Group>> {
-  if (isMultiUser()) return remote.fetchGroup(groupId);
+export async function getGroup(groupId: string, options?: FetchGroupOptions): Promise<RemoteResult<Group>> {
+  if (isMultiUser()) return remote.fetchGroup(groupId, options);
 
   const found = localGroups().find((g) => g.id === groupId);
   // Ничего не сочиняем: событие либо есть, либо его нет.
@@ -317,7 +317,7 @@ export async function saveProfile(profile: UserProfile): Promise<RemoteResult<tr
 // Подписка на изменения
 // ---------------------------------------------------------------------------
 
-export function subscribeToGroup(groupId: string, onChange: () => void): () => void {
+export function subscribeToGroup(groupId: string, onChange: (change?: GroupRealtimeChange) => void): () => void {
   if (isMultiUser()) return remote.subscribeToGroup(groupId, onChange);
 
   // Локальный режим: только соседние вкладки того же браузера.

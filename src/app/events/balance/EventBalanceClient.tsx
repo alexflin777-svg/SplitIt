@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
 import { simplifyDebts } from '@/lib/debt-simplification';
-import { getGroup, subscribeToGroup } from '@/lib/store';
+import { useGroup } from '@/lib/data-hooks';
 import {
   ArrowLeft,
   Scale,
@@ -21,20 +20,9 @@ import { useI18n } from '@/lib/i18n/provider';
 
 export default function EventBalanceClient({ groupId }: { groupId: string }) {
   const { t } = useI18n();
-  const [group, setGroup] = useState<any>(null);
-
-  useEffect(() => {
-    // Никаких выдуманных «Участник 2» при отсутствии события: подставленный
-    // фейк раньше показывал баланс несуществующей группы как настоящий.
-    const loadGroupData = async () => {
-      const { data } = await getGroup(groupId);
-      setGroup(data);
-    };
-
-    loadGroupData();
-    const unsubscribe = subscribeToGroup(groupId, loadGroupData);
-    return () => unsubscribe();
-  }, [groupId]);
+  // Никаких выдуманных «Участник 2» при отсутствии события: хук возвращает null,
+  // если группа недоступна, и Realtime патчит SWR-кеш без полного refetch расхода.
+  const { group } = useGroup(groupId);
 
   if (!group) {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('balance.loading')}</div>;

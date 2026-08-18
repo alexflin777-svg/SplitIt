@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
-import { listGroups, isMultiUser, joinWaitlist } from '@/lib/store';
+import { isMultiUser, joinWaitlist } from '@/lib/store';
+import { useGroups } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
 import { OnboardingTour } from '@/components/OnboardingTour';
 import {
@@ -36,12 +37,11 @@ import { routes } from '@/lib/routes';
 export default function HomePage() {
   const router = useRouter();
   const { t } = useI18n();
-  const [groups, setGroups] = useState<any[]>([]);
+  const { groups, error: loadError, refresh: refreshGroups } = useGroups();
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Waitlist State
   const [waitlistEmail, setWaitlistEmail] = useState('');
@@ -80,12 +80,6 @@ export default function HomePage() {
     // Раздача сборок вернётся только release-подписью, с checksum и SHA —
     // задача P1-3 в todo.md.
   };
-
-  const refreshGroups = useCallback(async () => {
-    const { data, error } = await listGroups();
-    setLoadError(error);
-    setGroups(data ?? []);
-  }, []);
 
   useEffect(() => {
     // Check active user session

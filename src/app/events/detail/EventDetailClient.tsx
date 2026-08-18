@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
-  getGroup,
   renameGroup,
   setGroupStatus,
   deleteExpense as deleteExpenseFromStore,
   deleteGroup,
   createInvite,
   addGuestMember,
-  subscribeToGroup,
   isMultiUser,
 } from '@/lib/store';
 import { formatMoney } from '@/lib/currency';
@@ -46,6 +44,8 @@ import {
 import { routes, absoluteInviteLink, hasPublicInviteOrigin } from '@/lib/routes';
 import { getConfigProblem } from '@/lib/env';
 import { useI18n } from '@/lib/i18n/provider';
+import { useGroup } from '@/lib/data-hooks';
+import { DEFAULT_EXPENSE_PAGE_SIZE } from '@/lib/remote-store';
 
 /**
  * Экран «события нет на этом устройстве».
@@ -85,6 +85,8 @@ function EventNotFound({ groupId }: { groupId: string }) {
 export default function EventDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { t } = useI18n();
+  const [expenseLimit, setExpenseLimit] = useState(DEFAULT_EXPENSE_PAGE_SIZE);
+  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId, expenseLimit);
   const [group, setGroup] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -116,33 +118,28 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
    *
    * Раньше отсутствующее событие не считалось ошибкой: функция сочиняла
    * «Совместную поездку» с двумя вымышленными участниками и сохраняла её
-   * под настоящим id. Перейдя по приглашению, человек видел пустышку вместо
-   * группы владельца — и занятый id, из-за которого настоящая группа уже не
-   * могла подгрузиться. Ничего не сочиняем: событие либо есть, либо его нет.
+   * под настоящим id. Сейчас данные приходят из SWR-кеша; Realtime события
+   * точечно патчат этот кеш, а не вызывают полный refetch группы на каждый split.
    */
-  const loadGroup = useCallback(async () => {
-    // Источник данных выбирает фасад: Supabase, когда бэкенд подключён, иначе
-    // localStorage. Экран про это не знает и не должен знать.
-    const { data, error } = await getGroup(groupId);
+  useEffect(() => {
+    if (isLoading && !cachedGroup && !cachedError) {
+      setStatus('loading');
+      return;
+    }
 
-    if (error || !data) {
+    if (cachedError || !cachedGroup) {
       setGroup(null);
-      setLoadError(error);
+      setLoadError(cachedError);
       setStatus('not-found');
       return;
     }
 
-    setGroup(data);
-    setEditedName(data.name);
+    setGroup(cachedGroup);
+    setEditedName(cachedGroup.name);
     setStatus('ok');
     getActiveSession().then(setUserProfile);
-  }, [groupId]);
+  }, [cachedError, cachedGroup, isLoading]);
 
-  useEffect(() => {
-    loadGroup();
-    const unsubscribe = subscribeToGroup(groupId, loadGroup);
-    return () => unsubscribe();
-  }, [groupId, loadGroup]);
 
   if (status === 'loading') {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('eventDetail.loading')}</div>;
@@ -346,7 +343,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       setActionError(error);
       return;
     }
-    await loadGroup();
+    await refreshGroup();
   };
 
   const handleDeleteExpenseConfirmed = async () => {
@@ -359,7 +356,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       setActionError(error);
       return;
     }
-    await loadGroup();
+    await refreshGroup();
   };
 
   const handleDeleteEventConfirmed = async () => {
@@ -380,7 +377,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       setActionError(error);
       return;
     }
-    await loadGroup();
+    await refreshGroup();
 
     if (targetStatus === 'completed') {
       try {
@@ -745,6 +742,15 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 </div>
               );
             })}
+            {group.expensesHasMore ? (
+              <button
+                type="button"
+                onClick={() => setExpenseLimit((limit) => limit + DEFAULT_EXPENSE_PAGE_SIZE)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
+              >
+                Load {DEFAULT_EXPENSE_PAGE_SIZE} more expenses
+              </button>
+            ) : null}
           </div>
         )}
       </div>
