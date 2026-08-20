@@ -22,6 +22,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep link for the Supabase Google OAuth (PKCE) callback,
+                 see NATIVE_AUTH_REDIRECT_URL in src/lib/supabase.ts -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app.splitit.mobile" android:host="auth" android:path="/callback" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -38,4 +47,5 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 </manifest>

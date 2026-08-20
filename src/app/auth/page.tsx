@@ -174,7 +174,7 @@ function AuthForm() {
   };
 
   return (
-    <div className="space-y-4 max-w-md mx-auto px-1">
+    <div className="space-y-4 max-w-md mx-auto px-1 pb-24">
       {/* Header */}
       <div className="text-center space-y-1.5">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-extrabold text-xl flex items-center justify-center mx-auto shadow-lg shadow-blue-500/20 overflow-hidden">

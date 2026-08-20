@@ -295,7 +295,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
           >
             {(group.members || []).map((m: any) => (
               <option key={m.id} value={m.id}>
-                {m.avatar || '👤'} {m.name}
+                <span className="truncate max-w-[150px] inline-block align-bottom">{m.avatar || '👤'} {m.name}</span>
               </option>
             ))}
           </select>

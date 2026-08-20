@@ -13,6 +13,46 @@ export default function FriendsPage() {
   const [newFriendPhone, setNewFriendPhone] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [importError, setImportError] = useState('');
+  const [isCapacitor, setIsCapacitor] = useState(false);
+  useEffect(() => {
+    const checkCapacitor = async () => {
+      const { Capacitor } = await import('@capacitor/core');
+      setIsCapacitor(Capacitor.isNativePlatform());
+    };
+    checkCapacitor();
+  }, []);
+
+  const handleImportContacts = async () => {
+    setImportError('');
+    try {
+      const { Contacts } = await import('@capacitor-community/contacts');
+      const permission = await Contacts.requestPermissions();
+      if (permission.contacts === 'granted') {
+        const result = await Contacts.getContacts({
+          projection: { name: true, phones: true }
+        });
+        const newFriends = result.contacts.map((contact) => ({
+          id: crypto.randomUUID(),
+          name: contact.name?.display || 'Без имени',
+          phone: contact.phones?.[0]?.number || undefined,
+          avatar: '👤',
+          role: 'member' as const,
+        }));
+        const updatedFriends = [...newFriends, ...friends];
+        const error = saveFriends(updatedFriends);
+        if (error) {
+          setImportError(error);
+        } else {
+          setFriends(updatedFriends);
+        }
+      } else {
+        setImportError(t('friends.permissionDenied') || 'Нет доступа к контактам');
+      }
+    } catch (e: any) {
+      setImportError(e.message || 'Failed to import contacts.');
+    }
+  };
 
   useEffect(() => {
     // Load persistent friends list
@@ -89,6 +129,16 @@ export default function FriendsPage() {
           <UserPlus className="w-4 h-4" />
           <span>{t('friends.add')}</span>
         </button>
+
+        {isCapacitor && (
+          <button
+            onClick={handleImportContacts}
+            className="px-3.5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-green-500/20 transition-all active:scale-95"
+          >
+            <Phone className="w-4 h-4" />
+            <span>{t('friends.import')}</span>
+          </button>
+        )}
       </div>
 
       <div className="stitch-card p-4 flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">

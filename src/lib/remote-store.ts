@@ -20,6 +20,7 @@
  */
 
 import { supabase } from './supabase';
+import { t } from './i18n/t';
 
 export interface RemoteResult<T> {
   data: T | null;
@@ -70,9 +71,26 @@ export interface Group {
   members: GroupMember[];
   expenses: GroupExpense[];
   settlements: GroupSettlement[];
+  expensesHasMore?: boolean;
+  expensesLimit?: number;
 }
 
-const NO_BACKEND = 'Бэкенд не подключён — данные хранятся только на этом устройстве.';
+export interface FetchGroupOptions {
+  expensesLimit?: number;
+  expensesOffset?: number;
+}
+
+export type GroupRealtimeChange =
+  | { type: 'group-patch'; groupId: string; patch: Partial<Pick<Group, 'name' | 'category' | 'currency' | 'status' | 'updatedAt'>> }
+  | { type: 'expense-upsert'; groupId: string; expense: GroupExpense }
+  | { type: 'expense-delete'; groupId: string; expenseId: string }
+  | { type: 'refetch'; groupId: string; reason: 'members' | 'settlements' | 'splits' };
+
+export const DEFAULT_EXPENSE_PAGE_SIZE = 50;
+
+function noBackend(): string {
+  return t('errors.noBackend');
+}
 
 function fail<T>(message: string): RemoteResult<T> {
   return { data: null, error: message };
@@ -84,13 +102,13 @@ function translate(error: { message: string; code?: string }): string {
 
   // Отказ RLS выглядит как нарушение политики, а не как «нет прав».
   if (error.code === '42501' || m.includes('row-level security')) {
-    return 'Недостаточно прав для этой операции.';
+    return t('errors.insufficientPermissions');
   }
   if (error.code === '23514' || m.includes('check constraint')) {
-    return 'Значение не прошло проверку: суммы должны быть больше нуля.';
+    return t('errors.checkConstraintAmount');
   }
-  if (error.code === '23505') return 'Такая запись уже существует.';
-  if (m.includes('fetch') || m.includes('network')) return 'Нет связи с сервером.';
+  if (error.code === '23505') return t('errors.duplicateRecord');
+  if (m.includes('fetch') || m.includes('network')) return t('errors.noServerConnection');
   return error.message;
 }
 
@@ -99,19 +117,38 @@ function translate(error: { message: string; code?: string }): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Одна вложенная выборка вместо пяти запросов: PostgREST собирает связи по
- * внешним ключам, а RLS отсекает чужое на каждом уровне.
+ * Базовая группа грузится отдельно от расходов. Расходы — самый быстрорастущий
+ * список, поэтому их нельзя постоянно тащить полным вложенным деревом.
  */
-const GROUP_SELECT = `
+const GROUP_CORE_SELECT = `
   id, name, category, default_currency, status, created_by, created_at, updated_at,
   group_members ( user_id, role, profiles ( id, full_name, avatar_url, email, phone ) ),
-  expenses (
-    id, title, amount, currency, amount_in_group_currency, category,
-    paid_by_id, created_at,
-    expense_splits ( user_id, amount_owed )
-  ),
+  group_participants ( id, display_name, kind, profile_id, created_by ),
   settlements ( id, payer_id, payee_id, amount, currency, payment_method, status, created_at )
 `;
+
+const EXPENSE_SELECT = `
+  id, title, amount, currency, amount_in_group_currency, category,
+  paid_by_id, created_at,
+  expense_splits ( user_id, amount_owed )
+`;
+
+function mapExpense(e: any): GroupExpense {
+  return {
+    id: e.id,
+    title: e.title,
+    amount: Number(e.amount),
+    currency: e.currency,
+    amountInGroupCurrency: Number(e.amount_in_group_currency),
+    category: e.category ?? 'other',
+    paidById: e.paid_by_id,
+    splits: (e.expense_splits ?? []).map((split: any) => ({
+      userId: split.user_id,
+      amountOwed: Number(split.amount_owed),
+    })),
+    createdAt: e.created_at,
+  };
+}
 
 function mapGroup(row: any): Group {
   return {
@@ -123,30 +160,29 @@ function mapGroup(row: any): Group {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
-    members: (row.group_members ?? []).map((m: any) => ({
-      id: m.user_id,
-      name: m.profiles?.full_name ?? 'Участник',
-      avatar: m.profiles?.avatar_url ?? '👤',
-      role: m.role ?? 'member',
-      email: m.profiles?.email ?? undefined,
-      phone: m.profiles?.phone ?? undefined,
-    })),
-    expenses: (row.expenses ?? [])
-      .map((e: any) => ({
-        id: e.id,
-        title: e.title,
-        amount: Number(e.amount),
-        currency: e.currency,
-        amountInGroupCurrency: Number(e.amount_in_group_currency),
-        category: e.category ?? 'other',
-        paidById: e.paid_by_id,
-        splits: (e.expense_splits ?? []).map((s: any) => ({
-          userId: s.user_id,
-          amountOwed: Number(s.amount_owed),
-        })),
-        createdAt: e.created_at,
+    members: [
+      ...(row.group_members ?? []).map((m: any) => ({
+        id: m.user_id,
+        name: m.profiles?.full_name ?? t('export.defaultMember'),
+        avatar: m.profiles?.avatar_url ?? '👤',
+        role: m.role ?? 'member',
+        email: m.profiles?.email ?? undefined,
+        phone: m.profiles?.phone ?? undefined,
+      })),
+      ...(row.group_participants ?? []).filter((p: any) => p.kind === 'guest').map((p: any) => ({
+        id: p.id,
+        name: p.display_name,
+        avatar: '👤',
+        role: 'member',
+        email: undefined,
+        phone: undefined,
       }))
+    ],
+    expenses: (row.expenses ?? [])
+      .map(mapExpense)
       .sort((a: GroupExpense, b: GroupExpense) => b.createdAt.localeCompare(a.createdAt)),
+    expensesHasMore: row.expenses_has_more ?? false,
+    expensesLimit: row.expenses_limit,
     settlements: (row.settlements ?? []).map((s: any) => ({
       id: s.id,
       fromUserId: s.payer_id,
@@ -161,27 +197,100 @@ function mapGroup(row: any): Group {
 }
 
 export async function fetchGroups(): Promise<RemoteResult<Group[]>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { data, error } = await supabase
     .from('groups')
-    .select(GROUP_SELECT)
+    .select(GROUP_CORE_SELECT)
     .order('created_at', { ascending: false });
 
   if (error) return fail(translate(error));
-  return { data: (data ?? []).map(mapGroup), error: null };
+
+  const groups = (data ?? []).map(mapGroup);
+  const withBoundedExpenses = await Promise.all(
+    groups.map(async (group) => {
+      const expenses = await fetchExpensesPage(group.id, { limit: DEFAULT_EXPENSE_PAGE_SIZE });
+      return expenses.data
+        ? {
+            ...group,
+            expenses: expenses.data.expenses,
+            expensesHasMore: expenses.data.hasMore,
+            expensesLimit: DEFAULT_EXPENSE_PAGE_SIZE,
+          }
+        : group;
+    }),
+  );
+
+  return { data: withBoundedExpenses, error: null };
 }
 
-export async function fetchGroup(groupId: string): Promise<RemoteResult<Group>> {
-  if (!supabase) return fail(NO_BACKEND);
+export async function fetchExpensesPage(
+  groupId: string,
+  { limit = DEFAULT_EXPENSE_PAGE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<RemoteResult<{ expenses: GroupExpense[]; hasMore: boolean }>> {
+  if (!supabase) return fail(noBackend());
 
-  const { data, error } = await supabase.from('groups').select(GROUP_SELECT).eq('id', groupId).maybeSingle();
+  const boundedLimit = Math.max(1, Math.min(limit, 100));
+  const from = Math.max(0, offset);
+  const to = from + boundedLimit;
+  const { data, error } = await supabase
+    .from('expenses')
+    .select(EXPENSE_SELECT)
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) return fail(translate(error));
+  const rows = data ?? [];
+  return {
+    data: {
+      expenses: rows.slice(0, boundedLimit).map(mapExpense),
+      hasMore: rows.length > boundedLimit,
+    },
+    error: null,
+  };
+}
+
+async function fetchExpenseById(expenseId: string): Promise<RemoteResult<{ groupId: string; expense: GroupExpense }>> {
+  if (!supabase) return fail(noBackend());
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .select(`group_id, ${EXPENSE_SELECT}`)
+    .eq('id', expenseId)
+    .maybeSingle();
+
+  if (error) return fail(translate(error));
+  if (!data) return fail(t('errors.expenseNotFoundOrUnavailable'));
+  return { data: { groupId: data.group_id, expense: mapExpense(data) }, error: null };
+}
+
+export async function fetchGroup(groupId: string, options: FetchGroupOptions = {}): Promise<RemoteResult<Group>> {
+  if (!supabase) return fail(noBackend());
+
+  const expensesLimit = options.expensesLimit ?? DEFAULT_EXPENSE_PAGE_SIZE;
+  const expensesOffset = options.expensesOffset ?? 0;
+
+  const { data, error } = await supabase.from('groups').select(GROUP_CORE_SELECT).eq('id', groupId).maybeSingle();
 
   if (error) return fail(translate(error));
   // Отсутствие строки здесь означает «нет доступа или не существует» — RLS не
   // различает эти случаи намеренно, чтобы по ответу нельзя было перебирать id.
-  if (!data) return fail('Событие недоступно: его не существует или у вас нет доступа.');
-  return { data: mapGroup(data), error: null };
+  if (!data) return fail(t('errors.eventUnavailableNoAccess'));
+
+  const group = mapGroup(data);
+  const expensesResult = await fetchExpensesPage(groupId, { limit: expensesLimit, offset: expensesOffset });
+  if (expensesResult.error || !expensesResult.data) return fail(expensesResult.error ?? t('errors.eventUnavailableNoAccess'));
+
+  return {
+    data: {
+      ...group,
+      expenses: expensesResult.data.expenses,
+      expensesHasMore: expensesResult.data.hasMore,
+      expensesLimit,
+    },
+    error: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +302,7 @@ export async function createGroup(input: {
   category: string;
   currency: string;
 }): Promise<RemoteResult<Group>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { data: createdId, error } = await supabase.rpc('create_group_with_owner', {
     p_name: input.name,
@@ -202,29 +311,29 @@ export async function createGroup(input: {
   });
 
   if (error) return fail(translate(error));
-  if (!createdId) return fail('Сервер не вернул id созданного события.');
+  if (!createdId) return fail(t('errors.noCreatedIdEvent'));
   return fetchGroup(createdId as string);
 }
 
 export async function renameGroup(groupId: string, name: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
   const { data, error } = await supabase.from('groups').update({ name }).eq('id', groupId).select('id').maybeSingle();
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Событие не найдено или у вас нет права его переименовать.');
+  return data ? { data: true, error: null } : fail(t('errors.eventNotFoundOrNoRenamePermission'));
 }
 
 export async function renameGroupStatus(groupId: string, status: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
   const { data, error } = await supabase.from('groups').update({ status }).eq('id', groupId).select('id').maybeSingle();
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Событие не найдено или менять его статус может только владелец.');
+  return data ? { data: true, error: null } : fail(t('errors.eventNotFoundOrNotOwnerStatus'));
 }
 
 export async function deleteGroup(groupId: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
   const { data, error } = await supabase.from('groups').delete().eq('id', groupId).select('id').maybeSingle();
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Событие не найдено или вы не можете его удалить (только создатель может удалить).');
+  return data ? { data: true, error: null } : fail(t('errors.eventNotFoundOrNoDeletePermission'));
 }
 
 export async function addExpense(
@@ -240,7 +349,7 @@ export async function addExpense(
     createdAt?: string;
   },
 ): Promise<RemoteResult<string>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { data: createdId, error } = await supabase.rpc('add_expense_with_splits', {
     p_group_id: groupId,
@@ -255,7 +364,7 @@ export async function addExpense(
   });
 
   if (error) return fail(translate(error));
-  return createdId ? { data: createdId as string, error: null } : fail('Сервер не вернул id расхода.');
+  return createdId ? { data: createdId as string, error: null } : fail(t('errors.noCreatedIdExpense'));
 }
 
 /**
@@ -274,7 +383,7 @@ export async function updateExpense(
     createdAt?: string;
   },
 ): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { data, error } = await supabase.rpc('update_expense_with_splits', {
     p_expense_id: expenseId,
@@ -289,21 +398,21 @@ export async function updateExpense(
   });
 
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Расход не найден или недоступен.');
+  return data ? { data: true, error: null } : fail(t('errors.expenseNotFoundOrUnavailable'));
 }
 
 export async function deleteExpense(expenseId: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
   const { data, error } = await supabase.from('expenses').delete().eq('id', expenseId).select('id').maybeSingle();
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Расход не найден или у вас нет права его удалить.');
+  return data ? { data: true, error: null } : fail(t('errors.expenseNotFoundOrNoDeletePermission'));
 }
 
 export async function addSettlement(
   groupId: string,
   settlement: { fromUserId: string; toUserId: string; amount: number; currency: string; paymentMethod: string },
 ): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { error } = await supabase.from('settlements').insert({
     group_id: groupId,
@@ -340,7 +449,7 @@ export async function createInvite(
   createdBy: string,
   ttlHours = 24 * 14,
 ): Promise<RemoteResult<string>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const code = randomInviteCode();
   const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
@@ -354,14 +463,14 @@ export async function createInvite(
 
 /** Вызывает SECURITY DEFINER функцию: единственный путь в чужую группу. */
 export async function redeemInvite(code: string): Promise<RemoteResult<string>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { data, error } = await supabase.rpc('redeem_group_invite', { p_invite_code: code });
 
   if (error) {
     const m = error.message.toLowerCase();
     if (m.includes('недействительно') || m.includes('истекло')) {
-      return fail('Приглашение недействительно или истекло. Попросите новую ссылку.');
+      return fail(t('errors.inviteInvalidOrExpired'));
     }
     return fail(translate(error));
   }
@@ -369,7 +478,7 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
 }
 
 export async function leaveGroup(groupId: string, userId: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
   const { data, error } = await supabase
     .from('group_members')
     .delete()
@@ -378,7 +487,7 @@ export async function leaveGroup(groupId: string, userId: string): Promise<Remot
     .select('group_id')
     .maybeSingle();
   if (error) return fail(translate(error));
-  return data ? { data: true, error: null } : fail('Участник не найден или уже вышел из события.');
+  return data ? { data: true, error: null } : fail(t('errors.memberNotFoundOrLeft'));
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +502,7 @@ export async function upsertProfile(profile: {
   phone?: string;
   preferred_currency?: string;
 }): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   const { error } = await supabase.from('profiles').upsert({
     id: profile.id,
@@ -415,20 +524,55 @@ export async function upsertProfile(profile: {
  * применения RLS, поэтому чужие изменения физически не долетают — в отличие от
  * прошлой схемы, где клиенты сами рассылали друг другу всё своё состояние.
  */
-export function subscribeToGroup(groupId: string, onChange: () => void): () => void {
+export function subscribeToGroup(groupId: string, onChange: (change: GroupRealtimeChange) => void): () => void {
   const client = supabase;
   if (!client) return () => {};
 
+  const notifyExpense = async (expenseId: string | undefined) => {
+    if (!expenseId) return;
+    const { data } = await fetchExpenseById(expenseId);
+    if (data && data.groupId === groupId) {
+      onChange({ type: 'expense-upsert', groupId, expense: data.expense });
+    } else {
+      onChange({ type: 'refetch', groupId, reason: 'splits' });
+    }
+  };
+
   const channel = client
     .channel(`group:${groupId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'groups', filter: `id=eq.${groupId}` }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, onChange)
-    // expense_splits не содержит group_id, поэтому фильтрацию оставляет RLS.
-    // Событие нужно слушать: при редактировании expense UPDATE приходит до
-    // замены долей, и без этого финального сигнала другой клиент видел старый split.
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `group_id=eq.${groupId}` }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'groups', filter: `id=eq.${groupId}` }, (payload: any) => {
+      if (payload.eventType === 'DELETE') return onChange({ type: 'refetch', groupId, reason: 'members' });
+      const row = payload.new ?? {};
+      onChange({
+        type: 'group-patch',
+        groupId,
+        patch: {
+          name: row.name,
+          category: row.category,
+          currency: row.default_currency,
+          status: row.status,
+          updatedAt: row.updated_at,
+        },
+      });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, (payload: any) => {
+      if (payload.eventType === 'DELETE') {
+        onChange({ type: 'expense-delete', groupId, expenseId: payload.old?.id });
+        return;
+      }
+      void notifyExpense(payload.new?.id);
+    })
+    // expense_splits не содержит group_id, поэтому берём один изменённый расход
+    // по expense_id вместо полного refetch группы.
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, (payload: any) => {
+      void notifyExpense(payload.new?.expense_id ?? payload.old?.expense_id);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `group_id=eq.${groupId}` }, () => {
+      onChange({ type: 'refetch', groupId, reason: 'settlements' });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => {
+      onChange({ type: 'refetch', groupId, reason: 'members' });
+    })
     .subscribe();
 
   return () => {
@@ -437,7 +581,7 @@ export function subscribeToGroup(groupId: string, onChange: () => void): () => v
 }
 
 export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
-  if (!supabase) return fail(NO_BACKEND);
+  if (!supabase) return fail(noBackend());
 
   // Запись идёт через RPC, а не прямым INSERT: политика анонимной записи снята
   // миграцией 20260815000000_harden_waitlist.sql. Функция сама нормализует и
@@ -450,4 +594,33 @@ export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
   }
 
   return { data: true, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Virtual members (guests)
+// ---------------------------------------------------------------------------
+
+export async function addGuestMember(groupId: string, name: string): Promise<RemoteResult<GroupMember>> {
+  if (!supabase) return fail(noBackend());
+
+  const { data, error } = await supabase.rpc('add_virtual_member', {
+    p_group_id: groupId,
+    p_member_name: name,
+  });
+
+  if (error) return fail(translate(error));
+  if (!data) return fail(t('errors.noMemberDataReturned'));
+
+  const participant = data as any;
+  return {
+    data: {
+      id: participant.id,
+      name: participant.name,
+      avatar: participant.avatar ?? '👤',
+      role: participant.role ?? 'member',
+      email: undefined,
+      phone: undefined,
+    },
+    error: null
+  };
 }

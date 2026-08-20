@@ -8,6 +8,7 @@ import { routes } from '@/lib/routes';
 import { I18nProvider } from '@/lib/i18n/provider';
 import HeaderNavLabel from '@/components/HeaderNavLabel';
 import { PushInit } from '@/components/PushInit';
+import { NativeAuthInit } from '@/components/NativeAuthInit';
 
 /**
  * Шрифт вшивается в сборку, а не тянется с fonts.googleapis.com.
@@ -46,6 +47,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
         <I18nProvider>
           <PushInit />
+          <NativeAuthInit />
         {/* Top Navbar with Responsive Mobile Safe Area Support */}
         <header className="app-header sticky top-0 z-40 w-full glass-panel border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-3">
           <div className="max-w-md mx-auto flex items-center justify-between">

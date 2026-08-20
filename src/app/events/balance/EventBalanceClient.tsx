@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/currency';
 import { simplifyDebts } from '@/lib/debt-simplification';
-import { getGroup, subscribeToGroup } from '@/lib/store';
+import { useGroup } from '@/lib/data-hooks';
 import {
   ArrowLeft,
   Scale,
@@ -21,20 +20,9 @@ import { useI18n } from '@/lib/i18n/provider';
 
 export default function EventBalanceClient({ groupId }: { groupId: string }) {
   const { t } = useI18n();
-  const [group, setGroup] = useState<any>(null);
-
-  useEffect(() => {
-    // Никаких выдуманных «Участник 2» при отсутствии события: подставленный
-    // фейк раньше показывал баланс несуществующей группы как настоящий.
-    const loadGroupData = async () => {
-      const { data } = await getGroup(groupId);
-      setGroup(data);
-    };
-
-    loadGroupData();
-    const unsubscribe = subscribeToGroup(groupId, loadGroupData);
-    return () => unsubscribe();
-  }, [groupId]);
+  // Никаких выдуманных «Участник 2» при отсутствии события: хук возвращает null,
+  // если группа недоступна, и Realtime патчит SWR-кеш без полного refetch расхода.
+  const { group } = useGroup(groupId);
 
   if (!group) {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('balance.loading')}</div>;
@@ -185,9 +173,9 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
                   <div>
                     <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white min-w-0">
-                      <span className="truncate max-w-xs">{fromMember?.name?.split(' ')[0]}</span>
+                      <span className="truncate inline-block align-bottom max-w-[80px]">{fromMember?.name?.split(' ')[0]}</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="truncate max-w-xs">{toMember?.name?.split(' ')[0]}</span>
+                      <span className="truncate inline-block align-bottom max-w-[80px]">{toMember?.name?.split(' ')[0]}</span>
                     </div>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('balance.transferMethod')}</span>
                   </div>
@@ -212,7 +200,7 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
 
       {/* Individual Net Balances List */}
       <div className="space-y-3 pt-2">
-        <h3 className="font-bold text-slate-900 dark:text-white text-sm">{t('balance.finalBalances')}</h3>
+        <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate min-w-0 max-w-[200px]">{t('balance.finalBalances')}</h3>
 
         <div className="space-y-2.5">
           {Object.entries(memberBalances).map(([id, data]) => {
