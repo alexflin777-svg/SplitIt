@@ -24,7 +24,26 @@ export function useNativeAuthCallback() {
 
       await Browser.close().catch(() => {});
 
-      const code = new URL(url).searchParams.get('code');
+      const params = new URL(url).searchParams;
+
+      // Ветка Telegram: браузерная страница /auth/telegram-native вернула
+      // одноразовый token_hash — обмениваем его на сессию прямо здесь.
+      const tgTokenHash = params.get('tg_token_hash');
+      if (tgTokenHash) {
+        const { error } = await supabase!.auth.verifyOtp({
+          type: 'magiclink',
+          token_hash: tgTokenHash,
+        });
+        if (error) {
+          console.warn('[SplitIT] Telegram: token_hash не обменялся на сессию', error.message);
+          return;
+        }
+        const profile = await getActiveSession();
+        if (profile) router.replace('/friends');
+        return;
+      }
+
+      const code = params.get('code');
       if (!code) return;
 
       const { error } = await supabase!.auth.exchangeCodeForSession(code);
