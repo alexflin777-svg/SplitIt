@@ -8,6 +8,7 @@ import { getConfigProblem } from '@/lib/env';
 import { processAvatarFile } from '@/lib/avatar';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
+import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 
 type AuthMode = 'register' | 'login' | 'reset' | 'update-password';
 
@@ -276,6 +277,13 @@ function AuthForm() {
               </svg>
               <span>{t('auth.googleLogin')}</span>
             </button>
+            <TelegramLoginButton
+              onSuccess={() => {
+                router.push(routes.home());
+                router.refresh();
+              }}
+              onError={(msg) => setErrorMessage(msg)}
+            />
             <div className="flex items-center gap-4">
               <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
               <span className="text-xs text-slate-400 font-medium">{t('auth.orEmail')}</span>

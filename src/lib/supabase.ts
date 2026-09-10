@@ -368,6 +368,43 @@ export async function signInWithGoogle(): Promise<{ error: string | null }> {
   return { error: null };
 }
 
+/**
+ * Вход через Telegram Login Widget.
+ *
+ * Payload виджета уходит в Edge Function `telegram-auth`, которая проверяет
+ * HMAC-подпись ботовым токеном на сервере (клиентская проверка бессмысленна:
+ * подделывается) и возвращает одноразовый token_hash. Здесь мы обмениваем его
+ * на полноценную сессию через verifyOtp — дальше пользователь неотличим от
+ * вошедшего любым другим способом.
+ */
+export async function signInWithTelegram(
+  payload: Record<string, unknown>,
+): Promise<{ error: string | null }> {
+  if (!supabase) return { error: t('errors.syncDisabledNoBackend') };
+
+  const { data, error } = await supabase.functions.invoke('telegram-auth', {
+    body: payload,
+  });
+
+  if (error) {
+    // Ошибка функции не маскируется под успех; типовые случаи переводим.
+    return { error: translateAuthError(error.message || 'Telegram auth failed') };
+  }
+
+  const tokenHash = (data as { token_hash?: string } | null)?.token_hash;
+  if (!tokenHash) {
+    return { error: t('errors.invalidCredentials') };
+  }
+
+  const { error: otpError } = await supabase.auth.verifyOtp({
+    type: 'magiclink',
+    token_hash: tokenHash,
+  });
+  if (otpError) return { error: translateAuthError(otpError.message) };
+
+  return { error: null };
+}
+
 export interface ResetResult {
   success: boolean;
   message: string;
