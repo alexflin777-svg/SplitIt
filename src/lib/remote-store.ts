@@ -596,6 +596,33 @@ export async function joinWaitlist(email: string): Promise<RemoteResult<true>> {
   return { data: true, error: null };
 }
 
+/**
+ * Отправка обратной связи. Как и waitlist, идёт только через SECURITY DEFINER
+ * RPC (миграция 20260910150000_feedback.sql): прямой записи в таблицу у
+ * клиента нет, чтение отзывов закрыто всем, кроме service role.
+ */
+export async function submitFeedback(input: {
+  category: 'idea' | 'bug' | 'praise' | 'other';
+  message: string;
+  contact?: string;
+  source?: string;
+}): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(noBackend());
+
+  const { error } = await supabase.rpc('submit_feedback', {
+    p_category: input.category,
+    p_message: input.message,
+    p_contact: input.contact ?? null,
+    p_source: input.source ?? null,
+  });
+
+  if (error) {
+    return fail(translate(error));
+  }
+
+  return { data: true, error: null };
+}
+
 // ---------------------------------------------------------------------------
 // Virtual members (guests)
 // ---------------------------------------------------------------------------

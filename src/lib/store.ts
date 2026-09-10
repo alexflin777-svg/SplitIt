@@ -333,4 +333,6 @@ export async function joinWaitlist(email: string) {
   return remote.joinWaitlist(email);
 }
 
+export const submitFeedback = remote.submitFeedback;
+
 export const addGuestMember = remote.addGuestMember;
