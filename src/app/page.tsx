@@ -9,6 +9,7 @@ import { isMultiUser, joinWaitlist } from '@/lib/store';
 import { useGroups } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
 import { OnboardingTour } from '@/components/OnboardingTour';
+import { LifeSituations } from '@/components/LifeSituations';
 import {
   Plus,
   Plane,
@@ -277,6 +278,17 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        {/* Жизненные ситуации: контент-блок для гостей (RU-тест) */}
+        <LifeSituations />
+
+        <p className="text-center text-[11px] text-slate-400 dark:text-slate-500">
+          <Link href="/privacy" className="underline">Конфиденциальность</Link>
+          {' · '}
+          <Link href="/terms" className="underline">Условия</Link>
+          {' · '}
+          <Link href="/feedback" className="underline">Обратная связь</Link>
+        </p>
       </div>
     );
   }
