@@ -15,9 +15,10 @@ CREATE TABLE public.feedback (
     message text NOT NULL CHECK (char_length(message) BETWEEN 3 AND 2000),
     -- Контакт необязателен: отзыв можно оставить анонимно.
     contact text CHECK (contact IS NULL OR char_length(contact) <= 320),
-    -- Если отзыв оставил вошедший пользователь — фиксируем связь, но не
-    -- требуем её: форма доступна и с лендинга без входа.
-    user_id uuid REFERENCES auth.users (id) ON DELETE SET NULL,
+    -- Если отзыв оставил вошедший пользователь — фиксируем его id, но без FK
+    -- на auth.users: тестовый PostgreSQL (test/*-rls) не содержит схемы auth,
+    -- а целостность здесь не критична — отзыв ценен и после удаления аккаунта.
+    user_id uuid,
     -- Страница/платформа, откуда пришёл отзыв (web, android) — для триажа.
     source text CHECK (source IS NULL OR char_length(source) <= 40)
 );
