@@ -108,6 +108,9 @@ function translate(error: { message: string; code?: string }): string {
     return t('errors.checkConstraintAmount');
   }
   if (error.code === '23505') return t('errors.duplicateRecord');
+  // Коды из миграций 20260925*: событие закрыто / превышен лимит публичной формы.
+  if (error.code === 'P0423') return t('errors.eventLocked');
+  if (error.code === 'P0429') return t('errors.publicRateLimited');
   if (m.includes('fetch') || m.includes('network')) return t('errors.noServerConnection');
   return error.message;
 }

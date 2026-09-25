@@ -46,6 +46,7 @@ import { getConfigProblem } from '@/lib/env';
 import { useI18n } from '@/lib/i18n/provider';
 import { useGroup } from '@/lib/data-hooks';
 import { DEFAULT_EXPENSE_PAGE_SIZE } from '@/lib/remote-store';
+import EventSummary from '../_components/EventSummary';
 
 /**
  * Экран «события нет на этом устройстве».
@@ -155,6 +156,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   );
 
   const isCompleted = group.status === 'completed';
+  // Закрыть и переоткрыть событие может только владелец — это же правило
+  // проверяет политика groups_update_owner в базе.
+  const isOwner = !isMultiUser() || userProfile?.id === group.createdBy;
   const isCurrentUserMember =
     !!userProfile && (group.members || []).some((m: any) => m.id === userProfile.id);
 
@@ -458,23 +462,29 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
       {/* Completed Status Verification Banner */}
       {isCompleted && (
-        <div className="stitch-card p-4 bg-emerald-500 text-white space-y-2 shadow-lg border-emerald-400">
+        <div
+          data-testid="closed-banner"
+          className="stitch-card p-4 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white space-y-3 shadow-lg border-emerald-500"
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-100" />
               <span className="font-extrabold text-sm">{t('eventDetail.completedBanner')}</span>
             </div>
-            <button
-              onClick={() => handleToggleCompleteEvent('active')}
-              className="text-[10px] font-bold bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg flex items-center gap-1"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>{t('eventDetail.resume')}</span>
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => handleToggleCompleteEvent('active')}
+                className="text-[10px] font-bold bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>{t('eventDetail.resume')}</span>
+              </button>
+            )}
           </div>
           <p className="text-xs text-emerald-100 font-medium">
             {t('eventDetail.completedNote')}
           </p>
+          <EventSummary group={group} currentUserId={userProfile?.id} />
         </div>
       )}
 
@@ -541,13 +551,24 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
         {/* Action Buttons Grid */}
         <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/10">
-          <Link
-            href={routes.expenseNew(group.id)}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
-          >
-            <PlusCircle className="w-5 h-5 text-blue-400" />
-            <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
-          </Link>
+          {isCompleted ? (
+            <span
+              aria-disabled="true"
+              title={t('summary.lockedHint')}
+              className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/5 text-center opacity-50 cursor-not-allowed"
+            >
+              <PlusCircle className="w-5 h-5 text-blue-400" />
+              <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
+            </span>
+          ) : (
+            <Link
+              href={routes.expenseNew(group.id)}
+              className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
+            >
+              <PlusCircle className="w-5 h-5 text-blue-400" />
+              <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
+            </Link>
+          )}
 
           <Link
             href={routes.eventBalance(group.id)}
@@ -574,11 +595,12 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </Link>
         </div>
 
-        {!isCompleted && (
+        {!isCompleted && isOwner && (group.expenses || []).length > 0 && (
           <div className="pt-2">
             <button
               onClick={() => setShowCompleteModal(true)}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs border border-emerald-400/40 flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
+              data-testid="close-event"
+              className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm border border-emerald-400/40 flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{t('eventDetail.finishEvent')}</span>
@@ -652,13 +674,15 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           <h4 className="font-bold text-slate-900 dark:text-white text-sm">
             {t('eventDetail.transactionsFeed', { count: (group.expenses || []).length })}
           </h4>
-          <Link
-            href={routes.expenseNew(group.id)}
-            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>{t('eventNew.add')}</span>
-          </Link>
+          {!isCompleted && (
+            <Link
+              href={routes.expenseNew(group.id)}
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>{t('eventNew.add')}</span>
+            </Link>
+          )}
         </div>
 
         {(group.expenses || []).length === 0 ? (
@@ -699,6 +723,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         )}
                       </div>
 
+                      {!isCompleted && (
                       <div className="flex items-center gap-1 pl-1 border-l border-slate-100 dark:border-slate-700">
                         <Link
                           href={routes.expenseEdit(group.id, expense.id)}
@@ -715,6 +740,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                      )}
                     </div>
                   </div>
 
@@ -892,6 +918,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 {t('eventDetail.completeEventBody')}
               </p>
             </div>
+            <EventSummary group={group} compact />
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 type="button"

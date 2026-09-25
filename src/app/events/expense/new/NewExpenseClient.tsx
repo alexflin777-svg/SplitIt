@@ -8,7 +8,7 @@ import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRa
 import { parseReceiptImage } from '@/lib/ocr';
 import { getGroup, addExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
-import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
+import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
 import { useI18n } from '@/lib/i18n/provider';
 
 export default function NewExpenseClient({ groupId }: { groupId: string }) {
@@ -128,7 +128,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
       return;
     }
 
-    const perPerson = selectedMembers.length > 0 ? convertedAmount / selectedMembers.length : 0;
+    const shares = splitEvenly(convertedAmount, selectedMembers.length);
 
     setIsSaving(true);
     const { error: saveProblem } = await addExpense(group.id, {
@@ -138,7 +138,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
       amountInGroupCurrency: convertedAmount,
       category,
       paidById: paidById || group.members?.[0]?.id || '',
-      splits: selectedMembers.map((mId) => ({ userId: mId, amountOwed: perPerson })),
+      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
       createdAt: date ? new Date(date).toISOString() : new Date().toISOString(),
     });
     setIsSaving(false);

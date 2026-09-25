@@ -37,3 +37,20 @@ export const AMOUNT_INPUT_PROPS = {
   step: '0.01',
   inputMode: 'decimal' as const,
 };
+
+/**
+ * Делит сумму поровну в копейках: сумма долей равна исходной сумме ровно.
+ *
+ * Раньше доля считалась как `amount / n` без округления, а колонка
+ * expense_splits.amount_owed — NUMERIC(12,2). База округляла каждую долю
+ * отдельно: 100 на троих превращалось в 33.33 × 3 = 99.99, и копейка терялась —
+ * балансы события переставали сходиться к нулю. Остаток от деления в копейках
+ * достаётся первым участникам по порядку (детерминированно на всех устройствах).
+ */
+export function splitEvenly(amount: number, count: number): number[] {
+  if (!Number.isFinite(amount) || count <= 0) return [];
+  const totalCents = Math.round(amount * 100);
+  const base = Math.trunc(totalCents / count);
+  const remainder = totalCents - base * count;
+  return Array.from({ length: count }, (_, i) => (base + (i < Math.abs(remainder) ? Math.sign(remainder) : 0)) / 100);
+}

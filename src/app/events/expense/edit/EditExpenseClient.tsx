@@ -7,7 +7,7 @@ import { ArrowLeft, Check, Calendar, Tag, Trash2 } from 'lucide-react';
 import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosureContext, isRateStale } from '@/lib/currency';
 import { getGroup, updateExpense, deleteExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
-import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
+import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
 import { useI18n } from '@/lib/i18n/provider';
 
 export default function EditExpenseClient({ groupId, expenseId }: { groupId: string; expenseId: string }) {
@@ -107,7 +107,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
       return;
     }
 
-    const perPerson = selectedMembers.length > 0 ? convertedAmount / selectedMembers.length : 0;
+    const shares = splitEvenly(convertedAmount, selectedMembers.length);
     const updatedExpense = {
       ...expense,
       title,
@@ -116,7 +116,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
       amountInGroupCurrency: convertedAmount,
       category,
       paidById,
-      splits: selectedMembers.map((mId) => ({ userId: mId, amountOwed: perPerson })),
+      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
       createdAt: date || expense.createdAt,
     };
 
@@ -128,7 +128,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
       amountInGroupCurrency: convertedAmount,
       category,
       paidById,
-      splits: selectedMembers.map((mId) => ({ userId: mId, amountOwed: perPerson })),
+      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
       createdAt: date ? new Date(date).toISOString() : expense.createdAt,
     });
     setIsSaving(false);
