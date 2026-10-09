@@ -256,7 +256,7 @@ describe('Права', () => {
 
   test('anon не исполняет; обе функции SECURITY DEFINER с закреплённым search_path', async () => {
     for (const fn of ['add_expense_with_splits', 'update_expense_with_splits']) {
-      const sig = `public.${fn}(uuid, text, numeric, text, numeric, text, uuid, jsonb, timestamptz)`;
+      const sig = `public.${fn}(uuid, text, numeric, text, numeric, text, uuid, jsonb, timestamptz, text)`;
       const r = await db.query(
         `SELECT has_function_privilege('anon', $1, 'EXECUTE') AS anon_ok,
                 has_function_privilege('authenticated', $1, 'EXECUTE') AS auth_ok,

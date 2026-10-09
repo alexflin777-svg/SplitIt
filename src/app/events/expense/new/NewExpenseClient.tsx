@@ -207,7 +207,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
       category,
       paidById: paidById || group.members?.[0]?.id || '',
       splits,
-      splitType: itemMode ? 'shares' : 'equal',
+      splitMode: itemMode ? 'items' : 'equal',
       createdAt: date ? new Date(date).toISOString() : new Date().toISOString(),
     });
     setIsSaving(false);

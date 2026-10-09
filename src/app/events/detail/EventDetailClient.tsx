@@ -45,6 +45,7 @@ import { routes, absoluteInviteLink, hasPublicInviteOrigin } from '@/lib/routes'
 import { getConfigProblem } from '@/lib/env';
 import { useI18n } from '@/lib/i18n/provider';
 import { useGroup } from '@/lib/data-hooks';
+import { resolveSplitMode } from '@/lib/split-rescale';
 import { DEFAULT_EXPENSE_PAGE_SIZE } from '@/lib/remote-store';
 import EventSummary from '../_components/EventSummary';
 
@@ -748,7 +749,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase">
-                        {expense.splitType === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}
+                        {resolveSplitMode(expense) === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}
                       </span>
                       <span>• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
                     </div>

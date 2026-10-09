@@ -8,6 +8,7 @@ import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRa
 import { getGroup, updateExpense, deleteExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
+import { rescaleSplits, resolveSplitMode, sameTotal, type Split, type SplitMode } from '@/lib/split-rescale';
 import { useI18n } from '@/lib/i18n/provider';
 
 export default function EditExpenseClient({ groupId, expenseId }: { groupId: string; expenseId: string }) {
@@ -27,6 +28,13 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
   const [category, setCategory] = useState<'food' | 'transport' | 'lodging' | 'entertainment' | 'other'>('food');
   const [paidById, setPaidById] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  // Доли из базы и как они были получены. Раньше экран забирал только id
+  // участников и при сохранении делил поровну — неравные доли терялись (P1-16).
+  const [originalSplits, setOriginalSplits] = useState<Split[]>([]);
+  const [originalMode, setOriginalMode] = useState<SplitMode>('equal');
+  // «Поровну» включается только явным действием пользователя, если расход
+  // был поделён иначе.
+  const [equalMode, setEqualMode] = useState(true);
 
   // Delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -49,7 +57,12 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         setDate(foundExp.createdAt ? foundExp.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
         setCategory((foundExp.category || 'food') as typeof category);
         setPaidById(foundExp.paidById || foundGroup.members?.[0]?.id || 'user-me');
-        setSelectedMembers((foundExp.splits || []).map((s: any) => s.userId));
+        const splits: Split[] = (foundExp.splits || []).map((s: any) => ({ userId: s.userId, amountOwed: Number(s.amountOwed) }));
+        const mode = resolveSplitMode({ ...foundExp, splits });
+        setOriginalSplits(splits);
+        setOriginalMode(mode);
+        setEqualMode(mode === 'equal');
+        setSelectedMembers(splits.map((s) => s.userId));
       }
     }
     });
@@ -67,7 +80,51 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
   }
 
   const parsedAmount = parseAmount(amount).value || 0;
-  const { convertedAmount } = convertCurrency(parsedAmount, currency, group.currency || 'RUB');
+  const groupCurrency = group.currency || 'RUB';
+  // Сумма и валюта не менялись — берём сохранённый пересчёт, а не свежий курс:
+  // иначе при валютном расходе итог «сам» сдвигался бы при каждом сохранении.
+  const amountUnchanged =
+    parsedAmount === Number(expense.amount) &&
+    currency === (expense.currency || groupCurrency) &&
+    Number.isFinite(Number(expense.amountInGroupCurrency));
+  const convertedAmount = amountUnchanged
+    ? Number(expense.amountInGroupCurrency)
+    : convertCurrency(parsedAmount, currency, groupCurrency).convertedAmount;
+  const originalIds = originalSplits.map((s) => s.userId);
+  const membersUnchanged =
+    selectedMembers.length === originalIds.length && selectedMembers.every((id) => originalIds.includes(id));
+
+  // Доли, которые будут сохранены, — их же показывает список ниже.
+  let plannedSplits: Split[] | null;
+  let rescaled = false;
+  if (!equalMode) {
+    if (sameTotal(originalSplits, convertedAmount)) {
+      plannedSplits = originalSplits;
+    } else {
+      plannedSplits = rescaleSplits(originalSplits, convertedAmount);
+      rescaled = true;
+    }
+  } else if (originalMode === 'equal' && membersUnchanged && sameTotal(originalSplits, convertedAmount)) {
+    // Ничего не менялось — сохраняем как было, не перераспределяя копейку остатка.
+    plannedSplits = originalSplits;
+  } else {
+    // Порядок по id: лишняя копейка должна доставаться одному и тому же
+    // участнику на всех устройствах (порядок долей из PostgREST не гарантирован).
+    const ordered = [...selectedMembers].sort();
+    const shares = splitEvenly(convertedAmount, ordered.length);
+    plannedSplits = ordered.map((userId, i) => ({ userId, amountOwed: shares[i] }));
+  }
+  const plannedSplitMode: SplitMode = equalMode ? 'equal' : originalMode;
+  const shareById = new Map((plannedSplits ?? []).map((s) => [s.userId, s.amountOwed]));
+  const originalShareById = new Map(originalSplits.map((s) => [s.userId, s.amountOwed]));
+  const knownIds = new Set((group.members || []).map((m: any) => m.id));
+  const splitRows: Array<{ id: string; name: string; avatar: string }> = [
+    ...(group.members || []).map((m: any) => ({ id: m.id, name: m.name, avatar: m.avatar || '👤' })),
+    // Доля участника, которого уже нет в событии, не должна пропасть молча.
+    ...originalIds
+      .filter((id) => !knownIds.has(id))
+      .map((id) => ({ id, name: t('expenseEdit.unknownMember'), avatar: '👤' })),
+  ];
   const rateDisclosureCtx = ratesLoaded
     ? getRateDisclosureContext(currency, group?.currency || 'RUB')
     : null;
@@ -81,6 +138,8 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
   ];
 
   const toggleMember = (id: string) => {
+    // Неравные доли: состав меняется только после явного «Поделить поровну».
+    if (!equalMode) return;
     if (selectedMembers.includes(id)) {
       if (selectedMembers.length > 1) {
         setSelectedMembers(selectedMembers.filter((m) => m !== id));
@@ -107,18 +166,10 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
       return;
     }
 
-    const shares = splitEvenly(convertedAmount, selectedMembers.length);
-    const updatedExpense = {
-      ...expense,
-      title,
-      amount: validAmount,
-      currency,
-      amountInGroupCurrency: convertedAmount,
-      category,
-      paidById,
-      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
-      createdAt: date || expense.createdAt,
-    };
+    if (!plannedSplits || plannedSplits.length === 0) {
+      setAmountError(t('expenseEdit.rescaleError'));
+      return;
+    }
 
     setIsSaving(true);
     const { error: saveProblem } = await updateExpense(group.id, expenseId, {
@@ -128,7 +179,8 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
       amountInGroupCurrency: convertedAmount,
       category,
       paidById,
-      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
+      splits: plannedSplits,
+      splitMode: plannedSplitMode,
       createdAt: date ? new Date(date).toISOString() : expense.createdAt,
     });
     setIsSaving(false);
@@ -303,48 +355,94 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
         </div>
 
         {/* Split members */}
-        <div className="stitch-card p-5 space-y-3">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {t('expenseNew.splitLabel', { count: selectedMembers.length })}
-          </label>
+        <div className="stitch-card p-5 space-y-3" data-testid="split-section">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {equalMode ? t('expenseNew.splitLabel', { count: selectedMembers.length }) : t('expenseEdit.splitsTitle')}
+            </label>
+            <span
+              data-testid="split-mode-badge"
+              data-mode={plannedSplitMode}
+              className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase text-slate-600 dark:text-slate-300"
+            >
+              {t(`expenseEdit.mode.${plannedSplitMode}`)}
+            </span>
+          </div>
+
+          {!equalMode && (
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('expenseEdit.keepSplitsHint')}</p>
+          )}
+          {!equalMode && rescaled && plannedSplits && (
+            <p
+              role="status"
+              data-testid="split-rescaled-notice"
+              className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-[11px] font-bold text-amber-800 dark:text-amber-300"
+            >
+              {t('expenseEdit.rescaledNotice')}
+            </p>
+          )}
 
           <div className="space-y-2">
-            {(group.members || []).map((member: any) => {
-              const isSelected = selectedMembers.includes(member.id);
-              const perPerson =
-                selectedMembers.length > 0 ? parsedAmount / selectedMembers.length : 0;
+            {splitRows.map((member) => {
+              const isSelected = equalMode ? selectedMembers.includes(member.id) : shareById.has(member.id);
+              const share = shareById.get(member.id);
+              const before = originalShareById.get(member.id);
 
               return (
                 <div
                   key={member.id}
+                  data-testid="split-row"
+                  data-member-id={member.id}
                   onClick={() => toggleMember(member.id)}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50/40'
-                      : 'border-slate-200 bg-white opacity-60'
-                  }`}
+                  aria-disabled={!equalMode}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                    equalMode ? 'cursor-pointer' : 'cursor-default'
+                  } ${isSelected ? 'border-blue-500 bg-blue-50/40' : 'border-slate-200 bg-white opacity-60'}`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`w-5 h-5 rounded-md flex items-center justify-center text-white text-xs ${
+                      className={`w-5 h-5 shrink-0 rounded-md flex items-center justify-center text-white text-xs ${
                         isSelected ? 'bg-blue-600' : 'bg-slate-300'
                       }`}
                     >
                       {isSelected && <Check className="w-3.5 h-3.5" />}
                     </div>
-                    <span className="text-base">{member.avatar || '👤'}</span>
+                    <span className="text-base">{member.avatar}</span>
                     <span className="text-xs font-bold text-slate-900 min-w-0 truncate max-w-xs">{member.name}</span>
                   </div>
 
-                  {isSelected && parsedAmount > 0 && (
-                    <span className="text-xs font-extrabold text-blue-600">
-                      {formatMoney(perPerson, currency)}
+                  {isSelected && share !== undefined && (
+                    <span className="flex items-baseline gap-1.5 shrink-0">
+                      {rescaled && before !== undefined && before !== share && (
+                        <s className="text-[10px] font-semibold text-slate-400">{formatMoney(before, groupCurrency)}</s>
+                      )}
+                      <span data-testid="split-share" className="text-xs font-extrabold text-blue-600">
+                        {formatMoney(share, groupCurrency)}
+                      </span>
                     </span>
                   )}
                 </div>
               );
             })}
           </div>
+
+          {originalMode !== 'equal' && (
+            <button
+              type="button"
+              data-testid={equalMode ? 'split-restore-action' : 'split-equal-action'}
+              onClick={() => {
+                if (equalMode) {
+                  setSelectedMembers(originalIds);
+                  setEqualMode(false);
+                } else {
+                  setEqualMode(true);
+                }
+              }}
+              className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all"
+            >
+              {equalMode ? t('expenseEdit.restoreSplitsAction') : t('expenseEdit.splitEqualAction')}
+            </button>
+          )}
         </div>
 
         {saveError && (

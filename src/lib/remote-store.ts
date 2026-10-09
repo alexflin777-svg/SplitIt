@@ -21,6 +21,7 @@
 
 import { supabase } from './supabase';
 import { t } from './i18n/t';
+import type { SplitMode } from './split-rescale';
 
 export interface RemoteResult<T> {
   data: T | null;
@@ -46,6 +47,10 @@ export interface GroupExpense {
   paidById: string;
   splits: Array<{ userId: string; amountOwed: number }>;
   createdAt: string;
+  /** Как поделён расход (20261011000000). Нет — тип неизвестен, выводится из долей. */
+  splitMode?: SplitMode;
+  /** Устаревшее локальное поле F6: 'shares' — «по позициям». Только чтение старых данных. */
+  splitType?: 'equal' | 'shares';
 }
 
 export interface GroupSettlement {
@@ -132,7 +137,7 @@ const GROUP_CORE_SELECT = `
 
 const EXPENSE_SELECT = `
   id, title, amount, currency, amount_in_group_currency, category,
-  paid_by_id, paid_by_participant_id, created_at,
+  paid_by_id, paid_by_participant_id, created_at, split_mode,
   expense_splits ( user_id, participant_id, amount_owed )
 `;
 
@@ -152,6 +157,7 @@ function mapExpense(e: any): GroupExpense {
       amountOwed: Number(split.amount_owed),
     })),
     createdAt: e.created_at,
+    splitMode: e.split_mode ?? undefined,
   };
 }
 
@@ -352,6 +358,7 @@ export async function addExpense(
     paidById: string;
     splits: Array<{ userId: string; amountOwed: number }>;
     createdAt?: string;
+    splitMode?: SplitMode;
   },
 ): Promise<RemoteResult<string>> {
   if (!supabase) return fail(noBackend());
@@ -366,6 +373,7 @@ export async function addExpense(
     p_category: expense.category,
     p_created_at: expense.createdAt,
     p_splits: expense.splits.map((split) => ({ user_id: split.userId, amount_owed: split.amountOwed })),
+    p_split_mode: expense.splitMode ?? null,
   });
 
   if (error) return fail(translate(error));
@@ -386,6 +394,7 @@ export async function updateExpense(
     paidById: string;
     splits: Array<{ userId: string; amountOwed: number }>;
     createdAt?: string;
+    splitMode?: SplitMode;
   },
 ): Promise<RemoteResult<true>> {
   if (!supabase) return fail(noBackend());
@@ -400,6 +409,7 @@ export async function updateExpense(
     p_category: expense.category,
     p_created_at: expense.createdAt,
     p_splits: expense.splits.map((split) => ({ user_id: split.userId, amount_owed: split.amountOwed })),
+    p_split_mode: expense.splitMode ?? null,
   });
 
   if (error) return fail(translate(error));

@@ -23,6 +23,7 @@ import type { FetchGroupOptions, Group, GroupRealtimeChange, RemoteResult } from
 import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from './supabase';
 import type { UserProfile } from './supabase';
 import { t } from './i18n/t';
+import type { SplitMode } from './split-rescale';
 
 export type { FetchGroupOptions, Group, GroupMember, GroupExpense, GroupRealtimeChange, GroupSettlement, RemoteResult } from './remote-store';
 
@@ -168,6 +169,15 @@ export async function deleteGroup(groupId: string): Promise<RemoteResult<true>> 
   return ok(true);
 }
 
+/**
+ * Локальные расходы F6 хранили тип в splitType ('shares' — «по позициям»), и его
+ * читает экран события. Держим поле в согласии с splitMode.
+ */
+function legacySplitType(mode: SplitMode | undefined): { splitType?: 'equal' | 'shares' } {
+  if (!mode) return { splitType: undefined };
+  return { splitType: mode === 'equal' ? 'equal' : 'shares' };
+}
+
 export async function addExpense(
   groupId: string,
   expense: {
@@ -179,9 +189,8 @@ export async function addExpense(
     paidById: string;
     splits: Array<{ userId: string; amountOwed: number }>;
     createdAt?: string;
-    /** 'shares' — доли по позициям чека (F6). Хранится только локально: в сети колонки нет,
-     *  а сами доли (splits) сохраняются в обоих режимах одинаково. */
-    splitType?: 'equal' | 'shares';
+    /** Как поделён расход: в сети — expenses.split_mode (20261011000000), локально — поле расхода. */
+    splitMode?: SplitMode;
   },
 ): Promise<RemoteResult<true>> {
   if (isMultiUser()) {
@@ -196,7 +205,12 @@ export async function addExpense(
   groups[idx] = {
     ...groups[idx],
     expenses: [
-      { id: `exp-${Date.now()}`, ...expense, createdAt: expense.createdAt ?? new Date().toISOString() },
+      {
+        id: `exp-${Date.now()}`,
+        ...expense,
+        ...legacySplitType(expense.splitMode),
+        createdAt: expense.createdAt ?? new Date().toISOString(),
+      },
       ...groups[idx].expenses,
     ],
     updatedAt: new Date().toISOString(),
@@ -217,6 +231,7 @@ export async function updateExpense(
     paidById: string;
     splits: Array<{ userId: string; amountOwed: number }>;
     createdAt?: string;
+    splitMode?: SplitMode;
   },
 ): Promise<RemoteResult<true>> {
   if (isMultiUser()) {
@@ -231,7 +246,16 @@ export async function updateExpense(
   groups[idx] = {
     ...groups[idx],
     expenses: groups[idx].expenses.map((e) =>
-      e.id === expenseId ? { ...e, ...expense, id: expenseId, createdAt: expense.createdAt ?? e.createdAt } : e,
+      e.id === expenseId
+        ? {
+            ...e,
+            ...expense,
+            // Без явной перезаписи устаревший splitType старой версии пережил бы правку.
+            ...(expense.splitMode !== undefined ? legacySplitType(expense.splitMode) : {}),
+            id: expenseId,
+            createdAt: expense.createdAt ?? e.createdAt,
+          }
+        : e,
     ),
     updatedAt: new Date().toISOString(),
   };
