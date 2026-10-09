@@ -179,6 +179,9 @@ export async function addExpense(
     paidById: string;
     splits: Array<{ userId: string; amountOwed: number }>;
     createdAt?: string;
+    /** 'shares' — доли по позициям чека (F6). Хранится только локально: в сети колонки нет,
+     *  а сами доли (splits) сохраняются в обоих режимах одинаково. */
+    splitType?: 'equal' | 'shares';
   },
 ): Promise<RemoteResult<true>> {
   if (isMultiUser()) {

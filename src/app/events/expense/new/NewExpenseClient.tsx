@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Camera, Upload, Sparkles, Check, Globe, RefreshCw, UserCheck, Calendar, DollarSign, Tag } from 'lucide-react';
+import { ArrowLeft, Camera, Upload, Sparkles, Check, Globe, RefreshCw, UserCheck, Calendar, DollarSign, Tag, X } from 'lucide-react';
 import { CURRENCIES, convertCurrency, formatMoney, fetchLiveExchangeRates, getRateDisclosureContext, isRateStale } from '@/lib/currency';
-import { parseReceiptImage } from '@/lib/ocr';
+import { parseReceiptImage, isSupportedCurrency, type ReceiptItem } from '@/lib/ocr';
+import { allocateByItems } from '@/lib/item-split';
 import { getGroup, addExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
@@ -35,6 +36,11 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
   const [isScanning, setIsScanning] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
   const [ocrFailed, setOcrFailed] = useState(false);
+  // Валюта подставлена из чека — показываем пометку, пока её не сменили вручную.
+  const [currencyFromReceipt, setCurrencyFromReceipt] = useState(false);
+  // Позиции чека с отметками «кто ел»; режим «По позициям» (F6).
+  const [receiptItems, setReceiptItems] = useState<Array<ReceiptItem & { memberIds: string[] }> | null>(null);
+  const [splitMode, setSplitMode] = useState<'equal' | 'items'>('equal');
 
   // Живые курсы не загружались на этом экране вовсе — пересчёт шёл по
   // резервным значениям из кода, и пользователю об этом не сообщали.
@@ -103,11 +109,51 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     if (result.suggestedTitle) {
       setTitle(result.suggestedTitle);
     }
+    const receiptCurrency = isSupportedCurrency(result.detectedCurrency) ? result.detectedCurrency : currency;
+    if (isSupportedCurrency(result.detectedCurrency)) {
+      setCurrency(result.detectedCurrency);
+      setCurrencyFromReceipt(true);
+    }
+    if (result.items.length > 0) {
+      const everyone = (group?.members || []).map((m: any) => m.id);
+      setReceiptItems(result.items.map((item) => ({ ...item, memberIds: everyone })));
+      setSplitMode('items');
+    } else {
+      setReceiptItems(null);
+      setSplitMode('equal');
+    }
     setOcrStatus(
       result.suggestedTotal !== null
-        ? t('expenseNew.ocrSuccessMsg', { total: result.suggestedTotal, currency })
+        ? t('expenseNew.ocrSuccessMsg', { total: result.suggestedTotal, currency: receiptCurrency })
         : t('expenseNew.ocrNoAmountMsg')
     );
+  };
+
+  const allMemberIds: string[] = (group?.members || []).map((m: any) => m.id);
+  const itemMode = splitMode === 'items' && !!receiptItems && receiptItems.length > 0;
+  const itemShares = itemMode ? allocateByItems(convertedAmount, receiptItems!, allMemberIds) : {};
+  const itemsSum = receiptItems ? Math.round(receiptItems.reduce((s, i) => s + i.total, 0) * 100) / 100 : 0;
+  const itemsDifference = Math.round((parsedAmount - itemsSum) * 100) / 100;
+
+  const toggleItemMember = (itemIdx: number, memberId: string) => {
+    setReceiptItems((prev) =>
+      prev
+        ? prev.map((item, i) => {
+            if (i !== itemIdx) return item;
+            const has = item.memberIds.includes(memberId);
+            // У позиции всегда остаётся хотя бы один участник.
+            if (has && item.memberIds.length === 1) return item;
+            return { ...item, memberIds: has ? item.memberIds.filter((id) => id !== memberId) : [...item.memberIds, memberId] };
+          })
+        : prev,
+    );
+  };
+
+  // Ошибочно распознанную строку можно убрать, иначе она забрала бы долю суммы.
+  const removeItem = (itemIdx: number) => {
+    const next = (receiptItems ?? []).filter((_, i) => i !== itemIdx);
+    setReceiptItems(next.length > 0 ? next : null);
+    if (next.length === 0) setSplitMode('equal');
   };
 
   const toggleMember = (id: string) => {
@@ -137,7 +183,20 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
       return;
     }
 
-    const shares = splitEvenly(convertedAmount, selectedMembers.length);
+    let splits: Array<{ userId: string; amountOwed: number }>;
+    if (itemMode) {
+      // Сумма долей строго равна итогу (allocateByItems); пустой результат —
+      // ошибка, а не тихое сохранение без долей.
+      const entries = Object.entries(allocateByItems(convertedAmount, receiptItems!, allMemberIds));
+      if (entries.length === 0) {
+        setAmountError(t('expenseNew.itemsNoShares'));
+        return;
+      }
+      splits = entries.map(([userId, amountOwed]) => ({ userId, amountOwed }));
+    } else {
+      const shares = splitEvenly(convertedAmount, selectedMembers.length);
+      splits = selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] }));
+    }
 
     setIsSaving(true);
     const { error: saveProblem } = await addExpense(group.id, {
@@ -147,7 +206,8 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
       amountInGroupCurrency: convertedAmount,
       category,
       paidById: paidById || group.members?.[0]?.id || '',
-      splits: selectedMembers.map((mId, i) => ({ userId: mId, amountOwed: shares[i] })),
+      splits,
+      splitType: itemMode ? 'shares' : 'equal',
       createdAt: date ? new Date(date).toISOString() : new Date().toISOString(),
     });
     setIsSaving(false);
@@ -294,12 +354,23 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 {t('expenseNew.currencyLabel')}
+                {currencyFromReceipt && (
+                  <span
+                    data-testid="currency-from-receipt"
+                    className="normal-case tracking-normal whitespace-nowrap px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold"
+                  >
+                    {t('expenseNew.currencyFromReceipt')}
+                  </span>
+                )}
               </label>
               <select
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
+                onChange={(e) => {
+                  setCurrency(e.target.value);
+                  setCurrencyFromReceipt(false);
+                }}
                 className="w-full px-3 py-3.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               >
                 {Object.values(CURRENCIES).map((c) => (
@@ -358,6 +429,89 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
 
         {/* Split options */}
         <div className="stitch-card p-5 space-y-3">
+          {receiptItems && receiptItems.length > 0 && (
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100" role="tablist">
+              {(['equal', 'items'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={splitMode === mode}
+                  data-testid={`split-mode-${mode}`}
+                  onClick={() => setSplitMode(mode)}
+                  className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                    splitMode === mode ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500'
+                  }`}
+                >
+                  {mode === 'equal' ? t('expenseNew.splitModeEqual') : t('expenseNew.splitModeItems')}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {itemMode ? (
+            <div className="space-y-3" data-testid="receipt-items">
+              <p className="text-[11px] text-slate-500">{t('expenseNew.itemsHint')}</p>
+              {receiptItems!.map((item, idx) => (
+                <div key={idx} className="p-3 rounded-xl border border-slate-200 space-y-2" data-testid="receipt-item">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-900 min-w-0 break-words">
+                      {item.name}
+                      {item.qty !== 1 && <span className="text-slate-400 font-medium"> × {item.qty}</span>}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-slate-700 whitespace-nowrap">{formatMoney(item.total, currency)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        aria-label={t('expenseNew.removeItem', { name: item.name })}
+                        data-testid="remove-item"
+                        className="w-6 h-6 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(group?.members || []).map((member: any) => {
+                      const on = item.memberIds.includes(member.id);
+                      return (
+                        <button
+                          key={member.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => toggleItemMember(idx, member.id)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                            on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'
+                          }`}
+                        >
+                          {member.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {Math.abs(itemsDifference) >= 0.01 && parsedAmount > 0 && (
+                <p className="text-[11px] font-medium text-amber-700" data-testid="items-difference">
+                  {t('expenseNew.itemsDifference', { amount: formatMoney(itemsDifference, currency) })}
+                </p>
+              )}
+              <div className="space-y-1 pt-1 border-t border-slate-100">
+                {(group?.members || []).map((member: any) =>
+                  itemShares[member.id] ? (
+                    <div key={member.id} className="flex items-center justify-between gap-2 text-xs" data-testid="item-share">
+                      <span className="font-bold text-slate-700 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                        {member.avatar || '👤'} {member.name}
+                      </span>
+                      <span className="font-extrabold text-blue-600">{formatMoney(itemShares[member.id], group?.currency || 'RUB')}</span>
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            </div>
+          ) : (
+          <>
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
             {t('expenseNew.splitLabel', { count: selectedMembers.length })}
           </label>
@@ -399,6 +553,8 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
               );
             })}
           </div>
+          </>
+          )}
         </div>
 
         {saveError && (
