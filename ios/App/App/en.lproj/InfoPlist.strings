@@ -1,0 +1,4 @@
+/* Permission prompts (English). Keep in sync with Info.plist. */
+"NSCameraUsageDescription" = "SplitIT uses the camera to photograph receipts and to take a profile photo.";
+"NSContactsUsageDescription" = "SplitIT reads your contacts only when you tap Import, so you can add friends to an event.";
+"NSPhotoLibraryUsageDescription" = "SplitIT uses your photos to attach a receipt or choose a profile photo.";
