@@ -22,6 +22,7 @@
 import { supabase } from './supabase';
 import { t } from './i18n/t';
 import type { SplitMode } from './split-rescale';
+import { fetchAllPages } from './paging';
 
 export interface RemoteResult<T> {
   data: T | null;
@@ -76,14 +77,8 @@ export interface Group {
   members: GroupMember[];
   expenses: GroupExpense[];
   settlements: GroupSettlement[];
-  expensesHasMore?: boolean;
-  expensesLimit?: number;
 }
 
-export interface FetchGroupOptions {
-  expensesLimit?: number;
-  expensesOffset?: number;
-}
 
 export type GroupRealtimeChange =
   | { type: 'group-patch'; groupId: string; patch: Partial<Pick<Group, 'name' | 'category' | 'currency' | 'status' | 'updatedAt'>> }
@@ -192,8 +187,6 @@ function mapGroup(row: any): Group {
     expenses: (row.expenses ?? [])
       .map(mapExpense)
       .sort((a: GroupExpense, b: GroupExpense) => b.createdAt.localeCompare(a.createdAt)),
-    expensesHasMore: row.expenses_has_more ?? false,
-    expensesLimit: row.expenses_limit,
     settlements: (row.settlements ?? []).map((s: any) => ({
       id: s.id,
       fromUserId: s.payer_id,
@@ -218,21 +211,35 @@ export async function fetchGroups(): Promise<RemoteResult<Group[]>> {
   if (error) return fail(translate(error));
 
   const groups = (data ?? []).map(mapGroup);
-  const withBoundedExpenses = await Promise.all(
+  // Сумма и число расходов на главной — по всем расходам события, а не по
+  // первой странице. Ошибка загрузки любого события — ошибка списка: раньше
+  // событие молча оставалось без расходов (итог 0 вместо честной ошибки).
+  const withExpenses = await Promise.all(
     groups.map(async (group) => {
-      const expenses = await fetchExpensesPage(group.id, { limit: DEFAULT_EXPENSE_PAGE_SIZE });
-      return expenses.data
-        ? {
-            ...group,
-            expenses: expenses.data.expenses,
-            expensesHasMore: expenses.data.hasMore,
-            expensesLimit: DEFAULT_EXPENSE_PAGE_SIZE,
-          }
-        : group;
+      const expenses = await fetchAllExpenses(group.id);
+      return expenses.data ? { group: { ...group, expenses: expenses.data }, error: null } : { group, error: expenses.error };
     }),
   );
+  const failed = withExpenses.find((r) => r.error);
+  if (failed) return fail(failed.error ?? t('errors.eventUnavailableNoAccess'));
 
-  return { data: withBoundedExpenses, error: null };
+  return { data: withExpenses.map((r) => r.group), error: null };
+}
+
+/**
+ * Все расходы события, страницами по 100 (G2, P1-15). Балансы, итог, экспорт
+ * и «Расчёт» считаются по этому списку: по одной странице деньги не сходились
+ * в событиях больше 50 расходов.
+ */
+export async function fetchAllExpenses(groupId: string): Promise<RemoteResult<GroupExpense[]>> {
+  const result = await fetchAllPages<GroupExpense>(async (offset, limit) => {
+    const page = await fetchExpensesPage(groupId, { limit, offset });
+    return page.data
+      ? { data: { items: page.data.expenses, hasMore: page.data.hasMore }, error: null }
+      : { data: null, error: page.error };
+  });
+  if (result.overflow) return fail(t('errors.tooManyExpenses'));
+  return result.data ? { data: result.data, error: null } : fail(result.error ?? t('errors.eventUnavailableNoAccess'));
 }
 
 export async function fetchExpensesPage(
@@ -249,6 +256,9 @@ export async function fetchExpensesPage(
     .select(EXPENSE_SELECT)
     .eq('group_id', groupId)
     .order('created_at', { ascending: false })
+    // Второй ключ: при равном created_at порядок между страницами иначе не
+    // определён, и расход мог попасть на две страницы или ни на одну.
+    .order('id', { ascending: false })
     .range(from, to);
 
   if (error) return fail(translate(error));
@@ -276,11 +286,8 @@ async function fetchExpenseById(expenseId: string): Promise<RemoteResult<{ group
   return { data: { groupId: data.group_id, expense: mapExpense(data) }, error: null };
 }
 
-export async function fetchGroup(groupId: string, options: FetchGroupOptions = {}): Promise<RemoteResult<Group>> {
+export async function fetchGroup(groupId: string): Promise<RemoteResult<Group>> {
   if (!supabase) return fail(noBackend());
-
-  const expensesLimit = options.expensesLimit ?? DEFAULT_EXPENSE_PAGE_SIZE;
-  const expensesOffset = options.expensesOffset ?? 0;
 
   const { data, error } = await supabase.from('groups').select(GROUP_CORE_SELECT).eq('id', groupId).maybeSingle();
 
@@ -290,18 +297,10 @@ export async function fetchGroup(groupId: string, options: FetchGroupOptions = {
   if (!data) return fail(t('errors.eventUnavailableNoAccess'));
 
   const group = mapGroup(data);
-  const expensesResult = await fetchExpensesPage(groupId, { limit: expensesLimit, offset: expensesOffset });
+  const expensesResult = await fetchAllExpenses(groupId);
   if (expensesResult.error || !expensesResult.data) return fail(expensesResult.error ?? t('errors.eventUnavailableNoAccess'));
 
-  return {
-    data: {
-      ...group,
-      expenses: expensesResult.data.expenses,
-      expensesHasMore: expensesResult.data.hasMore,
-      expensesLimit,
-    },
-    error: null,
-  };
+  return { data: { ...group, expenses: expensesResult.data }, error: null };
 }
 
 // ---------------------------------------------------------------------------

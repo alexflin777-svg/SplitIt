@@ -87,8 +87,10 @@ function EventNotFound({ groupId }: { groupId: string }) {
 export default function EventDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { t } = useI18n();
+  // Сколько расходов показывать в ленте. Это только отрисовка: в group.expenses
+  // всегда все расходы, по ним считаются итог и категории (G2).
   const [expenseLimit, setExpenseLimit] = useState(DEFAULT_EXPENSE_PAGE_SIZE);
-  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId, expenseLimit);
+  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId);
   const [group, setGroup] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -693,7 +695,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {(group.expenses || []).map((expense: any) => {
+            {(group.expenses || []).slice(0, expenseLimit).map((expense: any) => {
               const paidByMember =
                 (group.members || []).find((m: any) => m.id === expense.paidById) || group.members[0];
 
@@ -770,13 +772,13 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                 </div>
               );
             })}
-            {group.expensesHasMore ? (
+            {(group.expenses || []).length > expenseLimit ? (
               <button
                 type="button"
                 onClick={() => setExpenseLimit((limit) => limit + DEFAULT_EXPENSE_PAGE_SIZE)}
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
               >
-                Load {DEFAULT_EXPENSE_PAGE_SIZE} more expenses
+                {t('eventDetail.showMoreExpenses', { count: Math.min(DEFAULT_EXPENSE_PAGE_SIZE, (group.expenses || []).length - expenseLimit) })}
               </button>
             ) : null}
           </div>

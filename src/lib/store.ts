@@ -19,13 +19,13 @@
 
 import { isSupabaseConfigured } from './env';
 import * as remote from './remote-store';
-import type { FetchGroupOptions, Group, GroupRealtimeChange, RemoteResult } from './remote-store';
+import type { Group, GroupRealtimeChange, RemoteResult } from './remote-store';
 import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from './supabase';
 import type { UserProfile } from './supabase';
 import { t } from './i18n/t';
 import type { SplitMode } from './split-rescale';
 
-export type { FetchGroupOptions, Group, GroupMember, GroupExpense, GroupRealtimeChange, GroupSettlement, RemoteResult } from './remote-store';
+export type { Group, GroupMember, GroupExpense, GroupRealtimeChange, GroupSettlement, RemoteResult } from './remote-store';
 
 export function isMultiUser(): boolean {
   return isSupabaseConfigured();
@@ -52,8 +52,9 @@ export async function listGroups(): Promise<RemoteResult<Group[]>> {
   return ok(localGroups());
 }
 
-export async function getGroup(groupId: string, options?: FetchGroupOptions): Promise<RemoteResult<Group>> {
-  if (isMultiUser()) return remote.fetchGroup(groupId, options);
+/** Группа со всеми расходами (в сетевом режиме — догрузкой всех страниц, G2). */
+export async function getGroup(groupId: string): Promise<RemoteResult<Group>> {
+  if (isMultiUser()) return remote.fetchGroup(groupId);
 
   const found = localGroups().find((g) => g.id === groupId);
   // Ничего не сочиняем: событие либо есть, либо его нет.

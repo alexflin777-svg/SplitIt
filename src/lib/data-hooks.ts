@@ -10,7 +10,6 @@ import {
   type GroupRealtimeChange,
   type RemoteResult,
 } from './store';
-import { DEFAULT_EXPENSE_PAGE_SIZE } from './remote-store';
 import { getFriendsSnapshot, getSavedFriends, getServerFriendsSnapshot, subscribeToFriends } from './supabase';
 
 /**
@@ -27,8 +26,7 @@ export function useSavedFriends(): any[] {
 }
 
 export const GROUPS_CACHE_KEY = 'splitit:groups';
-export const groupCacheKey = (groupId: string, expensesLimit = DEFAULT_EXPENSE_PAGE_SIZE) =>
-  ['splitit:group', groupId, expensesLimit] as const;
+export const groupCacheKey = (groupId: string) => ['splitit:group', groupId] as const;
 
 function patchGroup(result: RemoteResult<Group> | undefined, change: GroupRealtimeChange): RemoteResult<Group> | undefined {
   if (!result?.data) return result;
@@ -50,9 +48,9 @@ function patchGroup(result: RemoteResult<Group> | undefined, change: GroupRealti
 
   if (change.type === 'expense-upsert') {
     const withoutChanged = result.data.expenses.filter((expense) => expense.id !== change.expense.id);
-    const expenses = [change.expense, ...withoutChanged]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, result.data.expensesLimit ?? DEFAULT_EXPENSE_PAGE_SIZE);
+    // Без обрезки: в кеше все расходы события (G2), и обрезка выкинула бы
+    // старые расходы из балансов при каждом новом.
+    const expenses = [change.expense, ...withoutChanged].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     return {
       ...result,
@@ -94,9 +92,9 @@ function patchGroups(result: RemoteResult<Group[]> | undefined, change: GroupRea
         group.id === change.groupId
           ? {
               ...group,
-              expenses: [change.expense, ...group.expenses.filter((expense) => expense.id !== change.expense.id)]
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .slice(0, group.expensesLimit ?? DEFAULT_EXPENSE_PAGE_SIZE),
+              expenses: [change.expense, ...group.expenses.filter((expense) => expense.id !== change.expense.id)].sort(
+                (a, b) => b.createdAt.localeCompare(a.createdAt),
+              ),
             }
           : group,
       ),
@@ -165,9 +163,9 @@ export function useGroups() {
   };
 }
 
-export function useGroup(groupId: string, expensesLimit = DEFAULT_EXPENSE_PAGE_SIZE) {
-  const key = groupId ? groupCacheKey(groupId, expensesLimit) : null;
-  const swr = useSWR(key, () => getGroup(groupId, { expensesLimit }), { revalidateOnFocus: true });
+export function useGroup(groupId: string) {
+  const key = groupId ? groupCacheKey(groupId) : null;
+  const swr = useSWR(key, () => getGroup(groupId), { revalidateOnFocus: true });
 
   useEffect(() => {
     if (!groupId) return;
