@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { UserPlus, Search, Phone, Info, Trash2 } from 'lucide-react';
-import { getSavedFriends, saveFriends, subscribeToLocalSync } from '@/lib/supabase';
+import { saveFriends } from '@/lib/supabase';
+import { useSavedFriends } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
 
 export default function FriendsPage() {
   const { t } = useI18n();
-  const [friends, setFriends] = useState<any[]>([]);
+  // Список читается из localStorage через useSyncExternalStore и обновляется
+  // сам после saveFriends — отдельного состояния и эффекта нет (P1-6).
+  const friends = useSavedFriends();
   const [search, setSearch] = useState('');
   const [newFriendName, setNewFriendName] = useState('');
   const [newFriendPhone, setNewFriendPhone] = useState('');
@@ -41,11 +44,7 @@ export default function FriendsPage() {
         }));
         const updatedFriends = [...newFriends, ...friends];
         const error = saveFriends(updatedFriends);
-        if (error) {
-          setImportError(error);
-        } else {
-          setFriends(updatedFriends);
-        }
+        if (error) setImportError(error);
       } else {
         setImportError(t('friends.permissionDenied') || 'Нет доступа к контактам');
       }
@@ -53,19 +52,6 @@ export default function FriendsPage() {
       setImportError(e.message || 'Failed to import contacts.');
     }
   };
-
-  useEffect(() => {
-    // Load persistent friends list
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение локального списка друзей после монтирования); пересмотр до 2026-11-15
-    setFriends(getSavedFriends());
-
-    // Соседняя вкладка этого браузера могла изменить локальный список.
-    const unsubscribe = subscribeToLocalSync(() => {
-      setFriends(getSavedFriends());
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const filteredFriends = friends.filter(
     (f) =>
@@ -92,7 +78,6 @@ export default function FriendsPage() {
       return;
     }
 
-    setFriends(updatedFriends);
     setSaveError('');
     setNewFriendName('');
     setNewFriendPhone('');
@@ -107,7 +92,6 @@ export default function FriendsPage() {
         setSaveError(error);
         return;
       }
-      setFriends(updated);
       setSaveError('');
     }
   };

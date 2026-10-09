@@ -35,25 +35,21 @@ export default function InviteClient() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  useEffect(() => {
-    if (!code) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (ошибка по параметру code до запроса сессии); пересмотр до 2026-11-15
-      setState({ kind: 'error', message: t('invite.errorNoCode') });
-      return;
-    }
-    if (!isMultiUser()) {
-      setState({
-        kind: 'error',
-        message: t('invite.errorLocalOnly'),
-      });
-      return;
-    }
+  // Ошибки, известные без сети, вычисляются при рендере, а не ставятся из
+  // эффекта (P1-6): нет кода в ссылке или приложение собрано без бэкенда.
+  const staticError = !code
+    ? t('invite.errorNoCode')
+    : !isMultiUser()
+      ? t('invite.errorLocalOnly')
+      : null;
 
+  useEffect(() => {
+    if (staticError) return;
     getActiveSession().then((session) => {
       setProfile(session);
       setState(session ? { kind: 'confirm' } : { kind: 'need-auth' });
     });
-  }, [code, t]);
+  }, [staticError]);
 
   const handleJoin = async () => {
     if (!code) return;
@@ -67,17 +63,19 @@ export default function InviteClient() {
     router.push(routes.eventDetail(groupId));
   };
 
+  const view: State = staticError ? { kind: 'error', message: staticError } : state;
+
   return (
     <div className="max-w-md mx-auto px-1 pb-24 pt-6">
       <div className="stitch-card p-6 text-center space-y-4 bg-white dark:bg-slate-800">
-        {state.kind === 'loading' && (
+        {view.kind === 'loading' && (
           <>
             <Loader2 className="w-7 h-7 mx-auto text-slate-400 animate-spin" aria-hidden="true" />
             <p className="text-sm text-slate-500">{t('invite.loading')}</p>
           </>
         )}
 
-        {state.kind === 'need-auth' && (
+        {view.kind === 'need-auth' && (
           <>
             <UserPlus className="w-8 h-8 mx-auto text-blue-600" aria-hidden="true" />
             <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.needAuthTitle')}</h1>
@@ -93,7 +91,7 @@ export default function InviteClient() {
           </>
         )}
 
-        {(state.kind === 'confirm' || state.kind === 'joining') && (
+        {(view.kind === 'confirm' || view.kind === 'joining') && (
           <>
             <UserPlus className="w-8 h-8 mx-auto text-blue-600" aria-hidden="true" />
             <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.confirmTitle')}</h1>
@@ -103,19 +101,19 @@ export default function InviteClient() {
             <button
               type="button"
               onClick={handleJoin}
-              disabled={state.kind === 'joining'}
+              disabled={view.kind === 'joining'}
               className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700 disabled:opacity-60"
             >
-              {state.kind === 'joining' ? t('invite.joiningButton') : t('invite.joinButton')}
+              {view.kind === 'joining' ? t('invite.joiningButton') : t('invite.joinButton')}
             </button>
           </>
         )}
 
-        {state.kind === 'error' && (
+        {view.kind === 'error' && (
           <div role="alert" data-testid="invite-error" className="space-y-3">
             <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" aria-hidden="true" />
             <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('invite.errorTitle')}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{state.message}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{view.message}</p>
             <Link
               href={routes.home()}
               className="inline-block px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold transition-all duration-300 hover:bg-blue-700"

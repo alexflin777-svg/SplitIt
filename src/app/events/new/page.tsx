@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plane, Home, Utensils, Sparkles, Check, UserPlus, X, Globe, Users } from 'lucide-react';
 import { CURRENCIES } from '@/lib/currency';
-import { getActiveSession, getSavedFriends, UserProfile } from '@/lib/supabase';
+import { getActiveSession, UserProfile } from '@/lib/supabase';
+import { useSavedFriends } from '@/lib/data-hooks';
 import { createGroup, isMultiUser } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
@@ -21,8 +22,10 @@ export default function NewEventPage() {
   const [members, setMembers] = useState<string[]>([t('eventNew.defaultYou')]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [savedFriends, setSavedFriends] = useState<any[]>([]);
   const multiUser = isMultiUser();
+  // В сетевом режиме локальные друзья не предлагаются: участники приходят по приглашению.
+  const localFriends = useSavedFriends();
+  const savedFriends = multiUser ? [] : localFriends;
 
   useEffect(() => {
     getActiveSession().then((u) => {
@@ -32,10 +35,7 @@ export default function NewEventPage() {
         if (u.preferred_currency) setCurrency(u.preferred_currency);
       }
     });
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение локального списка друзей после монтирования); пересмотр до 2026-11-15
-    if (!multiUser) setSavedFriends(getSavedFriends());
-  }, [multiUser, t]);
+  }, [t]);
 
   const categories = [
     { id: 'trip', label: t('eventNew.category.trip'), icon: Plane, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/60' },

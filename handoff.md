@@ -6,7 +6,7 @@
 
 > **Почему нет коммитов.** В этом клоне не настроены `git user.name` / `user.email`, а подставлять
 > подпись владельца за него агенту запрещено. Все изменения лежат в рабочем дереве и
-> разложены на пять патчей — по одному на задачу (T1–T5), чтобы получились раздельные коммиты.
+> разложены на шесть патчей — T1–T5 и `t6` (продолжение T4), чтобы получились раздельные коммиты.
 > Как их закоммитить — в `docs/reports/2026-10-ecc-cycle1.md`, раздел «Что нужно от владельца».
 > После коммитов SHA в шапке этого файла и `todo.md` нужно обновить.
 
@@ -22,7 +22,7 @@
 | *(не закоммичено)* T1 | Экран расхода показывает ошибку вместо вечной загрузки; диагностика флейка | `bug_report.md` (круг 2026-10-09) |
 | *(не закоммичено)* T2 | Удаление аккаунта: экран, RPC, Edge Function, `/delete-account`, 10 языков | `todo.md` P1-9 |
 | *(не закоммичено)* T3 | `npm run lint:i18n` + шаг в CI; 17 расхождений переводов исправлено | `scripts/check-i18n.mjs` |
-| *(не закоммичено)* T4 | `react-hooks/set-state-in-effect` → `"error"`, 7 исключений до 2026-11-15 | `eslint.config.mjs`, `todo.md` P1-6 |
+| *(не закоммичено)* T4 + t6 | `react-hooks/set-state-in-effect` → `"error"`; 4 из 7 мест переписаны, 3 исключения до 2026-11-15 | `eslint.config.mjs`, `todo.md` P1-6, `e2e/local-state.spec.ts` |
 | *(не закоммичено)* T5 | Этот файл, `todo.md`, отчёт цикла | `docs/reports/2026-10-ecc-cycle1.md` |
 
 ## 2. Что я запускал сам (Node 22, Chromium; дерево = `bce03b6` + изменения цикла)
@@ -33,7 +33,7 @@ npm run lint:i18n                    10 локалей × 463 ключа — р�
 npx tsc --noEmit                     exit 0
 npm run test:unit                    75/75
 npm run test:rls                     126/126   (было 105 до T2)
-npm test -- --fail-on-flaky-tests    110 passed (mobile chromium + desktop)
+npm test -- --fail-on-flaky-tests    126 passed (mobile chromium + desktop)
 playwright auth+integrity --repeat-each=20 --fail-on-flaky-tests   960 passed
 ```
 
@@ -54,7 +54,7 @@ playwright auth+integrity --repeat-each=20 --fail-on-flaky-tests   960 passed
 
 ## 5. Следующие шаги по порядку
 
-1. Владелец настраивает git-подпись и коммитит пять патчей (инструкция в отчёте), затем `git push origin launch/international` — дождаться зелёного `gate`.
+1. Владелец настраивает git-подпись и коммитит шесть патчей (инструкция в отчёте), затем `git push origin launch/international` — дождаться зелёного `gate`.
 2. P0-5 → P0-4: бэкап, затем три ожидающие миграции.
 3. Деплой `delete-account`, проверка на staging живым тестовым аккаунтом.
 4. P1-10 (Brevo DNS), P1-13 (privacy EN), затем P1-12 (Google Play closed test).

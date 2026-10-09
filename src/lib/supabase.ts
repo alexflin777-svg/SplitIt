@@ -166,8 +166,58 @@ export function getSavedFriends(): any[] {
 export function saveFriends(friends: any[]): string | null {
   if (typeof window === 'undefined') return null;
   const error = writeLocal(LOCAL_FRIENDS_KEY, friends);
-  if (!error) notifyLocalSync();
+  if (!error) {
+    notifyLocalSync();
+    // BroadcastChannel не доставляет сообщение своей же вкладке.
+    window.dispatchEvent(new Event(FRIENDS_CHANGED_EVENT));
+  }
   return error;
+}
+
+// ---------------------------------------------------------------------------
+// Список друзей как внешнее хранилище для useSyncExternalStore (P1-6).
+// Снимок обязан быть стабильным между вызовами, поэтому кэшируется по сырой
+// строке из localStorage. Чтение чистое: чистка старого демо-набора остаётся
+// в getSavedFriends().
+// ---------------------------------------------------------------------------
+
+const FRIENDS_CHANGED_EVENT = 'splitit_friends_changed';
+const NO_FRIENDS: any[] = [];
+let friendsSnapshot: { raw: string | null; value: any[] } | null = null;
+
+export function subscribeToFriends(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const unsubscribeSync = subscribeToLocalSync(callback);
+  window.addEventListener(FRIENDS_CHANGED_EVENT, callback);
+  return () => {
+    unsubscribeSync();
+    window.removeEventListener(FRIENDS_CHANGED_EVENT, callback);
+  };
+}
+
+export function getFriendsSnapshot(): any[] {
+  if (typeof window === 'undefined') return NO_FRIENDS;
+  const raw = localStorage.getItem(LOCAL_FRIENDS_KEY);
+  if (friendsSnapshot?.raw === raw) return friendsSnapshot.value;
+  let parsed: any[] = NO_FRIENDS;
+  if (raw) {
+    try {
+      const value = JSON.parse(raw);
+      parsed = Array.isArray(value) ? value : NO_FRIENDS;
+    } catch (e) {
+      console.warn(`[SplitIT] Повреждены данные в ${LOCAL_FRIENDS_KEY}, использую пустой список`, e);
+    }
+  }
+  const value = parsed.filter((friend) => {
+    const signature = `${friend?.id ?? ''}|${friend?.name ?? ''}|${friend?.email ?? ''}`;
+    return !LEGACY_DEMO_FRIENDS.has(signature);
+  });
+  friendsSnapshot = { raw, value };
+  return value;
+}
+
+export function getServerFriendsSnapshot(): any[] {
+  return NO_FRIENDS;
 }
 
 export function getSavedGroups(): any[] {

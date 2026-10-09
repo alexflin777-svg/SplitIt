@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import useSWR, { mutate as mutateGlobal } from 'swr';
 import {
   getGroup,
@@ -11,6 +11,20 @@ import {
   type RemoteResult,
 } from './store';
 import { DEFAULT_EXPENSE_PAGE_SIZE } from './remote-store';
+import { getFriendsSnapshot, getSavedFriends, getServerFriendsSnapshot, subscribeToFriends } from './supabase';
+
+/**
+ * Локальный список друзей без setState в эффекте (P1-6): на сервере и при
+ * гидратации — пустой список, затем React сам перечитывает localStorage.
+ * Обновляется при saveFriends в этой вкладке и при изменениях в соседних.
+ */
+export function useSavedFriends(): any[] {
+  useEffect(() => {
+    // Одноразовая чистка старого демо-набора в хранилище (инвариант И-14).
+    getSavedFriends();
+  }, []);
+  return useSyncExternalStore(subscribeToFriends, getFriendsSnapshot, getServerFriendsSnapshot);
+}
 
 export const GROUPS_CACHE_KEY = 'splitit:groups';
 export const groupCacheKey = (groupId: string, expensesLimit = DEFAULT_EXPENSE_PAGE_SIZE) =>

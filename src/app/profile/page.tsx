@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, signOutUser, UserProfile } from '@/lib/supabase';
@@ -28,6 +28,16 @@ import {
   Download,
 } from 'lucide-react';
 
+function subscribeToThemeClass(callback: () => void): () => void {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return () => observer.disconnect();
+}
+
+function readDarkClass(): boolean {
+  return document.documentElement.classList.contains('dark');
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { t } = useI18n();
@@ -37,21 +47,20 @@ export default function ProfilePage() {
   const [defaultCurrency, setDefaultCurrency] = useState('RUB');
   const [pushEnabled, setPushEnabled] = useState(true);
   const [telegramNotify, setTelegramNotify] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
   const [savedMessage, setSavedMessage] = useState(false);
   const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // App updater state
-  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
+  // Версия — константа сборки: состояние и эффект не нужны (P1-6).
+  const currentVersion = getCurrentInstalledVersion();
+  // Тема — это класс `dark` на <html>; читаем его как внешнее хранилище.
+  const darkMode = useSyncExternalStore(subscribeToThemeClass, readDarkClass, () => false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение версии сборки и темы из DOM после монтирования); пересмотр до 2026-11-15
-    setCurrentVersion(getCurrentInstalledVersion());
-
     getActiveSession().then((u) => {
       if (u) {
         setUser(u);
@@ -62,10 +71,6 @@ export default function ProfilePage() {
       }
       setSessionLoaded(true);
     });
-
-    if (typeof document !== 'undefined') {
-      setDarkMode(document.documentElement.classList.contains('dark'));
-    }
   }, []);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,15 +115,8 @@ export default function ProfilePage() {
   };
 
   const toggleDarkMode = () => {
-    const nextDark = !darkMode;
-    setDarkMode(nextDark);
-    if (typeof document !== 'undefined') {
-      if (nextDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
+    // Переключатель перерисуется сам: MutationObserver заметит смену класса.
+    document.documentElement.classList.toggle('dark', !darkMode);
   };
 
   const handleCheckForUpdates = async () => {
