@@ -59,6 +59,27 @@
   .app-header {
     padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 3.5rem);
   }
+
+  /* WebKit iOS рисует input[type=date] нативным контролом со своей минимальной
+     шириной и центровкой: в половине карточки «Новый расход» поле вылезало за
+     край (iPhone 13, 2026-10-09). Снимаем нативный вид, ограничиваем шириной
+     родителя и выравниваем текст влево, высота — как у соседнего select. */
+  input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 2.5rem;
+    text-align: left;
+  }
+
+  input[type='date']::-webkit-date-and-time-value {
+    margin: 0;
+    text-align: left;
+  }
 }
 
 /* Utility: hide scrollbar on horizontal scroll containers */

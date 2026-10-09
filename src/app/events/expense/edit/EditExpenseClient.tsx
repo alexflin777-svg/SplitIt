@@ -187,7 +187,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
 
         {/* Date & Category Grid */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="stitch-card p-4 space-y-1.5">
+          <div className="stitch-card p-4 space-y-1.5 min-w-0">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-blue-500" />
               <span>{t('expenseNew.dateLabel')}</span>
@@ -197,7 +197,8 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              data-testid="expense-date"
+              className="block w-full min-w-0 h-10 appearance-none text-left px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
 
