@@ -168,6 +168,18 @@
 
 ---
 
+## P1-9. Удаление аккаунта (Google Play / App Store)
+
+**Причина.** Оба стора требуют удаление аккаунта в приложении и (Google Play, Data safety) — ссылку на удаление без установки приложения. Добавлено 2026-10-09, цикл «Launch hardening 1» (T2).
+
+**Критерии приёмки:**
+- [x] экран «Удалить аккаунт» в профиле с подтверждением вводом своего email;
+- [x] миграция `20261009000000_delete_my_account.sql`: RPC SECURITY DEFINER, `search_path` закреплён, исполняет только `authenticated`; обезличивание в общих событиях; откат в `supabase/rollback/`;
+- [x] Edge Function `delete-account` (проверка JWT, удаление `auth.users` service-ролью);
+- [x] RLS-тесты PGlite (`test/account-deletion-rls.test.mjs`), E2E локального режима, тексты на 10 языках, страница `/delete-account`;
+- [ ] миграция применена к production (только после P0-4: Supabase Pro + бэкап), функция задеплоена, проверка на staging живым аккаунтом;
+- [ ] заявки со страницы `/delete-account` (feedback с `source = 'delete-account'`) кто-то разбирает в течение 30 дней — назначить ответственного.
+
 # P2 — после начала закрытой беты
 
 - Денормализация `expense_splits.group_id` и фильтр Realtime: только новой миграцией, с dual-write, индексом, RLS и нагрузочным/изоляционным тестом.

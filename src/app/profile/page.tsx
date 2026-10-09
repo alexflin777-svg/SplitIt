@@ -10,6 +10,7 @@ import { requestNotificationPermission, sendInAppNotification } from '@/lib/noti
 import { useRouter } from 'next/navigation';
 import { processAvatarFile } from '@/lib/avatar';
 import { useI18n } from '@/lib/i18n/provider';
+import DeleteAccountSection from './DeleteAccountSection';
 import {
   User,
   Bell,
@@ -415,6 +416,9 @@ export default function ProfilePage() {
           {t('profile.saveSettings')}
         </button>
       </form>
+
+      {/* Вне формы: Enter в полях профиля не должен доходить до удаления. */}
+      <DeleteAccountSection email={user.email} />
     </div>
   );
 }

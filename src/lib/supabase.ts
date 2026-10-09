@@ -451,6 +451,49 @@ export async function signOutUser() {
   notifyLocalSync();
 }
 
+/**
+ * Удаление аккаунта (требование Google Play и App Store).
+ *
+ * Сетевой режим: Edge Function delete-account удаляет данные (RPC
+ * delete_my_account) и вход (auth.users). Пока она не ответила успехом,
+ * пользователь остаётся в аккаунте и видит ошибку — успех не симулируется.
+ *
+ * В обоих режимах затем стираются локальные данные splitit_* на устройстве.
+ * Выбранный язык остаётся (это настройка устройства, а не личные данные), а из
+ * общего реестра локальных аккаунтов удаляется только своя запись — чужие
+ * локальные профили на этом же устройстве не трогаются.
+ */
+export async function deleteAccount(): Promise<{ error: string | null }> {
+  if (typeof window === 'undefined') return { error: t('errors.accountDeleteFailed') };
+  const session = getLocalSession();
+
+  if (supabase) {
+    const { error } = await supabase.functions.invoke('delete-account', { body: {} });
+    if (error) {
+      console.error('[SplitIT] Удаление аккаунта не удалось', error.message);
+      return { error: t('errors.accountDeleteFailed') };
+    }
+  }
+
+  await signOutUser();
+
+  const registry = getUsersRegistry();
+  const ownKey = session?.email?.toLowerCase().trim();
+  if (ownKey && registry[ownKey]) {
+    delete registry[ownKey];
+    writeLocal(USERS_REGISTRY_KEY, registry);
+  }
+
+  const keep = new Set(['splitit_locale', USERS_REGISTRY_KEY]);
+  const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter(
+    (key): key is string => Boolean(key && key.startsWith('splitit_') && !keep.has(key)),
+  );
+  keys.forEach((key) => localStorage.removeItem(key));
+  notifyLocalSync();
+  window.dispatchEvent(new Event('splitit_profile_changed'));
+  return { error: null };
+}
+
 export async function getActiveSession(): Promise<UserProfile | null> {
   if (!supabase) return getLocalSession();
 

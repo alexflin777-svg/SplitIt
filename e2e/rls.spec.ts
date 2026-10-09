@@ -80,7 +80,10 @@ test.describe('Миграции Supabase (инвариант И-9)', () => {
     // значения: пользователь может записать строку, которую сам потом не
     // увидит, в том числе от чужого имени.
     const offenders: string[] = [];
-    const pattern = /CREATE\s+POLICY\s+"([^"]+)"[\s\S]*?FOR\s+(INSERT|UPDATE)[\s\S]*?(?=;)/gi;
+    // [^;] а не [\s\S]: совпадение не должно выходить за пределы одного
+    // оператора. Иначе SELECT-политика «склеивалась» с ближайшим `SELECT …
+    // FOR UPDATE` (блокировка строк) из следующей миграции — ложная тревога.
+    const pattern = /CREATE\s+POLICY\s+"([^"]+)"[^;]*?FOR\s+(INSERT|UPDATE)[^;]*?(?=;)/gi;
 
     for (const match of all.matchAll(pattern)) {
       if (!/WITH\s+CHECK/i.test(match[0])) {

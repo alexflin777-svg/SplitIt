@@ -64,7 +64,16 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Как удалить данные</h2>
         <p>
-          Напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим аккаунт
+          В приложении: «Профиль» → «Удалить аккаунт» — удаление происходит сразу. Без приложения —
+          заявка на странице{' '}
+          <Link href="/delete-account" className="text-emerald-600 underline">/delete-account</Link>.
+          В общих событиях ваши расходы сохраняются под именем «Удалённый пользователь», чтобы не
+          сломать итоги других участников: суммы, названия расходов и приложенные к ним чеки
+          остаются видны участникам этого события, но больше не связаны с вашим именем, email и
+          телефоном.
+        </p>
+        <p>
+          Или напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим аккаунт
           и связанные данные в течение 30 дней и подтвердим удаление ответным письмом. Данные из
           списка ожидания удаляются по такому же запросу.
         </p>
@@ -80,8 +89,9 @@ export default function PrivacyPage() {
           SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
           create. Android contact names are read locally only with your permission and never
           uploaded. No location tracking, no ads, no selling of data. Data is stored in Supabase
-          with row-level security. To delete your account and data, e-mail {CONTACT} from your
-          registered address; deletion is completed within 30 days.
+          with row-level security. To delete your account and data, use Profile → Delete account in the app, the request
+          form at <Link href="/delete-account" className="underline">/delete-account</Link>, or e-mail {CONTACT} from your
+          registered address; requests are completed within 30 days.
         </p>
       </section>
 
