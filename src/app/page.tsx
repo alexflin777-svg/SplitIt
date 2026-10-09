@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney, convertCurrency } from '@/lib/currency';
@@ -10,6 +10,8 @@ import { useGroups } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
 import { OnboardingTour } from '@/components/OnboardingTour';
 import { LifeSituations } from '@/components/LifeSituations';
+import QuickProfileEditor from '@/components/QuickProfileEditor';
+import { isPhotoAvatar } from '@/lib/avatar';
 import {
   Plus,
   Plane,
@@ -43,6 +45,8 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const closeProfileEditor = useCallback(() => setProfileEditorOpen(false), []);
 
   // Waitlist State
   const [waitlistEmail, setWaitlistEmail] = useState('');
@@ -305,17 +309,30 @@ export default function HomePage() {
           }} 
         />
       )}
+      {profileEditorOpen && (
+        <QuickProfileEditor
+          user={userProfile}
+          onClose={closeProfileEditor}
+          onSaved={(updated) => setUserProfile(updated)}
+        />
+      )}
       <div className="space-y-5 max-w-md mx-auto px-1 pb-28">
       {/* User Greeting Bar */}
       <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold flex items-center justify-center text-lg overflow-hidden border border-blue-200/50">
-            {userProfile.avatar_url && userProfile.avatar_url.startsWith('data:image') ? (
-              <img src={userProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+          <button
+            type="button"
+            onClick={() => setProfileEditorOpen(true)}
+            aria-label={t('quickProfile.open')}
+            data-testid="home-avatar-button"
+            className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold flex items-center justify-center text-lg overflow-hidden border border-blue-200/50 hover:ring-2 hover:ring-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          >
+            {isPhotoAvatar(userProfile.avatar_url) ? (
+              <img src={userProfile.avatar_url} alt="" className="w-full h-full object-cover" />
             ) : (
               <span>{userProfile.avatar_url || '👤'}</span>
             )}
-          </div>
+          </button>
           <div>
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block">
               {t('home.loggedInAs')}

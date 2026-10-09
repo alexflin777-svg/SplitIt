@@ -10,6 +10,14 @@
  * Теперь изображение уменьшается до 256x256 и пережимается в JPEG до записи.
  */
 
+/** Эмодзи-аватары на выбор: регистрация и быстрый редактор профиля. */
+export const PRESET_AVATARS = ['👤', '👨‍💻', '👩‍🎨', '🦊', '🚀', '🐱', '🐼', '🕶️'];
+
+/** Фото хранится как data URL; всё остальное — эмодзи. */
+export function isPhotoAvatar(avatar: string | null | undefined): avatar is string {
+  return !!avatar && avatar.startsWith('data:image');
+}
+
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024; // дальше нет смысла даже декодировать
 const TARGET_SIZE = 256;
 const JPEG_QUALITY = 0.85;
