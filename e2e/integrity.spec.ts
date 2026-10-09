@@ -20,6 +20,20 @@ async function seed(page: Page, groups: unknown[] = []) {
   );
 }
 
+/**
+ * Открывает форму расхода и сразу различает два исхода: форма или честная
+ * ошибка «событие недоступно». До S2-10 экран при ненайденном событии вечно
+ * показывал «Загрузка события…», и тест падал таймаутом 30 с без причины.
+ */
+async function openExpenseForm(page: Page, id: string) {
+  await page.goto(`/events/expense/new?id=${id}`);
+  const title = page.getByPlaceholder(/Например|Ужин|Название/i).first();
+  const loadError = page.getByTestId('event-load-error');
+  await expect(title.or(loadError)).toBeVisible();
+  await expect(loadError, 'форма расхода не нашла засеянное событие').toHaveCount(0);
+  return title;
+}
+
 function group(id: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
@@ -102,8 +116,7 @@ test.describe('Денежные суммы (регрессия S2-1)', () => {
     const id = 'group-negative';
     await seed(page, [group(id)]);
 
-    await page.goto(`/events/expense/new?id=${id}`);
-    await page.getByPlaceholder(/Например|Ужин|Название/i).first().fill('Отрицательный расход');
+    await (await openExpenseForm(page, id)).fill('Отрицательный расход');
     await page.getByPlaceholder('0.00').fill('-1000');
     await page.getByRole('button', { name: /Сохранить|Добавить расход/ }).first().click();
 
@@ -130,8 +143,7 @@ test.describe('Денежные суммы (регрессия S2-1)', () => {
     const id = 'group-negative-bypass';
     await seed(page, [group(id)]);
 
-    await page.goto(`/events/expense/new?id=${id}`);
-    await page.getByPlaceholder(/Например|Ужин|Название/i).first().fill('Обход валидации');
+    await (await openExpenseForm(page, id)).fill('Обход валидации');
     await page.getByPlaceholder('0.00').fill('-1000');
 
     await page.evaluate(() => {
@@ -152,12 +164,19 @@ test.describe('Денежные суммы (регрессия S2-1)', () => {
     expect(expenses).toEqual([]);
   });
 
+  test('ненайденное событие показывает ошибку, а не вечную загрузку', async ({ page }) => {
+    await seed(page, []);
+
+    await page.goto('/events/expense/new?id=group-missing');
+    await expect(page.getByTestId('event-load-error')).toContainText('Событие недоступно');
+    await expect(page.getByText('Загрузка события...')).toHaveCount(0);
+  });
+
   test('нулевой расход отклоняется', async ({ page }) => {
     const id = 'group-zero';
     await seed(page, [group(id)]);
 
-    await page.goto(`/events/expense/new?id=${id}`);
-    await page.getByPlaceholder(/Например|Ужин|Название/i).first().fill('Нулевой расход');
+    await (await openExpenseForm(page, id)).fill('Нулевой расход');
     await page.getByPlaceholder('0.00').fill('0');
 
     await page.evaluate(() => {

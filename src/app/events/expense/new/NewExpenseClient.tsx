@@ -16,6 +16,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
   const { t } = useI18n();
 
   const [group, setGroup] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -44,8 +45,16 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
   }, []);
 
   useEffect(() => {
-    void getGroup(groupId).then(({ data }) => {
-      if (!data) return;
+    void getGroup(groupId).then(({ data, error }) => {
+      // Раньше ненайденное событие молча оставляло экран на «Загрузка события…»
+      // навсегда: пользователь ждал, а E2E падал таймаутом без причины (S2-10).
+      if (!data) {
+        // Текст переводится при рендере: `t` в зависимостях перезапускал бы
+        // загрузку при смене языка и сбрасывал выбранные поля.
+        setLoadError(error ?? '');
+        return;
+      }
+      setLoadError(null);
       setGroup(data);
       setCurrency(data.currency || 'RUB');
       setPaidById(data.members?.[0]?.id || '');
@@ -149,6 +158,17 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
     }
     router.push(routes.eventDetail(group.id));
   };
+
+  if (!group && loadError !== null) {
+    return (
+      <div role="alert" data-testid="event-load-error" className="stitch-card p-6 text-center space-y-3">
+        <p className="text-sm font-bold text-rose-700">{loadError || t('errors.eventUnavailableLocal')}</p>
+        <Link href={routes.home()} className="inline-block text-sm font-bold text-blue-600">
+          {t('eventDetail.backToEvents')}
+        </Link>
+      </div>
+    );
+  }
 
   if (!group) {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('expenseNew.loadingEvent')}</div>;
