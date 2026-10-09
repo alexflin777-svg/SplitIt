@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, useSyncExternalStore, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
 import { signUpUser, signInUser, signInWithGoogle, resetPassword, updatePassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
@@ -47,29 +47,38 @@ function AuthForm() {
         setStatusMessage(t('auth.loggedInAs', { name: user.full_name || user.email }));
       }
     });
+  }, [t]);
 
-    // Detect Telegram WebApp
-    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp;
-      if (tg.initDataUnsafe?.user) {
-        if (!getConfigProblem()) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение Telegram WebApp из window после монтирования); пересмотр до 2026-11-15
-          setErrorMessage(t('auth.telegramNotConfigured'));
-          return;
-        }
-        const tgUser = tg.initDataUnsafe.user;
-        const profile: UserProfile = {
-          id: 'tg-' + tgUser.id,
-          email: `${tgUser.username || 'tg_' + tgUser.id}@telegram.org`,
-          full_name: `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || 'Telegram User',
-          avatar_url: '📱',
-        };
-        saveLocalSession(profile);
-        setStatusMessage(t('auth.telegramWebApp', { name: tgUser.username || tgUser.first_name }));
-        setTimeout(() => router.push('/'), 1000);
-      }
-    }
-  }, [router, t]);
+  // Telegram WebApp: пользователь из window.Telegram читается как внешнее
+  // хранилище (на сервере — null), сообщения вычисляются при рендере (P1-6).
+  // В эффекте остаётся только побочное действие: сохранить профиль и уйти.
+  const telegramUserRaw = useSyncExternalStore(subscribeNever, readTelegramUser, () => null);
+  const telegramUser = useMemo(
+    () => (telegramUserRaw ? (JSON.parse(telegramUserRaw) as TelegramWebAppUser) : null),
+    [telegramUserRaw],
+  );
+  const telegramError = telegramUser && !configProblem ? t('auth.telegramNotConfigured') : null;
+  const telegramStatus =
+    telegramUser && configProblem
+      ? t('auth.telegramWebApp', { name: telegramUser.username || telegramUser.first_name || '' })
+      : null;
+
+  useEffect(() => {
+    // Локальный Telegram-профиль допустим только без бэкенда (демо-режим).
+    if (!telegramUser || !configProblem) return;
+    const profile: UserProfile = {
+      id: 'tg-' + telegramUser.id,
+      email: `${telegramUser.username || 'tg_' + telegramUser.id}@telegram.org`,
+      full_name: `${telegramUser.first_name || ''} ${telegramUser.last_name || ''}`.trim() || 'Telegram User',
+      avatar_url: '📱',
+    };
+    saveLocalSession(profile);
+    const timer = setTimeout(() => router.push('/'), 1000);
+    return () => clearTimeout(timer);
+  }, [telegramUser, configProblem, router]);
+
+  const shownStatus = statusMessage ?? telegramStatus;
+  const shownError = errorMessage ?? telegramError;
 
   const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -208,22 +217,22 @@ function AuthForm() {
       )}
 
       {/* Status Message */}
-      {statusMessage && (
+      {shownStatus && (
         <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2 font-bold animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-          <span>{statusMessage}</span>
+          <span>{shownStatus}</span>
         </div>
       )}
 
       {/* Error Message */}
-      {errorMessage && (
+      {shownError && (
         <div
           role="alert"
           data-testid="auth-error"
           className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2 font-bold animate-in fade-in"
         >
           <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <span>{errorMessage}</span>
+          <span>{shownError}</span>
         </div>
       )}
 
@@ -416,6 +425,24 @@ function AuthForm() {
       </form>
     </div>
   );
+}
+
+interface TelegramWebAppUser {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+/** window.Telegram не меняется после загрузки страницы — подписка не нужна. */
+function subscribeNever(): () => void {
+  return () => {};
+}
+
+/** Строка, а не объект: снимок useSyncExternalStore обязан быть стабильным. */
+function readTelegramUser(): string | null {
+  const user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+  return user ? JSON.stringify(user) : null;
 }
 
 function getSafeReturnPath(value: string | null): string {
