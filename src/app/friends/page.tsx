@@ -56,6 +56,7 @@ export default function FriendsPage() {
 
   useEffect(() => {
     // Load persistent friends list
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение локального списка друзей после монтирования); пересмотр до 2026-11-15
     setFriends(getSavedFriends());
 
     // Соседняя вкладка этого браузера могла изменить локальный список.

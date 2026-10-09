@@ -49,6 +49,7 @@ export default function ProfilePage() {
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение версии сборки и темы из DOM после монтирования); пересмотр до 2026-11-15
     setCurrentVersion(getCurrentInstalledVersion());
 
     getActiveSession().then((u) => {

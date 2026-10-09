@@ -33,6 +33,7 @@ export default function NewEventPage() {
       }
     });
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение локального списка друзей после монтирования); пересмотр до 2026-11-15
     if (!multiUser) setSavedFriends(getSavedFriends());
   }, [multiUser, t]);
 

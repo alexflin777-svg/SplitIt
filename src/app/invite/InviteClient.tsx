@@ -37,6 +37,7 @@ export default function InviteClient() {
 
   useEffect(() => {
     if (!code) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (ошибка по параметру code до запроса сессии); пересмотр до 2026-11-15
       setState({ kind: 'error', message: t('invite.errorNoCode') });
       return;
     }

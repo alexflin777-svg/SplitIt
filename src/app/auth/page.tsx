@@ -53,6 +53,7 @@ function AuthForm() {
       const tg = (window as any).Telegram.WebApp;
       if (tg.initDataUnsafe?.user) {
         if (!getConfigProblem()) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (чтение Telegram WebApp из window после монтирования); пересмотр до 2026-11-15
           setErrorMessage(t('auth.telegramNotConfigured'));
           return;
         }

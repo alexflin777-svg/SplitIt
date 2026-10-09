@@ -124,6 +124,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
    */
   useEffect(() => {
     if (isLoading && !cachedGroup && !cachedError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (синхронизация SWR-кеша события с редактируемым состоянием); пересмотр до 2026-11-15
       setStatus('loading');
       return;
     }

@@ -53,6 +53,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = readStoredLocale();
     if (stored) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (выбор локали после гидратации; перевод на useSyncExternalStore меняет момент смены языка); пересмотр до 2026-11-15
       setLocaleState(stored);
     } else {
       // First launch, no explicit choice saved yet: use the device/browser
