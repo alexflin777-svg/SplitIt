@@ -395,6 +395,7 @@ export const messages: Record<string, string> = {
   'home.waitlistError': 'Bitte geben Sie eine gültige E-Mail-Adresse ein.',
   'home.waitlistFailed': 'Eintrag fehlgeschlagen: {error}. Bitte später erneut versuchen.',
   'auth.googleLogin': 'Weiter mit Google',
+  'auth.oauthFailed': 'Anmeldung fehlgeschlagen: {error}',
   'auth.orEmail': 'Oder weiter mit E-Mail',
 
   // Data-layer error codes (store.ts / remote-store.ts / supabase.ts / credentials.ts)

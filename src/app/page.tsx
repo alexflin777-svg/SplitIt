@@ -167,7 +167,7 @@ export default function HomePage() {
       <div className="space-y-6 max-w-md mx-auto px-1 pb-28 animate-in fade-in duration-300">
         {/* Welcome Banner Card */}
         <div className="stitch-card p-6 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-900 text-white shadow-xl relative overflow-hidden text-center space-y-4">
-          <div className="absolute -right-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none" />
           <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center mx-auto shadow-inner text-3xl">
             🤝
           </div>
@@ -333,7 +333,7 @@ export default function HomePage() {
 
       {/* Top User Financial Overview Card */}
       <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
         
         <div className="flex items-center justify-between mb-4">
           <div>

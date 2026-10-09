@@ -78,7 +78,9 @@ function AuthForm() {
   }, [telegramUser, configProblem, router]);
 
   const shownStatus = statusMessage ?? telegramStatus;
-  const shownError = errorMessage ?? telegramError;
+  // Ошибка возврата из Google/Telegram (deep link → useNativeAuthCallback) приходит в query.
+  const oauthError = searchParams.get('oauth_error');
+  const shownError = errorMessage ?? telegramError ?? (oauthError ? t('auth.oauthFailed', { error: oauthError }) : null);
 
   const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -394,6 +394,7 @@ export const messages: Record<string, string> = {
   'home.waitlistError': 'Digite um e-mail válido.',
   'home.waitlistFailed': 'Não foi possível salvar: {error}. Tente novamente mais tarde.',
   'auth.googleLogin': 'Continuar com Google',
+  'auth.oauthFailed': 'Falha ao entrar: {error}',
   'auth.orEmail': 'Ou continue com e-mail',
 
   'currency.fallbackRatesLabel': 'Taxas de reserva',

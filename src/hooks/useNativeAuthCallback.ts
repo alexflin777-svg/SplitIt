@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getActiveSession, supabase } from '@/lib/supabase';
 
@@ -16,7 +17,9 @@ export function useNativeAuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    const isCapacitor = typeof window !== 'undefined' && (window as any).Capacitor?.isNative;
+    // В Capacitor 8 свойства `Capacitor.isNative` нет — только isNativePlatform().
+    // Старая проверка всегда давала undefined, и обработчик не подключался.
+    const isCapacitor = Capacitor.isNativePlatform();
     if (!isCapacitor || !supabase) return;
 
     const listenerPromise = App.addListener('appUrlOpen', async ({ url }) => {
@@ -36,10 +39,17 @@ export function useNativeAuthCallback() {
         });
         if (error) {
           console.warn('[SplitIT] Telegram: token_hash не обменялся на сессию', error.message);
+          router.replace(`/auth?oauth_error=${encodeURIComponent(error.message)}`);
           return;
         }
         const profile = await getActiveSession();
         if (profile) router.replace('/friends');
+        return;
+      }
+
+      const oauthError = params.get('error_description') || params.get('error');
+      if (oauthError) {
+        router.replace(`/auth?oauth_error=${encodeURIComponent(oauthError)}`);
         return;
       }
 
@@ -49,6 +59,7 @@ export function useNativeAuthCallback() {
       const { error } = await supabase!.auth.exchangeCodeForSession(code);
       if (error) {
         console.warn('[SplitIT] Не удалось обменять код авторизации на сессию', error.message);
+        router.replace(`/auth?oauth_error=${encodeURIComponent(error.message)}`);
         return;
       }
 

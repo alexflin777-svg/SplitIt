@@ -394,6 +394,7 @@ export const messages: Record<string, string> = {
   'home.waitlistError': '正しいメールアドレスを入力してください。',
   'home.waitlistFailed': '登録できませんでした: {error} 後でもう一度お試しください。',
   'auth.googleLogin': 'Google で続行',
+  'auth.oauthFailed': 'ログインできませんでした: {error}',
   'auth.orEmail': 'またはメールで続行',
 
   'currency.fallbackRatesLabel': '代替レート',

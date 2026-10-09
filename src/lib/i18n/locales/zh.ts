@@ -394,6 +394,7 @@ export const messages: Record<string, string> = {
   'home.waitlistError': '请输入有效的邮箱地址。',
   'home.waitlistFailed': '保存失败：{error}。请稍后再试。',
   'auth.googleLogin': '使用 Google 继续',
+  'auth.oauthFailed': '登录失败：{error}',
   'auth.orEmail': '或使用邮箱继续',
 
   'currency.fallbackRatesLabel': '备用汇率',

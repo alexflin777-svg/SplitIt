@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { Capacitor } from '@capacitor/core';
 import { getActiveSession } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 
 export function usePushNotifications() {
   useEffect(() => {
     // Only run in browser if Capacitor is injected, safely checking window.Capacitor
-    const isCapacitor = typeof window !== 'undefined' && (window as any).Capacitor?.isNative;
+    // В Capacitor 8 свойства `Capacitor.isNative` нет — только isNativePlatform().
+    // Старая проверка всегда давала undefined, и обработчик не подключался.
+    const isCapacitor = Capacitor.isNativePlatform();
     if (!isCapacitor) return;
 
     const setupPush = async () => {

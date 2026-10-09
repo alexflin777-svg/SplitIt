@@ -42,7 +42,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`light ${inter.variable}`}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {/* maximum-scale=1: iOS сам увеличивает страницу при фокусе на поле с шрифтом
+            меньше 16px и не возвращает масштаб — приложение «шире экрана». Масштаб жестом
+            в WKWebView/Safari iOS 10+ этим не отключается (доступность сохраняется). */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
       </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
         <I18nProvider>

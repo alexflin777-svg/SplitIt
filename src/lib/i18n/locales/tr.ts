@@ -394,6 +394,7 @@ export const messages: Record<string, string> = {
   'home.waitlistError': 'Lütfen geçerli bir e-posta girin.',
   'home.waitlistFailed': 'Kaydedilemedi: {error}. Lütfen daha sonra tekrar deneyin.',
   'auth.googleLogin': 'Google ile devam et',
+  'auth.oauthFailed': 'Giriş başarısız: {error}',
   'auth.orEmail': 'Veya e-posta ile devam et',
 
   'currency.fallbackRatesLabel': 'Yedek kurlar',
