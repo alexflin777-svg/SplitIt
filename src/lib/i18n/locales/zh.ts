@@ -57,6 +57,7 @@ export const messages: Record<string, string> = {
   'balance.settled': '已全部结清',
 
   'friends.title': '好友',
+  'friends.import': '导入',
   'friends.add': '添加好友',
 
   'profile.title': '我的',
@@ -392,8 +393,8 @@ export const messages: Record<string, string> = {
   'home.waitlistSuccess': '已加入等候名单，测试版开放时我们会通知您。',
   'home.waitlistError': '请输入有效的邮箱地址。',
   'home.waitlistFailed': '保存失败：{error}。请稍后再试。',
-  'auth.googleLogin': 'Continue with Google',
-  'auth.orEmail': 'Or continue with email',
+  'auth.googleLogin': '使用 Google 继续',
+  'auth.orEmail': '或使用邮箱继续',
 
   'currency.fallbackRatesLabel': '备用汇率',
 

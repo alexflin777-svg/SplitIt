@@ -57,6 +57,7 @@ export const messages: Record<string, string> = {
   'balance.settled': 'すべて精算済みです',
 
   'friends.title': '友達',
+  'friends.import': 'インポート',
   'friends.add': '友達を追加',
 
   'profile.title': 'プロフィール',
@@ -392,8 +393,8 @@ export const messages: Record<string, string> = {
   'home.waitlistSuccess': '登録しました。ベータ公開時にご連絡します。',
   'home.waitlistError': '正しいメールアドレスを入力してください。',
   'home.waitlistFailed': '登録できませんでした: {error} 後でもう一度お試しください。',
-  'auth.googleLogin': 'Continue with Google',
-  'auth.orEmail': 'Or continue with email',
+  'auth.googleLogin': 'Google で続行',
+  'auth.orEmail': 'またはメールで続行',
 
   'currency.fallbackRatesLabel': '代替レート',
 

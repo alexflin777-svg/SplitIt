@@ -64,6 +64,7 @@ export const messages: Record<string, string> = {
 
   // Friends
   'friends.title': 'Friends',
+  'friends.import': 'Import',
   'friends.add': 'Add friend',
 
   // Profile

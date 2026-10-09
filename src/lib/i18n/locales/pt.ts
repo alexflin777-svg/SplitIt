@@ -57,6 +57,7 @@ export const messages: Record<string, string> = {
   'balance.settled': 'Tudo quitado',
 
   'friends.title': 'Amigos',
+  'friends.import': 'Importar',
   'friends.add': 'Adicionar amigo',
 
   'profile.title': 'Perfil',
@@ -392,8 +393,8 @@ export const messages: Record<string, string> = {
   'home.waitlistSuccess': 'Obrigado, você está na lista de espera. Avisaremos quando a beta abrir.',
   'home.waitlistError': 'Digite um e-mail válido.',
   'home.waitlistFailed': 'Não foi possível salvar: {error}. Tente novamente mais tarde.',
-  'auth.googleLogin': 'Continue with Google',
-  'auth.orEmail': 'Or continue with email',
+  'auth.googleLogin': 'Continuar com Google',
+  'auth.orEmail': 'Ou continue com e-mail',
 
   'currency.fallbackRatesLabel': 'Taxas de reserva',
 

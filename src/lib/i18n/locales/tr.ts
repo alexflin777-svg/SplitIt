@@ -57,6 +57,7 @@ export const messages: Record<string, string> = {
   'balance.settled': 'Her şey hesaplaşıldı',
 
   'friends.title': 'Arkadaşlar',
+  'friends.import': 'İçe aktar',
   'friends.add': 'Arkadaş ekle',
 
   'profile.title': 'Profil',
@@ -392,8 +393,8 @@ export const messages: Record<string, string> = {
   'home.waitlistSuccess': 'Teşekkürler, bekleme listesindesiniz. Beta açıldığında haber vereceğiz.',
   'home.waitlistError': 'Lütfen geçerli bir e-posta girin.',
   'home.waitlistFailed': 'Kaydedilemedi: {error}. Lütfen daha sonra tekrar deneyin.',
-  'auth.googleLogin': 'Continue with Google',
-  'auth.orEmail': 'Or continue with email',
+  'auth.googleLogin': 'Google ile devam et',
+  'auth.orEmail': 'Veya e-posta ile devam et',
 
   'currency.fallbackRatesLabel': 'Yedek kurlar',
 

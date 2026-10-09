@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
+    "lint:i18n": "tsx scripts/check-i18n.mjs",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "serve:out": "node scripts/serve-out.mjs",

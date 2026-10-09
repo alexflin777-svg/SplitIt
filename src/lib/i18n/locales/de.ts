@@ -57,6 +57,7 @@ export const messages: Record<string, string> = {
   'balance.settled': 'Alles ausgeglichen',
 
   'friends.title': 'Freunde',
+  'friends.import': 'Importieren',
   'friends.add': 'Freund hinzufügen',
 
   'profile.title': 'Profil',
@@ -393,8 +394,8 @@ export const messages: Record<string, string> = {
   'home.waitlistSuccess': 'Danke, Sie stehen auf der Warteliste. Wir melden uns, sobald die Beta startet.',
   'home.waitlistError': 'Bitte geben Sie eine gültige E-Mail-Adresse ein.',
   'home.waitlistFailed': 'Eintrag fehlgeschlagen: {error}. Bitte später erneut versuchen.',
-  'auth.googleLogin': 'Continue with Google',
-  'auth.orEmail': 'Or continue with email',
+  'auth.googleLogin': 'Weiter mit Google',
+  'auth.orEmail': 'Oder weiter mit E-Mail',
 
   // Data-layer error codes (store.ts / remote-store.ts / supabase.ts / credentials.ts)
   'errors.noBackend': 'Kein Backend verbunden — Daten werden nur auf diesem Gerät gespeichert.',
