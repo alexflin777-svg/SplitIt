@@ -22,6 +22,7 @@ export default function NewEventPage() {
   const [members, setMembers] = useState<string[]>([t('eventNew.defaultYou')]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
   const multiUser = isMultiUser();
   // В сетевом режиме локальные друзья не предлагаются: участники приходят по приглашению.
   const localFriends = useSavedFriends();
@@ -31,7 +32,8 @@ export default function NewEventPage() {
     getActiveSession().then((u) => {
       if (u) {
         setUserProfile(u);
-        setMembers([u.full_name || t('eventNew.defaultYou')]);
+        // Меняем только себя (первый элемент): уже введённые имена гостей не стираются.
+        setMembers((prev) => [u.full_name || t('eventNew.defaultYou'), ...prev.slice(1)]);
         if (u.preferred_currency) setCurrency(u.preferred_currency);
       }
     });
@@ -75,10 +77,17 @@ export default function NewEventPage() {
       name: name.trim() || t('eventNew.defaultEventName'),
       category,
       currency,
-      memberNames: multiUser ? undefined : members,
+      memberNames: members,
     });
 
     setIsCreating(false);
+    if (data && error) {
+      // Событие создано, но часть гостей не добавилась: показываем, кого именно,
+      // и даём перейти в событие, а не создавать его повторно.
+      setCreateError(error);
+      setCreatedEventId(data.id);
+      return;
+    }
     if (error || !data) {
       setCreateError(error ?? t('eventNew.errorCreateFailed'));
       return;
@@ -164,9 +173,8 @@ export default function NewEventPage() {
           </select>
         </div>
 
-        {/* В сетевом режиме участники — реальные auth.users и входят только по
-            приглашению. Локальный список имён нельзя показывать как сохранённый. */}
-        {!multiUser && (
+        {/* В сетевом режиме имена становятся гостями события (group_participants),
+            люди с аккаунтом присоединяются по приглашению. */}
           <div className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
             {t('eventNew.membersLabel', { count: members.length })}
@@ -247,7 +255,6 @@ export default function NewEventPage() {
             ))}
           </div>
           </div>
-        )}
 
         {/* Action Button */}
         {createError && (
@@ -257,6 +264,14 @@ export default function NewEventPage() {
             className="p-3 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
           >
             {createError}
+            {createdEventId && (
+              <Link
+                href={routes.eventDetail(createdEventId)}
+                className="mt-2 block text-center px-3 py-2 rounded-lg bg-white border border-rose-200 text-rose-800"
+              >
+                {t('eventNew.openCreatedEvent')}
+              </Link>
+            )}
           </div>
         )}
 
@@ -270,7 +285,7 @@ export default function NewEventPage() {
           id="btn-create-event"
           type="button"
           onClick={handleCreate}
-          disabled={isCreating}
+          disabled={isCreating || createdEventId !== null}
           className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
         >
           {isCreating ? t('eventNew.creating') : t('eventNew.createAndOpen')}

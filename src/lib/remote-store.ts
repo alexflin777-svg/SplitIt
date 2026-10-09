@@ -132,8 +132,8 @@ const GROUP_CORE_SELECT = `
 
 const EXPENSE_SELECT = `
   id, title, amount, currency, amount_in_group_currency, category,
-  paid_by_id, created_at,
-  expense_splits ( user_id, amount_owed )
+  paid_by_id, paid_by_participant_id, created_at,
+  expense_splits ( user_id, participant_id, amount_owed )
 `;
 
 function mapExpense(e: any): GroupExpense {
@@ -144,9 +144,11 @@ function mapExpense(e: any): GroupExpense {
     currency: e.currency,
     amountInGroupCurrency: Number(e.amount_in_group_currency),
     category: e.category ?? 'other',
-    paidById: e.paid_by_id,
+    // Гость (20261010000000) хранится только как participant: paid_by_id/user_id
+    // у него NULL, а в members он лежит под id участника — см. mapGroup.
+    paidById: e.paid_by_id ?? e.paid_by_participant_id,
     splits: (e.expense_splits ?? []).map((split: any) => ({
-      userId: split.user_id,
+      userId: split.user_id ?? split.participant_id,
       amountOwed: Number(split.amount_owed),
     })),
     createdAt: e.created_at,
@@ -417,6 +419,18 @@ export async function addSettlement(
 ): Promise<RemoteResult<true>> {
   if (!supabase) return fail(noBackend());
 
+  // Переводы пока хранятся только между аккаунтами: payer_id/payee_id ссылаются
+  // на profiles, а RLS требует payer = auth.uid(). С гостем запись упала бы на
+  // FK или RLS с непонятным текстом — говорим прямо (todo.md P1-15).
+  const { data: guests, error: guestError } = await supabase
+    .from('group_participants')
+    .select('id')
+    .eq('group_id', groupId)
+    .eq('kind', 'guest')
+    .in('id', [settlement.fromUserId, settlement.toUserId]);
+  if (guestError) return fail(translate(guestError));
+  if ((guests ?? []).length > 0) return fail(t('errors.settlementWithGuest'));
+
   const { error } = await supabase.from('settlements').insert({
     group_id: groupId,
     payer_id: settlement.fromUserId,
@@ -426,6 +440,8 @@ export async function addSettlement(
     payment_method: settlement.paymentMethod,
   });
 
+  // settlements_insert_payer: отметить перевод может только тот, кто платил.
+  if (error?.code === '42501') return fail(t('errors.settlementOnlyPayer'));
   return error ? fail(translate(error)) : { data: true, error: null };
 }
 

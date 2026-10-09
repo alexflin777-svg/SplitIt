@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': '活动成员（{count}）',
   'eventNew.quickPickFriends': '从已保存的好友中快速选择：',
   'eventNew.memberPlaceholder': '成员姓名…',
-  'eventNew.multiUserNote': '这是共享活动：成员将通过您创建后发送的邀请链接加入。',
+  'eventNew.multiUserNote': '添加的名字会成为访客：可以为他们记录支出。若要让对方在自己手机上看到活动，请在创建后发送邀请链接。',
+  'eventNew.openCreatedEvent': '打开活动',
   'eventNew.creating': '正在创建…',
   'eventNew.createAndOpen': '创建活动并打开',
 
@@ -483,6 +484,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': '分享失败，请重试。',
   'summary.lockedHint': '活动已关闭：支出已锁定。',
   'errors.eventLocked': '该活动已关闭，支出无法再修改。创建者可以重新打开。',
+  'errors.settlementWithGuest': '暂时无法记录与访客的转账：访客没有账户。请在应用外结清。',
+  'errors.settlementOnlyPayer': '只有付款人可以标记这笔转账。请让对方在自己的应用中操作。',
+  'errors.guestsNotAdded': '活动已创建，但以下参与者未能添加：{names}。请在活动页面添加。',
   'errors.publicRateLimited': '请求过多，请一小时后再试。',
 
   // Удаление аккаунта (T2, 2026-10-09)

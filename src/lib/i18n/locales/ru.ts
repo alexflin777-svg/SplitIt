@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Участники события ({count})',
   'eventNew.quickPickFriends': 'Быстрый выбор из сохраненных друзей:',
   'eventNew.memberPlaceholder': 'Имя участника...',
-  'eventNew.multiUserNote': 'Событие общее: участники присоединяются по ссылке-приглашению, которую вы отправите после создания.',
+  'eventNew.multiUserNote': 'Добавленные имена станут гостями — за них можно записывать расходы. Чтобы человек видел событие у себя, отправьте ему ссылку-приглашение после создания.',
+  'eventNew.openCreatedEvent': 'Открыть событие',
   'eventNew.creating': 'Создаём…',
   'eventNew.createAndOpen': 'Создать событие и перейти',
 
@@ -482,6 +483,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Не удалось поделиться. Попробуйте ещё раз.',
   'summary.lockedHint': 'Событие закрыто: расходы не меняются.',
   'errors.eventLocked': 'Событие закрыто: расходы нельзя менять. Владелец может открыть его снова.',
+  'errors.settlementWithGuest': 'Переводы с гостями пока не записываются: у гостя нет аккаунта. Рассчитайтесь с ним вне приложения.',
+  'errors.settlementOnlyPayer': 'Отметить этот перевод может только тот, кто платил. Попросите его сделать это у себя в приложении.',
+  'errors.guestsNotAdded': 'Событие создано, но не добавлены участники: {names}. Добавьте их на странице события.',
   'errors.publicRateLimited': 'Слишком много запросов. Попробуйте через час.',
 
   // Удаление аккаунта (T2, 2026-10-09)

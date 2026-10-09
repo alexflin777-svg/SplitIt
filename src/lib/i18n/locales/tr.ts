@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Etkinlik üyeleri ({count})',
   'eventNew.quickPickFriends': 'Kayıtlı arkadaşlardan hızlı seçim:',
   'eventNew.memberPlaceholder': 'Üye adı…',
-  'eventNew.multiUserNote': 'Bu ortak bir etkinliktir: üyeler, oluşturduktan sonra gönderdiğiniz davet bağlantısı ile katılır.',
+  'eventNew.multiUserNote': 'Eklediğin adlar misafir olur: harcamalarını kaydedebilirsin. Birinin etkinliği kendi telefonunda görmesi için oluşturduktan sonra davet bağlantısını gönder.',
+  'eventNew.openCreatedEvent': 'Etkinliği aç',
   'eventNew.creating': 'Oluşturuluyor…',
   'eventNew.createAndOpen': 'Etkinliği oluştur ve aç',
 
@@ -483,6 +484,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Paylaşılamadı. Tekrar dene.',
   'summary.lockedHint': 'Etkinlik kapalı: harcamalar kilitli.',
   'errors.eventLocked': 'Bu etkinlik kapalı, harcamalar artık değiştirilemez. Sahibi yeniden açabilir.',
+  'errors.settlementWithGuest': 'Misafirlerle yapılan transferler henüz kaydedilemiyor: misafirin hesabı yok. Uygulama dışında hesaplaşın.',
+  'errors.settlementOnlyPayer': 'Bu transferi yalnızca ödeyen kişi işaretleyebilir. Kendi uygulamasında yapmasını isteyin.',
+  'errors.guestsNotAdded': 'Etkinlik oluşturuldu, ancak şu katılımcılar eklenmedi: {names}. Onları etkinlik sayfasında ekleyin.',
   'errors.publicRateLimited': 'Çok fazla istek. Bir saat sonra tekrar dene.',
 
   // Удаление аккаунта (T2, 2026-10-09)

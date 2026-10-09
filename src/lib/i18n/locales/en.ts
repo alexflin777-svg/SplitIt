@@ -179,7 +179,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Event members ({count})',
   'eventNew.quickPickFriends': 'Quick pick from saved friends:',
   'eventNew.memberPlaceholder': 'Member name…',
-  'eventNew.multiUserNote': 'This is a shared event: members join via the invite link you send after creating it.',
+  'eventNew.multiUserNote': 'Names you add become guests: you can record their expenses. To let someone see the event on their phone, send them the invite link after creating it.',
+  'eventNew.openCreatedEvent': 'Open the event',
   'eventNew.creating': 'Creating…',
   'eventNew.createAndOpen': 'Create event and open',
 
@@ -494,6 +495,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Could not share. Please try again.',
   'summary.lockedHint': 'Event is closed: expenses are locked.',
   'errors.eventLocked': 'This event is closed, expenses can no longer be changed. The owner can reopen it.',
+  'errors.settlementWithGuest': 'Transfers with guests can’t be recorded yet: a guest has no account. Settle up with them outside the app.',
+  'errors.settlementOnlyPayer': 'Only the person who paid can mark this transfer. Ask them to do it in their app.',
+  'errors.guestsNotAdded': 'The event was created, but these participants were not added: {names}. Add them on the event page.',
   'errors.publicRateLimited': 'Too many requests. Please try again in an hour.',
 
   // Удаление аккаунта (T2, 2026-10-09)

@@ -75,14 +75,33 @@ export async function createGroup(input: {
   if (!session) return { data: null, error: t('errors.signInToCreateEvent') };
 
   if (isMultiUser()) {
-    // Участников по именам в сетевом режиме не добавляют: человек попадает в
-    // группу только через приглашение, иначе в базе появятся строки без
-    // настоящих пользователей и расчёт долгов повиснет на призраках.
-    return remote.createGroup({
+    const created = await remote.createGroup({
       name: input.name,
       category: input.category,
       currency: input.currency,
     });
+    if (created.error || !created.data) return created;
+
+    // Имена, введённые при создании, становятся гостями (group_participants,
+    // kind = 'guest'): за них можно записывать расходы, а человек с аккаунтом
+    // присоединяется по приглашению. Раньше эти имена молча выбрасывались (F5).
+    // Первый элемент — всегда сам создатель (на экране его нельзя удалить).
+    const guestNames = [...new Set((input.memberNames ?? []).slice(1).map((n) => n.trim()).filter(Boolean))];
+    if (guestNames.length === 0) return created;
+
+    const failed: string[] = [];
+    for (const name of guestNames) {
+      const added = await remote.addGuestMember(created.data.id, name);
+      if (added.error) failed.push(`${name} (${added.error})`);
+    }
+
+    const refreshed = await remote.fetchGroup(created.data.id);
+    const group = refreshed.data ?? created.data;
+    // Событие уже создано: возвращаем и его, и ошибку, чтобы экран не
+    // предлагал «создать ещё раз» и не плодил дубли.
+    if (failed.length > 0) return { data: group, error: t('errors.guestsNotAdded', { names: failed.join(', ') }) };
+    if (refreshed.error) return { data: group, error: refreshed.error };
+    return ok(group);
   }
 
   const group: Group = {

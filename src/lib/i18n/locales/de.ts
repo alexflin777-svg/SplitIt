@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Mitglieder des Ereignisses ({count})',
   'eventNew.quickPickFriends': 'Schnellauswahl aus gespeicherten Freunden:',
   'eventNew.memberPlaceholder': 'Name des Mitglieds…',
-  'eventNew.multiUserNote': 'Dies ist ein gemeinsames Ereignis: Mitglieder treten über den Einladungslink bei, den du nach der Erstellung sendest.',
+  'eventNew.multiUserNote': 'Hinzugefügte Namen werden Gäste: Du kannst ihre Ausgaben erfassen. Damit jemand das Event auf seinem Handy sieht, sende ihm nach dem Erstellen den Einladungslink.',
+  'eventNew.openCreatedEvent': 'Event öffnen',
   'eventNew.creating': 'Wird erstellt…',
   'eventNew.createAndOpen': 'Ereignis erstellen und öffnen',
 
@@ -482,6 +483,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Teilen fehlgeschlagen. Bitte erneut versuchen.',
   'summary.lockedHint': 'Event abgeschlossen: Ausgaben sind gesperrt.',
   'errors.eventLocked': 'Dieses Event ist abgeschlossen, Ausgaben können nicht mehr geändert werden. Der Besitzer kann es wieder öffnen.',
+  'errors.settlementWithGuest': 'Überweisungen mit Gästen können noch nicht erfasst werden: Ein Gast hat kein Konto. Rechnet außerhalb der App ab.',
+  'errors.settlementOnlyPayer': 'Nur die Person, die bezahlt hat, kann diese Überweisung markieren. Bitte sie, das in ihrer App zu tun.',
+  'errors.guestsNotAdded': 'Das Event wurde erstellt, aber diese Teilnehmer wurden nicht hinzugefügt: {names}. Füge sie auf der Event-Seite hinzu.',
   'errors.publicRateLimited': 'Zu viele Anfragen. Bitte in einer Stunde erneut versuchen.',
 
   // Удаление аккаунта (T2, 2026-10-09)

@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Membres de l\'événement ({count})',
   'eventNew.quickPickFriends': 'Sélection rapide parmi les amis enregistrés :',
   'eventNew.memberPlaceholder': 'Nom du membre…',
-  'eventNew.multiUserNote': 'Cet événement est partagé : les membres rejoignent via le lien d\'invitation que vous enverrez après sa création.',
+  'eventNew.multiUserNote': 'Les noms ajoutés deviennent des invités : vous pouvez enregistrer leurs dépenses. Pour qu’une personne voie l’événement sur son téléphone, envoyez-lui le lien d’invitation après la création.',
+  'eventNew.openCreatedEvent': 'Ouvrir l’événement',
   'eventNew.creating': 'Création…',
   'eventNew.createAndOpen': 'Créer l\'événement et l\'ouvrir',
 
@@ -482,6 +483,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Échec du partage. Réessayez.',
   'summary.lockedHint': 'Événement clôturé : dépenses verrouillées.',
   'errors.eventLocked': 'Cet événement est clôturé, les dépenses ne peuvent plus être modifiées. Le propriétaire peut le rouvrir.',
+  'errors.settlementWithGuest': 'Les virements avec des invités ne peuvent pas encore être enregistrés : un invité n’a pas de compte. Réglez-les hors de l’application.',
+  'errors.settlementOnlyPayer': 'Seule la personne qui a payé peut marquer ce virement. Demandez-lui de le faire dans son application.',
+  'errors.guestsNotAdded': 'L’événement a été créé, mais ces participants n’ont pas été ajoutés : {names}. Ajoutez-les sur la page de l’événement.',
   'errors.publicRateLimited': 'Trop de requêtes. Réessayez dans une heure.',
 
   // Удаление аккаунта (T2, 2026-10-09)

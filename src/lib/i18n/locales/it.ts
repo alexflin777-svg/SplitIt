@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Membri dell\'evento ({count})',
   'eventNew.quickPickFriends': 'Selezione rapida dagli amici salvati:',
   'eventNew.memberPlaceholder': 'Nome del membro…',
-  'eventNew.multiUserNote': 'Questo è un evento condiviso: i membri si uniscono tramite il link di invito che invierai dopo la creazione.',
+  'eventNew.multiUserNote': 'I nomi aggiunti diventano ospiti: puoi registrare le loro spese. Perché qualcuno veda l’evento sul suo telefono, inviagli il link di invito dopo la creazione.',
+  'eventNew.openCreatedEvent': 'Apri l’evento',
   'eventNew.creating': 'Creazione…',
   'eventNew.createAndOpen': 'Crea evento e apri',
 
@@ -482,6 +483,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'Condivisione non riuscita. Riprova.',
   'summary.lockedHint': 'Evento chiuso: spese bloccate.',
   'errors.eventLocked': 'Questo evento è chiuso, le spese non si possono più modificare. Il proprietario può riaprirlo.',
+  'errors.settlementWithGuest': 'I trasferimenti con gli ospiti non si possono ancora registrare: un ospite non ha un account. Saldate fuori dall’app.',
+  'errors.settlementOnlyPayer': 'Solo chi ha pagato può segnare questo trasferimento. Chiedigli di farlo nella sua app.',
+  'errors.guestsNotAdded': 'L’evento è stato creato, ma questi partecipanti non sono stati aggiunti: {names}. Aggiungili nella pagina dell’evento.',
   'errors.publicRateLimited': 'Troppe richieste. Riprova tra un’ora.',
 
   // Удаление аккаунта (T2, 2026-10-09)

@@ -119,16 +119,39 @@ function applyRealtimeChange(groupId: string, change: GroupRealtimeChange | unde
     return;
   }
 
-  void mutateGlobal(
+  // Гость, добавленный на другом устройстве, приходит в расходе раньше, чем в
+  // members (group_participants нет в realtime-публикации). Такой расход
+  // нельзя просто вклеить: доля неизвестного участника молча выпала бы из
+  // итогов. Поэтому в этом случае группа перечитывается целиком.
+  let unknownParty = false;
+  const noteUnknown = (group: Group | undefined) => {
+    if (group && change.type === 'expense-upsert' && hasUnknownParty(group, change.expense)) unknownParty = true;
+  };
+
+  const single = mutateGlobal(
     (key) => Array.isArray(key) && key[0] === 'splitit:group' && key[1] === groupId,
-    (current) => patchGroup(current as RemoteResult<Group> | undefined, change),
+    (current) => {
+      noteUnknown((current as RemoteResult<Group> | undefined)?.data ?? undefined);
+      return patchGroup(current as RemoteResult<Group> | undefined, change);
+    },
     { revalidate: false },
   );
-  void mutateGlobal(
+  const list = mutateGlobal(
     GROUPS_CACHE_KEY,
-    (current) => patchGroups(current as RemoteResult<Group[]> | undefined, change),
+    (current) => {
+      noteUnknown((current as RemoteResult<Group[]> | undefined)?.data?.find((g) => g.id === groupId));
+      return patchGroups(current as RemoteResult<Group[]> | undefined, change);
+    },
     { revalidate: false },
   );
+  void Promise.all([single, list]).then(() => {
+    if (unknownParty) applyRealtimeChange(groupId, undefined);
+  });
+}
+
+function hasUnknownParty(group: Group, expense: Group['expenses'][number]): boolean {
+  const known = new Set(group.members.map((m) => m.id));
+  return !known.has(expense.paidById) || expense.splits.some((s) => !known.has(s.userId));
 }
 
 export function useGroups() {

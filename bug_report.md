@@ -1,10 +1,20 @@
 # SplitIT — Bug Report
 
-**Дата последнего круга:** 2026-10-09 (цикл «Launch hardening 1», ветка `launch/international`)
+**Дата последнего круга:** 2026-10-09 (цикл «iPhone-фидбек 1», ветка `launch/international`)
 
 **Архив прошлых кругов:** [bug_reports/2026-07-31-round-5.md](bug_reports/2026-07-31-round-5.md), раздел «Release audit — 2026-08-03» ниже.
 
 ---
+
+## Круг 2026-10-09 — iPhone-фидбек 1 (проверка владельцем на iPhone 13)
+
+| # | Дефект | Причина | Исправление / доказательство |
+|---|---|---|---|
+| F1 | «Импорт» на вкладке Друзья закрывает приложение | В `Info.plist` нет `NSContactsUsageDescription` — iOS убивает процесс при запросе доступа | Ключи контактов/камеры/фото + `ru.lproj`; `test/native-permissions.test.mjs` |
+| F4 | Аватар не сохраняется (в `profiles` остаётся «👤») | В `/profile` фото применялось только по кнопке «Сохранить»; при регистрации — только в `user_metadata` | Запись сразу после выбора; upsert после регистрации; `test/signup-profile.test.mjs`, `e2e/profile-avatar.spec.ts` |
+| F5 | **Расход в событии с гостем не сохраняется никогда** (S0, данные) | `add/update_expense_with_splits` проверяли id только по `group_members`, а гость живёт в `group_participants` → 22023 «Доли содержат пользователя вне группы» / «Плательщик не состоит в группе». Плюс `createGroup` в сетевом режиме молча выбрасывал имена участников | Миграция `20261010000000_guest_participants_in_expenses.sql`; `test/guest-expenses-rls.test.mjs` — без миграции 8 из 16 тестов падают ровно с прод-ошибками, с миграцией 18/18; `test/remote-guests.test.mjs` |
+
+Остаётся: переводы (settlements) с гостем — честный отказ с понятным текстом, запись невозможна до новой миграции (`todo.md` P1-15).
 
 ## Круг 2026-10-09 — Launch hardening 1 (T1: нестабильные E2E)
 

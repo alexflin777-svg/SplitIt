@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'イベントメンバー（{count}人）',
   'eventNew.quickPickFriends': '保存済みの友達からすばやく選択：',
   'eventNew.memberPlaceholder': 'メンバー名…',
-  'eventNew.multiUserNote': 'これは共有イベントです。作成後に送信する招待リンクからメンバーが参加します。',
+  'eventNew.multiUserNote': '追加した名前はゲストになり、その人の支出を記録できます。本人のスマホでイベントを見られるようにするには、作成後に招待リンクを送ってください。',
+  'eventNew.openCreatedEvent': 'イベントを開く',
   'eventNew.creating': '作成中…',
   'eventNew.createAndOpen': 'イベントを作成して開く',
 
@@ -483,6 +484,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': '共有できませんでした。もう一度お試しください。',
   'summary.lockedHint': 'イベントは締められています：支出はロック中。',
   'errors.eventLocked': 'このイベントは締められているため、支出を変更できません。オーナーは再開できます。',
+  'errors.settlementWithGuest': 'ゲストとの送金はまだ記録できません。ゲストにはアカウントがありません。アプリの外で精算してください。',
+  'errors.settlementOnlyPayer': 'この送金を記録できるのは支払った本人だけです。本人のアプリで記録してもらってください。',
+  'errors.guestsNotAdded': 'イベントは作成されましたが、次の参加者は追加されませんでした: {names}。イベントページで追加してください。',
   'errors.publicRateLimited': 'リクエストが多すぎます。1時間後にお試しください。',
 
   // Удаление аккаунта (T2, 2026-10-09)

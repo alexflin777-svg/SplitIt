@@ -167,7 +167,8 @@ export const messages: Record<string, string> = {
   'eventNew.membersLabel': 'Miembros del evento ({count})',
   'eventNew.quickPickFriends': 'Selección rápida de amigos guardados:',
   'eventNew.memberPlaceholder': 'Nombre del miembro…',
-  'eventNew.multiUserNote': 'Este es un evento compartido: los miembros se unen mediante el enlace de invitación que envíes tras crearlo.',
+  'eventNew.multiUserNote': 'Los nombres que añadas serán invitados: puedes registrar sus gastos. Para que alguien vea el evento en su móvil, envíale el enlace de invitación después de crearlo.',
+  'eventNew.openCreatedEvent': 'Abrir el evento',
   'eventNew.creating': 'Creando…',
   'eventNew.createAndOpen': 'Crear evento y abrir',
 
@@ -482,6 +483,9 @@ export const messages: Record<string, string> = {
   'summary.shareFailed': 'No se pudo compartir. Inténtalo de nuevo.',
   'summary.lockedHint': 'Evento cerrado: los gastos están bloqueados.',
   'errors.eventLocked': 'Este evento está cerrado y los gastos ya no se pueden cambiar. El propietario puede reabrirlo.',
+  'errors.settlementWithGuest': 'Todavía no se pueden registrar transferencias con invitados: un invitado no tiene cuenta. Saldad cuentas fuera de la app.',
+  'errors.settlementOnlyPayer': 'Solo quien pagó puede marcar esta transferencia. Pídele que lo haga en su app.',
+  'errors.guestsNotAdded': 'El evento se creó, pero no se añadieron estos participantes: {names}. Añádelos en la página del evento.',
   'errors.publicRateLimited': 'Demasiadas solicitudes. Inténtalo dentro de una hora.',
 
   // Удаление аккаунта (T2, 2026-10-09)
