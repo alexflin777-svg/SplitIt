@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, CheckCircle2, ArrowRight, User, Sparkles, Camera, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
 import { signUpUser, signInUser, signInWithGoogle, resetPassword, updatePassword, getActiveSession, saveLocalSession, UserProfile } from '@/lib/supabase';
 import { getConfigProblem } from '@/lib/env';
-import { processAvatarFile } from '@/lib/avatar';
+import { PRESET_AVATARS, processAvatarFile } from '@/lib/avatar';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
@@ -37,7 +37,7 @@ function AuthForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const presetAvatars = ['👤', '👨‍💻', '👩‍🎨', '🦊', '🚀', '🐱', '🐼', '🕶️'];
+  const presetAvatars = PRESET_AVATARS;
   const configProblem = getConfigProblem();
 
   useEffect(() => {
@@ -109,7 +109,7 @@ function AuthForm() {
     // угодно под любым email.
     if (mode === 'register') {
       const selectedAvatar = customAvatarPreview || avatarUrl;
-      const { data, error, requiresEmailConfirmation } = await signUpUser(
+      const { data, error, requiresEmailConfirmation, profileSyncError } = await signUpUser(
         email,
         password,
         fullName || t('auth.defaultUserName'),
@@ -126,6 +126,13 @@ function AuthForm() {
         return;
       }
       setStatusMessage(t('auth.registerSuccess', { name: data.full_name }));
+      if (profileSyncError) {
+        // Вход выполнен, аватар не записан: показываем причину и ведём в профиль,
+        // где фото можно выбрать снова (там оно сохраняется сразу).
+        setErrorMessage(t('auth.avatarSyncFailed', { error: profileSyncError }));
+        setTimeout(() => router.push(routes.profile()), 4000);
+        return;
+      }
       setTimeout(() => router.push(getSafeReturnPath(searchParams.get('next'))), 800);
     } else if (mode === 'login') {
       const { data, error } = await signInUser(email, password);

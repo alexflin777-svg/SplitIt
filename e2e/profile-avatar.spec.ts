@@ -107,3 +107,36 @@ test.describe('Быстрый редактор профиля на главно�
     await expect(page.getByTestId('home-avatar-button')).toHaveText('👤');
   });
 });
+
+test.describe('Фото в профиле сохраняется сразу (F4)', () => {
+  test('фото записывается без кнопки «Сохранить», несохранённое имя не уезжает вместе с ним', async ({ page }) => {
+    await seed(page);
+    await page.goto('/profile');
+    await page.locator('form input[type=text]').first().fill('Черновик имени');
+    await page.locator('input[type=file]').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_1PX });
+    await expect(page.getByTestId('profile-avatar').locator('img')).toBeVisible();
+    const stored = await storedSession(page);
+    expect(stored.avatar_url).toMatch(/^data:image\/jpeg;base64,/);
+    expect(stored.full_name).toBe('Демо Аккаунт');
+
+    await page.reload();
+    await expect(page.getByTestId('profile-avatar').locator('img')).toBeVisible();
+  });
+
+  test('сбой записи фото показывается ошибкой, прежний аватар остаётся', async ({ page }) => {
+    await seed(page);
+    await page.goto('/profile');
+    await expect(page.getByTestId('profile-avatar')).toHaveText('👤');
+    await page.evaluate((key) => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k: string, v: string) {
+        if (k === key) throw new DOMException('quota', 'QuotaExceededError');
+        return original.call(this, k, v);
+      };
+    }, SESSION_KEY);
+    await page.locator('input[type=file]').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_1PX });
+    await expect(page.getByRole('alert').filter({ hasText: 'Фото не сохранено' })).toBeVisible();
+    await expect(page.getByTestId('profile-avatar')).toHaveText('👤');
+    expect((await storedSession(page)).avatar_url).toBe('👤');
+  });
+});

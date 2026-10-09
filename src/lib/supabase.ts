@@ -42,6 +42,8 @@ export interface AuthResult {
   error: string | null;
   /** Регистрация создана, но Supabase ещё не выдал сессию до подтверждения email. */
   requiresEmailConfirmation?: boolean;
+  /** Аккаунт создан и вход выполнен, но выбранный аватар не записался в profiles. */
+  profileSyncError?: string;
 }
 
 const LOCAL_SESSION_KEY = 'splitit_local_user_session';
@@ -303,10 +305,14 @@ export async function signUpUser(
   if (weak) return { data: null, error: weak };
 
   if (supabase) {
+    // Фото (data URL до 200 КБ) в user_metadata не кладём: GoTrue копирует
+    // метаданные в JWT, и токен раздувается на каждый запрос. В метаданные —
+    // только эмодзи, фото уходит ниже прямой записью в profiles.
+    const metadataAvatar = avatarUrl && !avatarUrl.startsWith('data:') ? avatarUrl : '👤';
     const { data, error } = await supabase.auth.signUp({
       email: normEmail,
       password,
-      options: { data: { full_name: fullName, avatar_url: avatarUrl || '👤' } },
+      options: { data: { full_name: fullName, avatar_url: metadataAvatar } },
     });
 
     // Ошибка возвращается наверх, а не проглатывается: раньше провал регистрации
@@ -326,8 +332,22 @@ export async function signUpUser(
       return { data: profile, error: null, requiresEmailConfirmation: true };
     }
 
+    // Выбранный при регистрации аватар раньше уходил только в user_metadata, и
+    // в profiles оставался '👤' (F4, iPhone 2026-10-09). Пишем профиль явно,
+    // как только есть сессия. Сбой не отменяет регистрацию, но и не скрывается.
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: profile.id,
+      full_name: profile.full_name,
+      avatar_url: profile.avatar_url,
+      email: normEmail,
+      updated_at: new Date().toISOString(),
+    });
+
     const saveError = saveLocalSession(profile);
-    return saveError ? { data: null, error: saveError } : { data: profile, error: null };
+    if (saveError) return { data: null, error: saveError };
+    return profileError
+      ? { data: profile, error: null, profileSyncError: profileError.message }
+      : { data: profile, error: null };
   }
 
   // Локальный режим: аккаунт заводится на устройстве, пароль хранится хешем.

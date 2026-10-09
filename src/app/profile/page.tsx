@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Sparkles,
   Download,
+  Loader2,
 } from 'lucide-react';
 
 function subscribeToThemeClass(callback: () => void): () => void {
@@ -42,6 +43,10 @@ export default function ProfilePage() {
   const router = useRouter();
   const { t } = useI18n();
   const [user, setUser] = useState<UserProfile | null>(null);
+  // Последний записанный профиль. Фото сохраняется сразу (F4) поверх него, а не
+  // поверх формы: несохранённые правки имени/телефона не должны уехать вместе с фото.
+  const [savedProfile, setSavedProfile] = useState<UserProfile | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
   const [sessionLoaded, setSessionLoaded] = useState(false);
 
   const [defaultCurrency, setDefaultCurrency] = useState('RUB');
@@ -64,6 +69,7 @@ export default function ProfilePage() {
     getActiveSession().then((u) => {
       if (u) {
         setUser(u);
+        setSavedProfile(u);
         if (u.preferred_currency) setDefaultCurrency(u.preferred_currency);
         if (u.avatar_url && u.avatar_url.startsWith('data:image')) {
           setCustomAvatar(u.avatar_url);
@@ -75,18 +81,33 @@ export default function ProfilePage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = '';
+    if (!file || !savedProfile || avatarSaving) return;
     setAvatarError(null);
+    setAvatarSaving(true);
 
     // Проверка и сжатие до записи — см. src/lib/avatar.ts.
     const { dataUrl, error } = await processAvatarFile(file);
     if (error || !dataUrl) {
+      setAvatarSaving(false);
       setAvatarError(error ?? t('profile.avatarProcessError'));
-      e.target.value = '';
       return;
     }
+
+    // Раньше фото применялось только по кнопке «Сохранить» внизу формы — её
+    // легко было не нажать, и в базе оставался '👤'. Теперь запись сразу.
+    const updated: UserProfile = { ...savedProfile, avatar_url: dataUrl };
+    const { error: saveError } = await saveProfile(updated);
+    setAvatarSaving(false);
+    if (saveError) {
+      setAvatarError(t('profile.avatarSaveFailed', { error: saveError }));
+      return;
+    }
+    setSavedProfile(updated);
     setCustomAvatar(dataUrl);
     setUser((prev) => (prev ? { ...prev, avatar_url: dataUrl } : prev));
+    setSavedMessage(true);
+    setTimeout(() => setSavedMessage(false), 2500);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -104,6 +125,7 @@ export default function ProfilePage() {
       return;
     }
     setUser(updated);
+    setSavedProfile(updated);
     setSavedMessage(true);
     setTimeout(() => setSavedMessage(false), 2500);
   };
@@ -205,8 +227,13 @@ export default function ProfilePage() {
       <div className="stitch-card p-5 space-y-4">
         <div className="flex items-center gap-4">
           <div className="relative group">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center text-3xl shadow-md overflow-hidden">
-              {customAvatar ? (
+            <div
+              className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center text-3xl shadow-md overflow-hidden"
+              data-testid="profile-avatar"
+            >
+              {avatarSaving ? (
+                <Loader2 className="w-6 h-6 animate-spin" aria-label={t('profile.avatarSaving')} />
+              ) : customAvatar ? (
                 <img src={customAvatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <span>{user.avatar_url || '👤'}</span>
@@ -217,7 +244,7 @@ export default function ProfilePage() {
               title={t('profile.uploadPhotoTitle')}
             >
               <Camera className="w-3.5 h-3.5" />
-              <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+              <input type="file" accept="image/*" onChange={handleAvatarUpload} disabled={avatarSaving} className="sr-only" />
             </label>
           </div>
 
