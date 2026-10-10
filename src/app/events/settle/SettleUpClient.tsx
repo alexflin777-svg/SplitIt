@@ -30,6 +30,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   const [amountError, setAmountError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'cash'>('sbp');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     // Ничего не подставляем: раньше при отсутствии события показывалась
@@ -44,8 +45,15 @@ function SettleUpForm({ groupId }: { groupId: string }) {
       const memberIds = (loadedGroup.members || []).map((member: any) => member.id);
       const requestedFrom = searchParams.get('from');
       const requestedTo = searchParams.get('to');
+      // В общем событии платит либо сам пользователь, либо гость (у гостя нет
+      // аккаунта, его перевод отмечает любой участник — 20261012000000).
+      const requestedGuestPayer = (loadedGroup.members || []).some(
+        (m: any) => m.isGuest && m.id === requestedFrom,
+      );
       const nextPayer =
-        isMultiUser() && session && memberIds.includes(session.id)
+        isMultiUser() && requestedGuestPayer && requestedFrom
+          ? requestedFrom
+          : isMultiUser() && session && memberIds.includes(session.id)
           ? session.id
           : requestedFrom && memberIds.includes(requestedFrom)
             ? requestedFrom
@@ -55,6 +63,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
           ? requestedTo
           : memberIds.find((id: string) => id !== nextPayer) ?? nextPayer;
 
+      setSessionId(session?.id ?? null);
       setPayerId(nextPayer);
       setPayeeId(nextPayee);
       setGroup(loadedGroup);
@@ -70,6 +79,9 @@ function SettleUpForm({ groupId }: { groupId: string }) {
   }
 
   const payerMember = (group.members || []).find((m: any) => m.id === payerId) || group.members[0];
+  const payerOptions = isMultiUser()
+    ? (group.members || []).filter((m: any) => m.id === sessionId || m.isGuest)
+    : group.members || [];
   const payeeMember = (group.members || []).find((m: any) => m.id === payeeId) || group.members[0];
 
   const handleSettleSubmit = async (e: React.FormEvent) => {
@@ -187,10 +199,11 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             <select
               value={payerId}
               onChange={(e) => setPayerId(e.target.value)}
-              disabled={isMultiUser()}
+              disabled={payerOptions.length <= 1}
+              data-testid="settle-payer"
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
-              {(group.members || []).map((m: any) => (
+              {payerOptions.map((m: any) => (
                 <option key={m.id} value={m.id}>
                   {m.avatar || '👤'} {m.name}
                 </option>

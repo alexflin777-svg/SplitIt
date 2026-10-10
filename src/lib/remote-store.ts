@@ -36,6 +36,8 @@ export interface GroupMember {
   role: string;
   email?: string;
   phone?: string;
+  /** Гость без аккаунта (group_participants.kind = 'guest'). */
+  isGuest?: boolean;
 }
 
 export interface GroupExpense {
@@ -127,7 +129,7 @@ const GROUP_CORE_SELECT = `
   id, name, category, default_currency, status, created_by, created_at, updated_at,
   group_members ( user_id, role, profiles ( id, full_name, avatar_url, email, phone ) ),
   group_participants ( id, display_name, kind, profile_id, created_by ),
-  settlements ( id, payer_id, payee_id, amount, currency, payment_method, status, created_at )
+  settlements ( id, payer_id, payee_id, payer_participant_id, payee_participant_id, amount, currency, payment_method, status, created_at )
 `;
 
 const EXPENSE_SELECT = `
@@ -180,6 +182,7 @@ function mapGroup(row: any): Group {
         name: p.display_name,
         avatar: '👤',
         role: 'member',
+        isGuest: true,
         email: undefined,
         phone: undefined,
       }))
@@ -189,8 +192,9 @@ function mapGroup(row: any): Group {
       .sort((a: GroupExpense, b: GroupExpense) => b.createdAt.localeCompare(a.createdAt)),
     settlements: (row.settlements ?? []).map((s: any) => ({
       id: s.id,
-      fromUserId: s.payer_id,
-      toUserId: s.payee_id,
+      // Гость (20261012000000) хранится только как participant — как в расходах.
+      fromUserId: s.payer_id ?? s.payer_participant_id,
+      toUserId: s.payee_id ?? s.payee_participant_id,
       amount: Number(s.amount),
       currency: s.currency ?? 'RUB',
       paymentMethod: s.payment_method ?? 'sbp',
@@ -428,9 +432,11 @@ export async function addSettlement(
 ): Promise<RemoteResult<true>> {
   if (!supabase) return fail(noBackend());
 
-  // Переводы пока хранятся только между аккаунтами: payer_id/payee_id ссылаются
-  // на profiles, а RLS требует payer = auth.uid(). С гостем запись упала бы на
-  // FK или RLS с непонятным текстом — говорим прямо (todo.md P1-15).
+  // Перевод с гостем (у гостя нет аккаунта) записывает RPC record_settlement
+  // (20261012000000): отметить его может любой участник события, кроме
+  // закрытого. Между аккаунтами — прежняя прямая запись под RLS
+  // settlements_insert_payer (только от своего имени), в том числе в закрытом
+  // событии, как и до этой миграции.
   const { data: guests, error: guestError } = await supabase
     .from('group_participants')
     .select('id')
@@ -438,7 +444,19 @@ export async function addSettlement(
     .eq('kind', 'guest')
     .in('id', [settlement.fromUserId, settlement.toUserId]);
   if (guestError) return fail(translate(guestError));
-  if ((guests ?? []).length > 0) return fail(t('errors.settlementWithGuest'));
+  if ((guests ?? []).length > 0) {
+    const { data: createdId, error: rpcError } = await supabase.rpc('record_settlement', {
+      p_group_id: groupId,
+      p_payer_id: settlement.fromUserId,
+      p_payee_id: settlement.toUserId,
+      p_amount: settlement.amount,
+      p_currency: settlement.currency,
+      p_payment_method: settlement.paymentMethod,
+    });
+    if (rpcError?.code === 'P0423') return fail(t('errors.settlementEventLocked'));
+    if (rpcError) return fail(translate(rpcError));
+    return createdId ? { data: true, error: null } : fail(t('errors.noCreatedIdSettlement'));
+  }
 
   const { error } = await supabase.from('settlements').insert({
     group_id: groupId,
@@ -599,6 +617,11 @@ export function subscribeToGroup(groupId: string, onChange: (change: GroupRealti
       onChange({ type: 'refetch', groupId, reason: 'settlements' });
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => {
+      onChange({ type: 'refetch', groupId, reason: 'members' });
+    })
+    // Гости (20261012000000 добавила таблицу в публикацию): гость, добавленный
+    // на другом устройстве, появляется сразу, а не с первым расходом с ним.
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_participants', filter: `group_id=eq.${groupId}` }, () => {
       onChange({ type: 'refetch', groupId, reason: 'members' });
     })
     .subscribe();

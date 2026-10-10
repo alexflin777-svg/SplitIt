@@ -127,12 +127,51 @@ test('если гость не добавился — событие возвр�
   assert.doesNotMatch(res.error ?? '', /Петя/);
 });
 
-test('перевод с гостем не уходит в базу и даёт понятную ошибку', async () => {
+test('перевод с гостем записывается RPC record_settlement, без прямой записи в settlements (G3)', async () => {
   handlers['/rest/v1/group_participants'] = () => json([{ id: GUEST }]);
+  handlers['/rest/v1/rpc/record_settlement'] = () => json('55555555-5555-4555-8555-555555555555');
+  const res = await remote.addSettlement(GROUP, { fromUserId: GUEST, toUserId: ME, amount: 100, currency: 'RUB', paymentMethod: 'cash' });
+  assert.equal(res.error, null, res.error ?? '');
+  const rpc = calls.filter((c) => c.path === '/rest/v1/rpc/record_settlement');
+  assert.equal(rpc.length, 1);
+  assert.deepEqual(rpc[0].body, {
+    p_group_id: GROUP,
+    p_payer_id: GUEST,
+    p_payee_id: ME,
+    p_amount: 100,
+    p_currency: 'RUB',
+    p_payment_method: 'cash',
+  });
+  assert.equal(calls.filter((c) => c.path === '/rest/v1/settlements').length, 0, 'прямая запись в обход RPC');
+});
+
+test('перевод с гостем в закрытом событии — понятный текст, а не сырой P0423', async () => {
+  handlers['/rest/v1/group_participants'] = () => json([{ id: GUEST }]);
+  handlers['/rest/v1/rpc/record_settlement'] = () => json({ message: 'Событие закрыто', code: 'P0423' }, 400);
   const res = await remote.addSettlement(GROUP, { fromUserId: ME, toUserId: GUEST, amount: 100, currency: 'RUB', paymentMethod: 'cash' });
   assert.ok(res.error, 'ошибки нет');
+  assert.match(res.error, /закрыт|closed/i);
   assert.match(res.error, /гост|guest/i);
-  assert.equal(calls.filter((c) => c.path === '/rest/v1/settlements').length, 0, 'запись перевода всё равно отправлена');
+});
+
+test('перевод с гостем читается: сторона-гость берётся из *_participant_id', async () => {
+  handlers['/rest/v1/groups'] = () =>
+    json({
+      ...groupRow([[GUEST, 'Петя']]),
+      settlements: [
+        {
+          id: 's-1', payer_id: null, payee_id: ME, payer_participant_id: GUEST, payee_participant_id: 'p-me',
+          amount: 250, currency: 'RUB', payment_method: 'cash', status: 'completed', created_at: '2026-10-10T10:00:00Z',
+        },
+      ],
+    });
+  handlers['/rest/v1/expenses'] = () => json([]);
+  const res = await remote.fetchGroup(GROUP);
+  assert.equal(res.error, null, res.error ?? '');
+  assert.deepEqual(
+    res.data.settlements.map((s) => [s.fromUserId, s.toUserId, s.amount]),
+    [[GUEST, ME, 250]],
+  );
 });
 
 test('отказ RLS при переводе за другого объясняется, а не показывается сырым кодом', async () => {
