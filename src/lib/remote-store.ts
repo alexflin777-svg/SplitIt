@@ -698,7 +698,21 @@ export async function addGuestMember(groupId: string, name: string): Promise<Rem
       role: participant.role ?? 'member',
       email: undefined,
       phone: undefined,
+      isGuest: true,
     },
     error: null
   };
+}
+
+/**
+ * Удаление гостя (G4, 20261013000000). Гость с расходами, долями или
+ * переводами не удаляется: база отвечает P0409 (или FK RESTRICT 23503, если
+ * расход появился одновременно) — показываем понятный текст, а не сырой код.
+ */
+export async function removeGuest(participantId: string): Promise<RemoteResult<true>> {
+  if (!supabase) return fail(noBackend());
+  const { error } = await supabase.rpc('remove_guest', { p_participant_id: participantId });
+  if (error?.code === 'P0409' || error?.code === '23503') return fail(t('errors.guestHasMoney'));
+  if (error?.code === 'P0002') return fail(t('errors.guestNotFound'));
+  return error ? fail(translate(error)) : { data: true, error: null };
 }

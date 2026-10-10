@@ -383,3 +383,34 @@ export async function joinWaitlist(email: string) {
 export const submitFeedback = remote.submitFeedback;
 
 export const addGuestMember = remote.addGuestMember;
+
+/**
+ * Удаляет гостя без денег (G4). Если гость платил, участвует в доле или в
+ * переводе — отказ с понятным текстом, ничего не удаляется: иначе пропали бы
+ * чужие деньги (в сети это ещё и FK RESTRICT).
+ */
+export async function removeGuest(groupId: string, memberId: string): Promise<RemoteResult<true>> {
+  if (isMultiUser()) return remote.removeGuest(memberId);
+
+  const groups = localGroups();
+  const idx = groups.findIndex((g) => g.id === groupId);
+  if (idx === -1) return { data: null, error: t('errors.eventUnavailableLocal') };
+  const group = groups[idx];
+  const member = group.members.find((m) => m.id === memberId);
+  if (!member) return { data: null, error: t('errors.guestNotFound') };
+  // Владельца события (он же пользователь этого устройства) удалить нельзя.
+  if (member.role === 'owner' || member.id === group.createdBy) return { data: null, error: t('errors.guestNotFound') };
+
+  const hasMoney =
+    group.expenses.some((e) => e.paidById === memberId || e.splits.some((s) => s.userId === memberId)) ||
+    group.settlements.some((s) => s.fromUserId === memberId || s.toUserId === memberId);
+  if (hasMoney) return { data: null, error: t('errors.guestHasMoney') };
+
+  groups[idx] = {
+    ...group,
+    members: group.members.filter((m) => m.id !== memberId),
+    updatedAt: new Date().toISOString(),
+  };
+  const error = writeLocal(groups);
+  return error ? { data: null, error } : ok(true);
+}

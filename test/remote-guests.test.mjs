@@ -174,6 +174,32 @@ test('перевод с гостем читается: сторона-гость
   );
 });
 
+test('удаление гостя с деньгами (P0409) — понятный текст, а не код (G4)', async () => {
+  handlers['/rest/v1/rpc/remove_guest'] = () =>
+    json({ message: 'У гостя есть расходы — сначала перенесите или удалите их', code: 'P0409' }, 400);
+  const res = await remote.removeGuest(GUEST);
+  assert.equal(res.data, null);
+  assert.match(res.error ?? '', /расход|expense/i);
+  assert.doesNotMatch(res.error ?? '', /P0409/);
+  const rpc = calls.filter((c) => c.path === '/rest/v1/rpc/remove_guest');
+  assert.deepEqual(rpc.map((c) => c.body), [{ p_participant_id: GUEST }]);
+});
+
+test('гонка: FK RESTRICT (23503) при удалении гостя — тот же понятный текст', async () => {
+  handlers['/rest/v1/rpc/remove_guest'] = () =>
+    json({ message: 'update or delete on table "group_participants" violates foreign key constraint', code: '23503' }, 409);
+  const res = await remote.removeGuest(GUEST);
+  assert.doesNotMatch(res.error ?? '', /foreign key/);
+  assert.match(res.error ?? '', /расход|expense/i);
+});
+
+test('гость без денег удаляется', async () => {
+  handlers['/rest/v1/rpc/remove_guest'] = () => new Response(null, { status: 204 });
+  const res = await remote.removeGuest(GUEST);
+  assert.equal(res.error, null, res.error ?? '');
+  assert.equal(res.data, true);
+});
+
 test('отказ RLS при переводе за другого объясняется, а не показывается сырым кодом', async () => {
   handlers['/rest/v1/group_participants'] = () => json([]);
   handlers['/rest/v1/settlements'] = () =>

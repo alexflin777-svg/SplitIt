@@ -12,6 +12,7 @@ import {
   deleteGroup,
   createInvite,
   addGuestMember,
+  removeGuest,
   isMultiUser,
 } from '@/lib/store';
 import { formatMoney } from '@/lib/currency';
@@ -96,6 +97,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -342,6 +344,28 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     if (error) setActionError(error);
   };
 
+  // Гость: в сети — участник без аккаунта; локально — любой, кроме владельца.
+  // В закрытом событии состав не меняем; гость, ещё не подтверждённый
+  // сервером (временный id guest-…), удаляться не может.
+  const canRemoveMember = (m: any) =>
+    group.status !== 'completed' &&
+    !String(m.id).startsWith('guest-') &&
+    (isMultiUser() ? !!m.isGuest : m.role !== 'owner' && m.id !== group.createdBy && m.id !== userProfile?.id);
+
+  const handleRemoveMember = async (member: any) => {
+    // Повторный тап до ответа сервера дал бы «нельзя удалить» уже после удаления.
+    if (removingMemberId) return;
+    setActionError(null);
+    setRemovingMemberId(member.id);
+    const { error } = await removeGuest(group.id, member.id);
+    setRemovingMemberId(null);
+    if (error) {
+      setActionError(error);
+      return;
+    }
+    await refreshGroup();
+  };
+
   const handleSaveGroupName = async () => {
     if (!editedName.trim()) return;
     setIsEditingName(false);
@@ -403,9 +427,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   return (
     <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
       {actionError && (
-        <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
+        <div role="alert" data-testid="action-error" className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
           <p className="text-xs font-bold text-rose-700">{actionError}</p>
-          <button onClick={() => setActionError(null)} className="text-rose-500 hover:text-rose-700">
+          <button onClick={() => setActionError(null)} aria-label={t('eventDetail.cancel')} className="text-rose-500 hover:text-rose-700">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -667,6 +691,19 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             >
               <span className="text-base">{m.avatar || '👤'}</span>
               <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{m.name}</span>
+              {canRemoveMember(m) && (
+                <button
+                  type="button"
+                  data-testid={`remove-member-${m.id}`}
+                  onClick={() => void handleRemoveMember(m)}
+                  disabled={removingMemberId !== null}
+                  aria-label={t('eventDetail.removeGuest', { name: m.name })}
+                  title={t('eventDetail.removeGuest', { name: m.name })}
+                  className="-mr-1.5 p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
