@@ -13,8 +13,11 @@ export const metadata: Metadata = {
   description: 'Какие данные обрабатывает SplitIT, зачем и как их удалить.',
 };
 
-const UPDATED = '10 сентября 2026';
+const UPDATED = '10 октября 2026';
 const CONTACT = 'info@splitit-apps.com';
+// Публично указывается только компания, без персональных данных владельца (правило владельца, G5).
+const OPERATOR_RU = '«Константа Лабс»';
+const OPERATOR_EN = 'Konstanta Labs';
 
 export default function PrivacyPage() {
   return (
@@ -26,8 +29,8 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-semibold text-gray-900">Кто мы</h2>
         <p>
           SplitIT — приложение для учёта и деления общих расходов в поездках и группах
-          (веб-версия на splitit-apps.com и приложение для Android). Оператор данных:
-          владелец сервиса SplitIT; контакт для вопросов о данных: {CONTACT}.
+          (веб-версия на splitit-apps.com и приложение для Android). Оператор данных и
+          разработчик: {OPERATOR_RU}; контакт для вопросов о данных: {CONTACT}.
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Какие данные мы обрабатываем</h2>
@@ -68,9 +71,9 @@ export default function PrivacyPage() {
           заявка на странице{' '}
           <Link href="/delete-account" className="text-emerald-600 underline">/delete-account</Link>.
           В общих событиях ваши расходы сохраняются под именем «Удалённый пользователь», чтобы не
-          сломать итоги других участников: суммы, названия расходов и приложенные к ним чеки
-          остаются видны участникам этого события, но больше не связаны с вашим именем, email и
-          телефоном.
+          сломать итоги других участников: суммы и названия расходов остаются видны участникам
+          этого события, но больше не связаны с вашим именем, email и телефоном. Фото чеков
+          приложение не хранит: распознавание идёт на устройстве.
         </p>
         <p>
           Или напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим аккаунт
@@ -86,6 +89,7 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Privacy summary (English)</h2>
         <p className="text-gray-600">
+          SplitIT is developed and operated by {OPERATOR_EN} (data controller; contact: {CONTACT}).
           SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
           create. Android contact names are read locally only with your permission and never
           uploaded. No location tracking, no ads, no selling of data. Data is stored in Supabase

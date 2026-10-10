@@ -9,8 +9,11 @@ export const metadata: Metadata = {
   description: 'Правила использования сервиса SplitIT.',
 };
 
-const UPDATED = '10 сентября 2026';
+const UPDATED = '10 октября 2026';
 const CONTACT = 'info@splitit-apps.com';
+// Публично указывается только компания, без персональных данных владельца (правило владельца, G5).
+const OPERATOR_RU = '«Константа Лабс»';
+const OPERATOR_EN = 'Konstanta Labs';
 
 export default function TermsPage() {
   return (
@@ -22,6 +25,7 @@ export default function TermsPage() {
         <h2 className="text-lg font-semibold text-gray-900">Что такое SplitIT</h2>
         <p>
           SplitIT помогает записывать общие расходы группы и считать, кто кому сколько должен.
+          Сервис разрабатывает и предоставляет {OPERATOR_RU}.
           SplitIT — калькулятор и учёт: мы <strong>не</strong> переводим деньги, не храним
           платёжные реквизиты и не являемся платёжным сервисом. Все расчёты между участниками
           происходят вне приложения.
@@ -61,11 +65,11 @@ export default function TermsPage() {
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Контакты</h2>
-        <p>Вопросы по условиям: {CONTACT}.</p>
+        <p>{OPERATOR_RU}. Вопросы по условиям: {CONTACT}.</p>
 
         <h2 className="text-lg font-semibold text-gray-900">Terms summary (English)</h2>
         <p className="text-gray-600">
-          SplitIT is an expense-splitting calculator, not a payment service — no money moves
+          SplitIT is provided by {OPERATOR_EN} (contact: {CONTACT}). It is an expense-splitting calculator, not a payment service — no money moves
           through the app. The beta is provided “as is”. Core beta features are free. You own the
           content you create; group content is visible to group members. You may delete your
           account at any time; see the Privacy Policy for the deletion procedure.
