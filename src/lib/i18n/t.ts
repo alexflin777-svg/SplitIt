@@ -28,7 +28,13 @@ export function translateWith(
   vars?: Record<string, string | number>
 ): string {
   const dict = ALL_MESSAGES[locale] ?? ALL_MESSAGES[DEFAULT_LOCALE];
-  let str = dict[key] ?? ALL_MESSAGES[DEFAULT_LOCALE][key] ?? key;
+  // Множественное число: при числовом count берётся вариант `key#one|few|many`
+  // по правилам языка, если он есть в словаре; иначе — базовый ключ. Без этого
+  // экран писал «1 участников».
+  const count = vars?.count;
+  const plural =
+    typeof count === 'number' ? dict[`${key}#${new Intl.PluralRules(locale).select(count)}`] : undefined;
+  let str = plural ?? dict[key] ?? ALL_MESSAGES[DEFAULT_LOCALE][key] ?? key;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
       str = str.replaceAll(`{${k}}`, String(v));

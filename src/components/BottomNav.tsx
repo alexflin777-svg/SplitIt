@@ -37,8 +37,12 @@ export default function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pointer-events-none">
-      <div className="max-w-md mx-auto glass-panel rounded-2xl border border-slate-200/90 dark:border-slate-700/60 shadow-xl p-1.5 flex items-center justify-around pointer-events-auto">
+    <nav
+      data-testid="bottom-nav"
+      className="fixed bottom-0 left-0 right-0 z-50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pointer-events-none"
+    >
+      {/* Сплошной фон, как у шапки: сквозь полупрозрачную панель читался текст. */}
+      <div className="max-w-md mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-700/60 shadow-xl p-1.5 flex items-center justify-around pointer-events-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
+import MemberAvatar from '@/components/MemberAvatar';
 
 export default function EventBalanceClient({ groupId }: { groupId: string }) {
   const { t } = useI18n();
@@ -163,11 +164,11 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
               >
                 <div className="flex items-center gap-3">
                   <div className="flex items-center -space-x-1">
-                    <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs">
-                      {fromMember?.avatar || '👤'}
+                    <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs overflow-hidden">
+                      <MemberAvatar avatar={fromMember?.avatar} />
                     </div>
-                    <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs">
-                      {toMember?.avatar || '👤'}
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/50 border-2 border-white dark:border-slate-800 flex items-center justify-center text-sm font-bold shadow-xs overflow-hidden">
+                      <MemberAvatar avatar={toMember?.avatar} />
                     </div>
                   </div>
 
@@ -210,8 +211,8 @@ export default function EventBalanceClient({ groupId }: { groupId: string }) {
             return (
               <div key={id} className="stitch-card p-3.5 flex items-center justify-between bg-white dark:bg-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-base">
-                    {data.avatar}
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-base overflow-hidden flex-shrink-0">
+                    <MemberAvatar avatar={data.avatar} />
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-white text-xs min-w-0 truncate max-w-xs">{data.name}</h4>

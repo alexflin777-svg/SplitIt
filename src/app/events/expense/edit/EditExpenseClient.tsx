@@ -10,6 +10,8 @@ import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
 import { rescaleSplits, resolveSplitMode, sameTotal, type Split, type SplitMode } from '@/lib/split-rescale';
 import { useI18n } from '@/lib/i18n/provider';
+import { avatarGlyph } from '@/lib/avatar';
+import MemberAvatar from '@/components/MemberAvatar';
 
 export default function EditExpenseClient({ groupId, expenseId }: { groupId: string; expenseId: string }) {
   const router = useRouter();
@@ -348,7 +350,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
           >
             {(group.members || []).map((m: any) => (
               <option key={m.id} value={m.id}>
-                <span className="truncate max-w-[150px] inline-block align-bottom">{m.avatar || '👤'} {m.name}</span>
+                <span className="truncate max-w-[150px] inline-block align-bottom">{avatarGlyph(m.avatar)} {m.name}</span>
               </option>
             ))}
           </select>
@@ -407,7 +409,7 @@ export default function EditExpenseClient({ groupId, expenseId }: { groupId: str
                     >
                       {isSelected && <Check className="w-3.5 h-3.5" />}
                     </div>
-                    <span className="text-base">{member.avatar}</span>
+                    <span className="text-base w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={member.avatar} /></span>
                     <span className="text-xs font-bold text-slate-900 min-w-0 truncate max-w-xs">{member.name}</span>
                   </div>
 

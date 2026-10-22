@@ -18,6 +18,34 @@ export function isPhotoAvatar(avatar: string | null | undefined): avatar is stri
   return !!avatar && avatar.startsWith('data:image');
 }
 
+/** Семья через ZWJ с тонами кожи — около 20 code units; дальше это не значок. */
+const MAX_GLYPH_LENGTH = 24;
+
+/**
+ * Строка целиком из эмодзи: пиктограммы, флаги (пары regional indicator),
+ * склейки ZWJ, VS16, тоны кожи, теги субфлагов. Хотя бы одна пиктограмма или
+ * флаг обязательны — иначе «#», «1» и «*» (формально \p{Emoji}) тоже прошли бы.
+ */
+const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|‍|️|[\u{E0020}-\u{E007F}])+$/u;
+const HAS_PICTOGRAPH = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+
+/**
+ * Аватар в виде текста: для <option> и любого места, где нельзя показать <img>.
+ *
+ * Участник события получает avatar из profiles.avatar_url, а там у человека с
+ * фото лежит data:image/jpeg;base64,… на десятки килобайт. Экраны выводили
+ * поле как текст, и на iPhone поверх имени, суммы и кнопок карточки расхода
+ * ехала синяя base64-строка (2026-10-21). Выводим только пресеты и строки
+ * из одних эмодзи; фото, URL, base64 любой длины, буквы — нейтральный значок.
+ */
+export function avatarGlyph(avatar: string | null | undefined): string {
+  const value = avatar?.trim();
+  if (!value) return '👤';
+  if (PRESET_AVATARS.includes(value)) return value;
+  if (value.length > MAX_GLYPH_LENGTH || !EMOJI_ONLY.test(value) || !HAS_PICTOGRAPH.test(value)) return '👤';
+  return value;
+}
+
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024; // дальше нет смысла даже декодировать
 const TARGET_SIZE = 256;
 const JPEG_QUALITY = 0.85;

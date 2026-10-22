@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoney, convertCurrency } from '@/lib/currency';
@@ -47,6 +47,7 @@ export default function HomePage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const closeProfileEditor = useCallback(() => setProfileEditorOpen(false), []);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
 
   // Waitlist State
   const [waitlistEmail, setWaitlistEmail] = useState('');
@@ -314,6 +315,7 @@ export default function HomePage() {
           user={userProfile}
           onClose={closeProfileEditor}
           onSaved={(updated) => setUserProfile(updated)}
+          returnFocusRef={avatarButtonRef}
         />
       )}
       <div className="space-y-5 max-w-md mx-auto px-1 pb-28">
@@ -322,6 +324,7 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            ref={avatarButtonRef}
             onClick={() => setProfileEditorOpen(true)}
             aria-label={t('quickProfile.open')}
             data-testid="home-avatar-button"

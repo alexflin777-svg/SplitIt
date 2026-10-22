@@ -28,6 +28,25 @@ export function getCurrentInstalledVersion(): string {
   return BASE_APP_VERSION;
 }
 
+/** «1.0.2 (4)»: версия и номер сборки; номер не дублируется, если совпадает. */
+export function formatNativeVersion(info: { version: string; build?: string }): string {
+  return info.build && info.build !== info.version ? `${info.version} (${info.build})` : info.version;
+}
+
+/**
+ * Версия установленной нативной сборки: на iOS — CFBundleShortVersionString и
+ * CFBundleVersion (MARKETING_VERSION / CURRENT_PROJECT_VERSION в Xcode), на
+ * Android — versionName и versionCode. В вебе нативной версии нет — null.
+ * Без этого профиль на iPhone показывал зашитую BASE_APP_VERSION, какая бы
+ * сборка ни стояла (2026-10-21).
+ */
+export async function getNativeAppVersion(): Promise<string | null> {
+  const { Capacitor } = await import('@capacitor/core');
+  if (!Capacitor.isNativePlatform()) return null;
+  const { App } = await import('@capacitor/app');
+  return formatNativeVersion(await App.getInfo());
+}
+
 export type UpdateStatus = 'unconfigured' | 'up-to-date' | 'available' | 'error';
 
 export interface UpdateCheckResult {

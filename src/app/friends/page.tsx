@@ -5,6 +5,7 @@ import { UserPlus, Search, Phone, Info, Trash2 } from 'lucide-react';
 import { saveFriends } from '@/lib/supabase';
 import { useSavedFriends } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
+import MemberAvatar from '@/components/MemberAvatar';
 
 export default function FriendsPage() {
   const { t } = useI18n();
@@ -202,8 +203,8 @@ export default function FriendsPage() {
           filteredFriends.map((friend) => (
             <div key={friend.id} className="stitch-card p-4 flex items-center justify-between bg-white dark:bg-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-lg shadow-xs">
-                  {friend.avatar || '👤'}
+                <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-lg shadow-xs overflow-hidden flex-shrink-0">
+                  <MemberAvatar avatar={friend.avatar} />
                 </div>
                 <div>
                   <h4 className="font-extrabold text-slate-900 dark:text-white text-sm">{friend.name}</h4>

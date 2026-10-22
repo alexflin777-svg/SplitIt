@@ -12,6 +12,9 @@ interface Props {
   onClose: () => void;
   /** Вызывается только после успешной записи профиля. */
   onSaved: (updated: UserProfile) => void;
+  /** Куда вернуть фокус при закрытии. Safari/WebKit не фокусирует кнопку по
+   *  клику, поэтому document.activeElement при открытии — это body. */
+  returnFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -21,7 +24,7 @@ interface Props {
  * по кнопке «Сохранить» в профиле, и её легко было не нажать — в базе
  * оставался '👤'. Ошибка записи показывается, а не прячется.
  */
-export default function QuickProfileEditor({ user, onClose, onSaved }: Props) {
+export default function QuickProfileEditor({ user, onClose, onSaved, returnFocusRef }: Props) {
   const { t } = useI18n();
   const [name, setName] = useState(user.full_name);
   // 'processing' — фото сжимается, 'saving' — идёт запись. Пока занято, все
@@ -49,6 +52,7 @@ export default function QuickProfileEditor({ user, onClose, onSaved }: Props) {
   // Фокус внутрь шторки при открытии и обратно на кнопку-аватар при закрытии;
   // Tab не уходит на страницу под шторкой.
   useEffect(() => {
+    const returnTo = returnFocusRef;
     const opener = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
     dialog?.querySelector<HTMLElement>('button, input, [tabindex]')?.focus();
@@ -70,9 +74,9 @@ export default function QuickProfileEditor({ user, onClose, onSaved }: Props) {
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      opener?.focus();
+      (returnTo?.current ?? opener)?.focus();
     };
-  }, [onClose]);
+  }, [onClose, returnFocusRef]);
 
   const close = () => {
     if (!busy) onClose();

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
@@ -34,6 +34,23 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Viewport задаётся только здесь. Раньше <meta name="viewport"> писался руками
+ * в <head>, а Next добавлял свой по умолчанию — в out/*.html было два тега,
+ * и viewport-fit=cover (без него env(safe-area-inset-*) на iPhone равен 0)
+ * зависел от того, какой тег WebKit сочтёт последним.
+ *
+ * maximumScale=1: iOS сам увеличивает страницу при фокусе на поле с шрифтом
+ * меньше 16px и не возвращает масштаб — приложение «шире экрана». Масштаб жестом
+ * в WKWebView/Safari iOS 10+ этим не отключается (доступность сохраняется).
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -41,18 +58,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`light ${inter.variable}`}>
-      <head>
-        {/* maximum-scale=1: iOS сам увеличивает страницу при фокусе на поле с шрифтом
-            меньше 16px и не возвращает масштаб — приложение «шире экрана». Масштаб жестом
-            в WKWebView/Safari iOS 10+ этим не отключается (доступность сохраняется). */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-      </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
         <I18nProvider>
           <PushInit />
           <NativeAuthInit />
         {/* Top Navbar with Responsive Mobile Safe Area Support */}
-        <header className="app-header sticky top-0 z-40 w-full glass-panel border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-3">
+        {/* Фон шапки сплошной: с полупрозрачным glass-panel прокрученный текст
+            читался сквозь логотип и под статус-баром iPhone (ревью 2026-10-21). */}
+        <header className="app-header sticky top-0 z-40 w-full bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800/80 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] sm:pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-3">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2 group">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">

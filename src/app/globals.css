@@ -23,6 +23,16 @@
     --border: 215 25% 27%;
   }
 
+  /* Поле в фокусе (в том числе при экранной клавиатуре) браузер прокручивает
+     так, чтобы оно не оказалось под липкой шапкой или нижней панелью. Панель
+     при вводе не прячем: по одному фокусу нельзя узнать, открыта ли
+     клавиатура, а спрятанная навигация при закрытой клавиатуре — ловушка. */
+  /* Высота шапки = её padding-top + ~3rem (логотип h-9, pb-3, рамка). */
+  html {
+    scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem + 3.5rem);
+    scroll-padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   body {
     background-color: #f8fafc;
     color: #0f172a;
@@ -53,11 +63,32 @@
   html,
   body {
     -webkit-text-size-adjust: 100%;
+  }
+
+  /* Горизонтальную прокрутку гасим, но body не делаем контейнером прокрутки.
+     Было overflow-x: hidden и на html, и на body: html забирает overflow себе
+     (уходит во viewport), а у body hidden остаётся, overflow-y вычисляется в
+     auto — body становится scroll-контейнером, который сам никогда не
+     прокручивается. Липкая шапка (.app-header, sticky top-0) прилипала к нему
+     и уезжала вместе со страницей: на iPhone лента расходов и профиль
+     проезжали под часами и батареей (2026-10-21). clip режет так же, но
+     контейнер прокрутки не создаёт; где clip не поддержан, правило просто
+     не применится. */
+  html {
     overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: clip;
   }
 
   .app-header {
     padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 3.5rem);
+  }
+
+  /* Тот же запасной отступ, что у шапки: иначе поле в фокусе встаёт под неё. */
+  html {
+    scroll-padding-top: calc(max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 3.5rem) + 3.5rem);
   }
 
   /* WebKit iOS рисует input[type=date] нативным контролом со своей минимальной

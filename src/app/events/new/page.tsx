@@ -10,6 +10,7 @@ import { useSavedFriends } from '@/lib/data-hooks';
 import { createGroup, isMultiUser } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
+import MemberAvatar from '@/components/MemberAvatar';
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -201,7 +202,7 @@ export default function NewEventPage() {
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      <span>{friend.avatar || '👤'}</span>
+                      <span className="w-5 h-5 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={friend.avatar} /></span>
                       <span>{friend.name}</span>
                       {isAdded && <Check className="w-3.5 h-3.5" />}
                     </button>

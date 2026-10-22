@@ -11,6 +11,8 @@ import { getGroup, addExpense } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS, splitEvenly } from '@/lib/money';
 import { useI18n } from '@/lib/i18n/provider';
+import { avatarGlyph } from '@/lib/avatar';
+import MemberAvatar from '@/components/MemberAvatar';
 
 export default function NewExpenseClient({ groupId }: { groupId: string }) {
   const router = useRouter();
@@ -421,7 +423,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
           >
             {(group?.members || []).map((m: any) => (
               <option key={m.id} value={m.id}>
-                <span className="truncate max-w-[150px] inline-block align-bottom">{m.avatar || '👤'} {m.name}</span>
+                <span className="truncate max-w-[150px] inline-block align-bottom">{avatarGlyph(m.avatar)} {m.name}</span>
               </option>
             ))}
           </select>
@@ -502,7 +504,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
                   itemShares[member.id] ? (
                     <div key={member.id} className="flex items-center justify-between gap-2 text-xs" data-testid="item-share">
                       <span className="font-bold text-slate-700 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                        {member.avatar || '👤'} {member.name}
+                        {avatarGlyph(member.avatar)} {member.name}
                       </span>
                       <span className="font-extrabold text-blue-600">{formatMoney(itemShares[member.id], group?.currency || 'RUB')}</span>
                     </div>
@@ -540,7 +542,7 @@ export default function NewExpenseClient({ groupId }: { groupId: string }) {
                     >
                       {isSelected && <Check className="w-3.5 h-3.5" />}
                     </div>
-                    <span className="text-base">{member.avatar || '👤'}</span>
+                    <span className="text-base w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={member.avatar} /></span>
                     <span className="text-xs font-bold text-slate-900 min-w-0 truncate max-w-xs">{member.name}</span>
                   </div>
 

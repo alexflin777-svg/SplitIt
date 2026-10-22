@@ -49,6 +49,7 @@ import { useGroup } from '@/lib/data-hooks';
 import { resolveSplitMode } from '@/lib/split-rescale';
 import { DEFAULT_EXPENSE_PAGE_SIZE } from '@/lib/remote-store';
 import EventSummary from '../_components/EventSummary';
+import MemberAvatar from '@/components/MemberAvatar';
 
 /**
  * Экран «события нет на этом устройстве».
@@ -689,8 +690,8 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               key={m.id}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex-shrink-0"
             >
-              <span className="text-base">{m.avatar || '👤'}</span>
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{m.name}</span>
+              <span className="text-base w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={m.avatar} /></span>
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[10rem]">{m.name}</span>
               {canRemoveMember(m) && (
                 <button
                   type="button"
@@ -733,32 +734,33 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         ) : (
           <div className="space-y-3">
             {(group.expenses || []).slice(0, expenseLimit).map((expense: any) => {
-              const paidByMember =
-                (group.members || []).find((m: any) => m.id === expense.paidById) || group.members[0];
+              // Плательщика нет среди участников — пишем «Участник», а не
+              // приписываем расход первому участнику, как раньше.
+              const paidByMember = (group.members || []).find((m: any) => m.id === expense.paidById);
 
               return (
-                <div key={expense.id} className="stitch-card p-4 space-y-3 group hover:border-blue-300 transition-all bg-white dark:bg-slate-800">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 font-bold">
-                        {paidByMember?.avatar || '👤'}
+                <div key={expense.id} data-testid="expense-card" className="stitch-card p-4 space-y-3 group hover:border-blue-300 transition-all bg-white dark:bg-slate-800">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden" data-testid="expense-payer-avatar">
+                        <MemberAvatar avatar={paidByMember?.avatar} />
                       </div>
-                      <div>
-                        <h5 className="font-bold text-slate-900 dark:text-white text-sm min-w-0 truncate max-w-[200px]">{expense.title}</h5>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-2 break-words">{expense.title}</h5>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-2 break-words">
                           {t('eventDetail.paidByName')}{' '}
-                          <span className="font-bold text-slate-800 dark:text-slate-200 min-w-0 truncate inline-block max-w-[120px] align-bottom">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 flex-shrink-0">
                       <div className="text-right">
-                        <span className="block font-extrabold text-slate-900 dark:text-white text-base">
+                        <span className="block font-extrabold text-slate-900 dark:text-white text-base whitespace-nowrap" data-testid="expense-amount">
                           {formatMoney(expense.amount, expense.currency || group.currency)}
                         </span>
                         {expense.currency !== group.currency && (
-                          <span className="text-[10px] text-slate-400 font-semibold">
+                          <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">
                             ≈ {formatMoney(expense.amountInGroupCurrency, group.currency)}
                           </span>
                         )}
@@ -785,16 +787,16 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center gap-1.5">
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase">
                         {resolveSplitMode(expense) === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}
                       </span>
-                      <span>• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
+                      <span className="truncate" data-testid="expense-members-count">• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
                     </div>
 
                     {expense.createdAt ? (
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
                         <Calendar className="w-3 h-3 text-slate-400" />
                         {/* Дата берётся только из записи. Прежний fallback на
                             Date.now() рисовал сегодняшнее число у расхода без
@@ -851,7 +853,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                         className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-base">{f.avatar || '👤'}</span>
+                          <span className="text-base w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={f.avatar} /></span>
                           <div>
                             <span className="text-xs font-bold text-slate-900 dark:text-white block">{f.name}</span>
                             <span className="text-[10px] text-slate-400">{f.phone}</span>

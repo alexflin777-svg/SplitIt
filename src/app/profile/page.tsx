@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, signOutUser, UserProfile } from '@/lib/supabase';
 import { saveProfile } from '@/lib/store';
-import { checkForAppUpdates, getCurrentInstalledVersion, UpdateCheckResult } from '@/lib/app-updater';
+import { checkForAppUpdates, getCurrentInstalledVersion, getNativeAppVersion, UpdateCheckResult } from '@/lib/app-updater';
 import { requestNotificationPermission, sendInAppNotification } from '@/lib/notifications';
 import { useRouter } from 'next/navigation';
-import { processAvatarFile } from '@/lib/avatar';
+import { avatarGlyph, processAvatarFile } from '@/lib/avatar';
 import { useI18n } from '@/lib/i18n/provider';
 import DeleteAccountSection from './DeleteAccountSection';
 import {
@@ -58,8 +58,21 @@ export default function ProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // App updater state
-  // Версия — константа сборки: состояние и эффект не нужны (P1-6).
-  const currentVersion = getCurrentInstalledVersion();
+  // В вебе версия — константа сборки; в нативной оболочке — реальная версия
+  // установленной сборки, которую отдаёт Capacitor (асинхронно).
+  const [nativeVersion, setNativeVersion] = useState<string | null>(null);
+  const currentVersion = nativeVersion ?? getCurrentInstalledVersion();
+  useEffect(() => {
+    getNativeAppVersion()
+      .then((v) => {
+        if (v) setNativeVersion(v);
+      })
+      .catch((e) => {
+        // Не выдаём константу за версию установленной сборки.
+        console.error('Не удалось прочитать версию приложения', e);
+        setNativeVersion('—');
+      });
+  }, []);
   // Тема — это класс `dark` на <html>; читаем его как внешнее хранилище.
   const darkMode = useSyncExternalStore(subscribeToThemeClass, readDarkClass, () => false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -236,7 +249,7 @@ export default function ProfilePage() {
               ) : customAvatar ? (
                 <img src={customAvatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <span>{user.avatar_url || '👤'}</span>
+                <span>{avatarGlyph(user.avatar_url)}</span>
               )}
             </div>
             <label
@@ -248,9 +261,9 @@ export default function ProfilePage() {
             </label>
           </div>
 
-          <div>
-            <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{user.full_name}</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{user.email}</p>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-base break-words">{user.full_name}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium break-all">{user.email}</p>
             <span className="inline-block mt-1 text-[10px] font-extrabold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
               {t('profile.versionLabel', { version: currentVersion })}
             </span>

@@ -11,6 +11,7 @@ import { formatMoney } from '@/lib/currency';
 import { routes } from '@/lib/routes';
 import { parseAmount, AMOUNT_INPUT_PROPS } from '@/lib/money';
 import { useI18n } from '@/lib/i18n/provider';
+import { avatarGlyph } from '@/lib/avatar';
 
 function SettleUpForm({ groupId }: { groupId: string }) {
   const router = useRouter();
@@ -205,7 +206,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             >
               {payerOptions.map((m: any) => (
                 <option key={m.id} value={m.id}>
-                  {m.avatar || '👤'} {m.name}
+                  {avatarGlyph(m.avatar)} {m.name}
                 </option>
               ))}
             </select>
@@ -225,7 +226,7 @@ function SettleUpForm({ groupId }: { groupId: string }) {
             >
               {(group.members || []).map((m: any) => (
                 <option key={m.id} value={m.id}>
-                  {m.avatar || '👤'} {m.name}
+                  {avatarGlyph(m.avatar)} {m.name}
                 </option>
               ))}
             </select>
