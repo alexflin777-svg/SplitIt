@@ -72,3 +72,10 @@ export function warnIfMisconfigured(): void {
     console.warn(`[SplitIT] ${problem}`);
   }
 }
+
+/**
+ * Включать только когда в android/app есть google-services.json и серверная часть
+ * (таблица push_tokens + отправка). Иначе register() роняет приложение:
+ * инцидент 23.10.2026 — evidence/smoke-push-allow.out (FirebaseApp не инициализирован).
+ */
+export const PUSH_ENABLED = process.env.NEXT_PUBLIC_PUSH_ENABLED === '1';

@@ -171,7 +171,7 @@ async function runScenario(state) {
     { token: A.token },
   );
   check('повторное вступление B не дублирует членство',
-    repeatedMembership.ok && repeatedMembership.data?.length === 1,
+    repeat.ok && repeat.data === groupId && repeatedMembership.ok && repeatedMembership.data?.length === 1,
     `redeem HTTP ${repeat.status}; членство: ${JSON.stringify(repeatedMembership.data)}`);
 
   step('6. После вступления данные видны');

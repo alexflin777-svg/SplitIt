@@ -246,7 +246,12 @@ describe('Приглашения', () => {
   });
 
   test('тот же пользователь повторно по тому же коду не дублирует членство', async () => {
-    // Боб уже вступил в предыдущем тесте. Допустим и явный отказ RPC.
+    // Предусловие: Боб уже вступил в предыдущем тесте.
+    const beforeRepeat = await asUser(db, ALICE, () => db.query(
+      `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [aliceGroup, BOB],
+    ));
+    assert.equal(beforeRepeat.rows[0].n, 1, 'до повтора Боб должен быть участником');
     await asUser(db, BOB, () =>
       attempt(db, `SELECT public.redeem_group_invite('SECRET-CODE')`),
     );

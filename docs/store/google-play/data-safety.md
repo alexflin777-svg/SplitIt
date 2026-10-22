@@ -1,6 +1,6 @@
 # Google Play — Data safety (по фактическому коду)
 
-**Актуально на:** 2026-10-23 @ `19137c4`, ветка `release/1.0.2-closed-test` (изменения кандидата до коммита). Разработчик: **«Константа Лабс»** (Konstanta Labs).
+**Актуально на:** 2026-10-23; ветка release/1.0.2-closed-test, HEAD; точный SHA — RELEASE_CHECKLIST.md. Разработчик: **«Константа Лабс»** (Konstanta Labs).
 Источник — код, а не намерения: у каждого пункта ссылка на файл. При изменении кода форму нужно пересмотреть.
 
 ## Короткие ответы для формы
@@ -34,8 +34,9 @@
 - **Контакты.** Разрешение `READ_CONTACTS` запрашивается только по нажатию «Контакты»; имена и телефоны читаются **локально** и сохраняются в `localStorage` (`src/app/friends/page.tsx`, `saveFriends` в `src/lib/supabase.ts`). Автоматически на сервер не отправляются.
   ⚠️ Если пользователь сам добавит друга из контактов в событие, **имя** этого человека уйдёт на сервер как имя гостя (`add_virtual_member`) — это учтено выше в «Name». Телефон гостя на сервер не передаётся.
 - **Фото чека.** Распознавание (tesseract.js) выполняется на устройстве; фото никуда не загружается и нигде не хранится (`src/lib/ocr.ts`, загрузки нет). Модели распознавания скачиваются с публичного CDN без пользовательских данных.
-- **Местоположение, микрофон, SMS, календарь, идентификаторы устройства** — не заявлены в основном `AndroidManifest.xml`; в нём только `INTERNET` и `READ_CONTACTS`. Итоговые разрешения APK требуют проверки merged manifest (см. ниже).
-- **Push-токены** — плагин регистрируется, но токен никуда не отправляется и не хранится (`usePushNotifications.ts`: только `console.log`, таблицы нет). `google-services.json` в репозитории нет; если его добавят для release-сборки (`android/app/build.gradle` подключает google-services при наличии файла), Firebase создаст installation ID — тогда форму нужно обновить.
+- **Местоположение, микрофон, SMS, календарь** — не собираются; соответствующих разрешений в итоговом APK нет (список ниже).
+- **Push-токены и ID установки** — в 1.0.2 push выключен флагом сборки (`NEXT_PUBLIC_PUSH_ENABLED` не равен `1`): приложение не запрашивает разрешение на уведомления, Firebase не инициализируется (`google-services.json` нет), push-токены и ID установки не создаются и не передаются. В форме **Device or other IDs — нет**. См. `src/lib/env.ts`, `src/lib/push-policy.ts`, `src/hooks/usePushNotifications.ts`.
+  **При включении NEXT_PUBLIC_PUSH_ENABLED и добавлении google-services.json форму необходимо пересмотреть.**
 - **Платёжные данные** — нет: приложение не проводит платежи.
 
 ## Сетевые запросы без пользовательских данных
@@ -55,8 +56,16 @@
 2. `android:allowBackup="true"` — локальные данные попадают в резервную копию Android; решить, оставлять ли.
 3. Серверные логи Supabase/Vercel (IP) — вне кода приложения; Google относит их к собираемым данным только если они используются; проверить настройки хранения логов.
 
-## Разрешения итоговой Android-сборки — проверить перед отправкой
+## Разрешения итоговой Android-сборки
 
-Основной манифест содержит `INTERNET` и `READ_CONTACTS`. В `package.json` подключены плагины `@capacitor-community/contacts`, `@capacitor/app`, `@capacitor/browser`, `@capacitor/push-notifications`; платформы `@capacitor/android`, `@capacitor/ios`, ядро `@capacitor/core`. Плагина камеры в зависимостях нет. `capacitor.config.json` задаёт webDir и HTTPS-схемы, список разрешений не задаёт.
+Фактический список APK из `evidence/build-1ac4803/apk-permissions.txt`:
 
-**Проверить merged manifest после сборки (оркестратор: `aapt dump permissions <APK>`), включая возможное `POST_NOTIFICATIONS` и разрешения библиотек.** Нативная сборка здесь не выполнялась; основной манифест не доказывает полный список разрешений APK.
+- `android.permission.INTERNET`
+- `android.permission.READ_CONTACTS`
+- `android.permission.ACCESS_NETWORK_STATE`
+- `android.permission.POST_NOTIFICATIONS`
+- `android.permission.WAKE_LOCK`
+- `com.google.android.c2dm.permission.RECEIVE`
+- `app.splitit.mobile.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+
+Последние пять разрешений добавляют зависимости плагина push / AndroidX. Наличие разрешений в APK не означает их запрос приложением: в 1.0.2 настройка push выключена флагом сборки (см. выше). Список получен для APK 1ac4803; повторную сборку и её проверку выполняет оркестратор. Android-файлы в r2 не менялись.
