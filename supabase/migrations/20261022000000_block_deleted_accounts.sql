@@ -238,13 +238,15 @@ BEGIN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
 
-    DELETE FROM public.group_invites
-    WHERE invite_code = p_invite_code
-      AND (expires_at IS NULL OR expires_at > NOW())
-    RETURNING group_id INTO v_group_id;
+    -- Приглашение многоразовое до expires_at (решение владельца 22.10.2026: одну ссылку
+    -- кидают в общий чат; так ведёт себя production). Срок жизни задаёт клиент (14 дней).
+    SELECT gi.group_id INTO v_group_id
+    FROM public.group_invites gi
+    WHERE gi.invite_code = p_invite_code
+      AND (gi.expires_at IS NULL OR gi.expires_at > NOW());
 
     IF v_group_id IS NULL THEN
-        RAISE EXCEPTION 'Приглашение недействительно, уже использовано или истекло' USING ERRCODE = '22023';
+        RAISE EXCEPTION 'Приглашение недействительно или истекло' USING ERRCODE = '22023';
     END IF;
 
     INSERT INTO public.group_members (group_id, user_id, role)
