@@ -13,7 +13,9 @@
 --      удалённый uid не видит и не меняет ни одной строки.
 --   3. В начале каждой SECURITY DEFINER функции, доступной authenticated (они
 --      обходят RLS), и в create_group_with_owner — проверка
---      private.assert_account_active(). Публичные обёртки is_group_member,
+--      private.assert_account_active(). В пишущих RPC это первая строка тела,
+--      до любых блокировок строк: блокировка аккаунта берётся раньше блокировок
+--      строк, и взаимоблокировки с delete_my_account нет. Публичные обёртки is_group_member,
 --      is_group_owner, shares_group_with, redeem_group_invite проверяются через
 --      свои private-реализации.
 --   4. delete_my_account(): повтор для uid из реестра — 'already_deleted' без
@@ -231,10 +233,10 @@ DECLARE
     v_user_id UUID := auth.uid();
     v_group_id UUID;
 BEGIN
+    PERFORM private.assert_account_active();
     IF v_user_id IS NULL THEN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
-    PERFORM private.assert_account_active();
 
     DELETE FROM public.group_invites
     WHERE invite_code = p_invite_code
@@ -292,10 +294,10 @@ DECLARE
     v_expense_id UUID;
     v_payer RECORD;
 BEGIN
+    PERFORM private.assert_account_active();
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
-    PERFORM private.assert_account_active();
 
     -- Раньше это проверяла RLS (expenses_insert_member); DEFINER её обходит.
     -- Проверка до блокировок (посторонний не встаёт в очередь на чужое
@@ -341,10 +343,10 @@ DECLARE
     v_group_id UUID;
     v_payer RECORD;
 BEGIN
+    PERFORM private.assert_account_active();
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
-    PERFORM private.assert_account_active();
 
     SELECT group_id INTO v_group_id
     FROM public.expenses
@@ -402,10 +404,10 @@ DECLARE
     v_currency TEXT;
     v_id UUID;
 BEGIN
+    PERFORM private.assert_account_active();
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
-    PERFORM private.assert_account_active();
 
     -- Проверка до блокировок и повторно после — как в add_expense_with_splits.
     IF p_group_id IS NULL OR NOT public.is_group_member(p_group_id) THEN
@@ -473,10 +475,10 @@ AS $$
 DECLARE
     v_group_id UUID;
 BEGIN
+    PERFORM private.assert_account_active();
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
     END IF;
-    PERFORM private.assert_account_active();
 
     SELECT gp.group_id INTO v_group_id
     FROM public.group_participants gp
@@ -513,10 +515,10 @@ DECLARE
   v_participant_id uuid;
   v_name text := btrim(coalesce(p_member_name, ''));
 BEGIN
+  PERFORM private.assert_account_active();
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
   END IF;
-  PERFORM private.assert_account_active();
 
   IF char_length(v_name) < 1 OR char_length(v_name) > 80 THEN
     RAISE EXCEPTION 'Имя участника должно быть от 1 до 80 символов.' USING ERRCODE = '22023';

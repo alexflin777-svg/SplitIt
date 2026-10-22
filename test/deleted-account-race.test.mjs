@@ -14,6 +14,9 @@
  * Порядок детерминирован: B запускается, только когда A держит транзакцию
  * открытой, а COMMIT A выполняется, только когда B по pg_stat_activity
  * действительно ждёт блокировку (или уже закончил — тогда это видно в итоге).
+ *
+ * Сценарии B: UPDATE, INSERT, DELETE, UPSERT (INSERT … ON CONFLICT DO UPDATE)
+ * и RPC. Отдельно — откат: удалённый не узнаёт членство, ни своё, ни чужое.
  */
 
 import { test, before, after, describe } from 'node:test';
@@ -193,6 +196,63 @@ describe('Гонка: запись удаляемого аккаунта во в
     assert.equal(state, 'blocked', 'B должен был ждать A');
   });
 
+  test('DELETE своего членства не проходит после удаления', async () => {
+    const ev = await buildEvent(srv.admin);
+    // Боб — второй владелец: удаление понижает его роль и держит строку членства.
+    await srv.admin.query(`UPDATE public.group_members SET role = 'owner' WHERE group_id = $1 AND user_id = $2`, [ev.group, ev.bob]);
+    const { res, state } = await raceDuringDeletion(
+      srv,
+      ev,
+      `DELETE FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [ev.group, ev.bob],
+    );
+    const m = await one(srv.admin, `SELECT role FROM public.group_members WHERE group_id = $1 AND user_id = $2`, [ev.group, ev.bob]);
+    assert.deepEqual(m, { role: 'member' }, 'удалённый аккаунт удалил членство, которое удаление оставило ради денег');
+    assert.ok(!res.ok || res.rowCount === 0, `DELETE затронул ${res.rowCount} строк`);
+    assert.equal(state, 'blocked', 'B должен был ждать A');
+  });
+
+  test('UPSERT профиля (INSERT … ON CONFLICT DO UPDATE) не возвращает имя и email', async () => {
+    const ev = await buildEvent(srv.admin);
+    const { res, state } = await raceDuringDeletion(
+      srv,
+      ev,
+      `INSERT INTO public.profiles (id, full_name, email) VALUES ($1, 'Боб', 'bob@example.com')
+       ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, email = EXCLUDED.email`,
+      [ev.bob],
+    );
+    assert.deepEqual(await profileOf(srv.admin, ev.bob), { full_name: DELETED_NAME, email: null }, 'профиль восстановлен через UPSERT');
+    assert.ok(!res.ok || res.rowCount === 0, `UPSERT затронул ${res.rowCount} строк`);
+    assert.equal(state, 'blocked', 'B должен был ждать A');
+  });
+
+  test('пишущие SECURITY DEFINER RPC проверяют аккаунт первой строкой, до блокировок', async () => {
+    const rows = (await srv.admin.query(`
+      SELECT p.proname, p.prosrc
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE p.prosecdef AND n.nspname IN ('public', 'private')
+        AND p.prorettype <> 'trigger'::regtype
+        AND (has_function_privilege('authenticated', p.oid, 'EXECUTE') OR has_function_privilege('anon', p.oid, 'EXECUTE'))
+        AND p.prosrc ~* '\\m(insert|update|delete)\\M'
+      ORDER BY 1`)).rows;
+    assert.deepEqual(
+      rows.map((r) => r.proname),
+      ['add_expense_with_splits', 'add_virtual_member', 'delete_my_account', 'join_waitlist', 'record_settlement',
+        'redeem_group_invite', 'remove_guest', 'submit_feedback', 'update_expense_with_splits'],
+      'список пишущих DEFINER RPC изменился — проверьте новую функцию',
+    );
+    for (const { proname, prosrc } of rows) {
+      const body = prosrc.slice(prosrc.search(/\bBEGIN\b/i) + 'BEGIN'.length).trimStart();
+      if (proname === 'delete_my_account') {
+        // Удаление само берёт блокировку аккаунта эксклюзивно — до блокировок строк.
+        const lock = body.indexOf('pg_advisory_xact_lock(');
+        assert.ok(lock >= 0 && lock < body.indexOf('FOR UPDATE'), proname);
+        continue;
+      }
+      assert.match(body, /^PERFORM private\.assert_account_active\(\);/, `${proname}: первой строкой не проверка аккаунта`);
+    }
+  });
+
   test('обратный порядок: запись начата раньше — удаление ждёт её и обезличивает итог', async () => {
     const ev = await buildEvent(srv.admin);
     const a = await srv.connect();
@@ -320,6 +380,28 @@ describe('Откат: down.sql не возвращает доступ удалё
     await assert.rejects(bob.query(`SELECT public.submit_feedback('idea', 'после отката')`), /Аккаунт удалён/);
     await bob.end();
     assert.deepEqual(await profileOf(srv.admin, ev.bob), { full_name: DELETED_NAME, email: null });
+  });
+
+  test('удалённый Боб не узнаёт членство — ни своё, ни чужое', async () => {
+    const bob = await srv.connect();
+    await becomeUser(bob, ev.bob);
+    for (const [sql, params] of [
+      ['SELECT public.shares_group_with($1) AS v', [ev.alice]],
+      ['SELECT private.shares_group_with($1) AS v', [ev.alice]],
+      ['SELECT public.is_group_member($1) AS v', [ev.group]],
+      ['SELECT private.is_group_member($1) AS v', [ev.group]],
+      ['SELECT public.is_group_owner($1) AS v', [ev.group]],
+      ['SELECT private.is_group_owner($1) AS v', [ev.group]],
+    ]) {
+      const answer = await bob.query(sql, params).then((r) => `ответ ${r.rows[0].v}`, (e) => e.message);
+      assert.match(answer, /Аккаунт удалён/, `${sql}: ${answer}`);
+    }
+    await bob.end();
+
+    const alice = await srv.connect();
+    await becomeUser(alice, ev.alice);
+    assert.equal((await one(alice, 'SELECT public.shares_group_with($1) AS v', [ev.bob])).v, true, 'живая Алиса');
+    await alice.end();
   });
 
   test('гонка закрыта и после отката', async () => {

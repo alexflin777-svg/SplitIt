@@ -15,20 +15,29 @@
 -- Запись в supabase_migrations.schema_migrations тоже остаётся: миграция по
 -- сути применена, и повторный db push не должен накатывать её заново.
 --
--- Что откат делает: убирает проверку удалённого аккаунта из трёх функций
--- членства private.is_group_member / is_group_owner / shares_group_with,
--- возвращая тела из 20260801000001. Это единственное, что может заметно
--- ударить по живым пользователям: обычные политики вызывают эти функции на
--- КАЖДУЮ строку, и проверка добавляет на строку поиск в реестре и
+-- Что откат делает: облегчает проверку удалённого аккаунта в трёх функциях
+-- членства private.is_group_member / is_group_owner / shares_group_with.
+-- Обычные политики вызывают их (через публичные обёртки) на КАЖДУЮ строку, и
+-- полная проверка добавляет на строку вызов plpgsql, свежий снимок и
 -- advisory-блокировку. Применять, если после выкладки чтение крупных событий
 -- стало медленным.
 --
--- Цена отката: удалённый пользователь сможет вызвать публичные обёртки
--- is_group_member / is_group_owner / shares_group_with и узнать ответ «да/нет»
--- про собственное членство. Данные таблиц он по-прежнему не видит (их закрывает
--- RESTRICTIVE-политика), а RPC с записью и деньгами отклоняются.
+-- Облегчённая проверка: для живого пользователя — один поиск по первичному
+-- ключу реестра, без plpgsql и блокировок. Если uid в реестре, вызывается
+-- полная private.assert_account_active() — ошибка 42501, как до отката.
+-- Совсем убрать проверку из этих функций нельзя: политики исполняют их с правами
+-- вызывающего, значит EXECUTE у authenticated обязан остаться, и без проверки
+-- удалённый узнавал бы через shares_group_with(чужой uuid) текущее членство
+-- других людей (ревью R3). Поэтому ни публичные обёртки, ни сами private-функции
+-- удалённому ничего не отвечают — ни про себя, ни про других.
 --
--- Вернуть проверку: повторно выполнить три CREATE OR REPLACE FUNCTION
+-- Цена отката: ответ о членстве больше не ждёт идущего delete_my_account —
+-- запрос, начатый до его commit, отвечает как до удаления (это и есть
+-- состояние на момент запроса). Удаление, закоммиченное до начала запроса,
+-- видно в снимке: реестр не очищается. Запись по-прежнему сериализуют
+-- RESTRICTIVE-политика, триггер и assert в RPC.
+--
+-- Вернуть полную проверку: повторно выполнить три CREATE OR REPLACE FUNCTION
 -- private.is_group_member / is_group_owner / shares_group_with из раздела 3
 -- миграции 20261022000000.
 
@@ -39,10 +48,14 @@ SECURITY DEFINER
 STABLE
 SET search_path = pg_catalog, public
 AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.group_members
-        WHERE group_id = p_group_id AND user_id = auth.uid()
-    );
+    SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM private.deleted_accounts WHERE user_id = auth.uid())
+            THEN NOT private.assert_account_active()
+        ELSE EXISTS (
+            SELECT 1 FROM public.group_members
+            WHERE group_id = p_group_id AND user_id = auth.uid()
+        )
+    END;
 $$;
 
 CREATE OR REPLACE FUNCTION private.is_group_owner(p_group_id UUID)
@@ -52,13 +65,17 @@ SECURITY DEFINER
 STABLE
 SET search_path = pg_catalog, public
 AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.groups
-        WHERE id = p_group_id AND created_by = auth.uid()
-    ) OR EXISTS (
-        SELECT 1 FROM public.group_members
-        WHERE group_id = p_group_id AND user_id = auth.uid() AND role = 'owner'
-    );
+    SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM private.deleted_accounts WHERE user_id = auth.uid())
+            THEN NOT private.assert_account_active()
+        ELSE EXISTS (
+            SELECT 1 FROM public.groups
+            WHERE id = p_group_id AND created_by = auth.uid()
+        ) OR EXISTS (
+            SELECT 1 FROM public.group_members
+            WHERE group_id = p_group_id AND user_id = auth.uid() AND role = 'owner'
+        )
+    END;
 $$;
 
 CREATE OR REPLACE FUNCTION private.shares_group_with(p_user_id UUID)
@@ -68,12 +85,16 @@ SECURITY DEFINER
 STABLE
 SET search_path = pg_catalog, public
 AS $$
-    SELECT EXISTS (
-        SELECT 1
-        FROM public.group_members AS mine
-        JOIN public.group_members AS theirs USING (group_id)
-        WHERE mine.user_id = auth.uid() AND theirs.user_id = p_user_id
-    );
+    SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM private.deleted_accounts WHERE user_id = auth.uid())
+            THEN NOT private.assert_account_active()
+        ELSE EXISTS (
+            SELECT 1
+            FROM public.group_members AS mine
+            JOIN public.group_members AS theirs USING (group_id)
+            WHERE mine.user_id = auth.uid() AND theirs.user_id = p_user_id
+        )
+    END;
 $$;
 
 -- CREATE OR REPLACE сохраняет права, но повторяем явно, как в миграции.
