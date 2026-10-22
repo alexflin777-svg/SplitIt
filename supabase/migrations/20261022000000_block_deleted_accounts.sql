@@ -255,6 +255,23 @@ BEGIN
 END;
 $$;
 
+-- Дрейф production (сверка 22.10.2026, PROD-RECON-20261022.md): в prod public.redeem_group_invite —
+-- старая SECURITY DEFINER-версия с «переносом гостя по совпадению имени» (любой с кодом,
+-- назвавшийся именем гостя, забирал его расходы и долги), без проверки удалённого аккаунта.
+-- Приводим её к виду из 20260801000001: тонкая обёртка над private.redeem_group_invite,
+-- где проверка аккаунта стоит первой строкой. На базе из репозитория это no-op.
+-- Перенос гостя этим НЕ возвращается: перенос долгов гостя — отдельное решение владельца
+-- (в prod на 22.10: 1 гость, 1 доля, 0 расходов и 0 переводов от его имени).
+CREATE OR REPLACE FUNCTION public.redeem_group_invite(p_invite_code TEXT)
+RETURNS UUID
+LANGUAGE SQL
+SECURITY INVOKER
+VOLATILE
+SET search_path = pg_catalog, private
+AS $$ SELECT private.redeem_group_invite(p_invite_code) $$;
+REVOKE ALL ON FUNCTION public.redeem_group_invite(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.redeem_group_invite(text) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.create_group_with_owner(p_name text, p_category text, p_default_currency text)
 RETURNS uuid
 LANGUAGE plpgsql
