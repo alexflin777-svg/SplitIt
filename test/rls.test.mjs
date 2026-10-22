@@ -245,18 +245,20 @@ describe('Приглашения', () => {
     assert.equal(seen.expenses.length, 1, 'после вступления расходы не видны');
   });
 
-  test('использованный код не пускает второго получателя', async () => {
+  test('код многоразовый до срока: второй получатель тоже вступает', async () => {
     const res = await asUser(db, CAROL, () =>
       attempt(db, `SELECT public.redeem_group_invite('SECRET-CODE')`),
     );
-    assert.equal(res.ok, false, 'одноразовый код сработал для второго пользователя');
-    assert.match(res.error, /недействительно|использовано|истекло/);
+    assert.equal(res.ok, true, `второй получатель не вступил по действующему коду: ${res.error}`);
 
     const membership = await db.query(
       `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
       [aliceGroup, CAROL],
     );
-    assert.equal(membership.rows[0].n, 0, 'второй пользователь попал в группу по использованному коду');
+    assert.equal(membership.rows[0].n, 1, 'второй получатель не попал в группу');
+
+    // Возвращаем исходный состав: следующие тесты этого файла рассчитывают на Carol вне группы.
+    await db.query(`DELETE FROM public.group_members WHERE group_id = $1 AND user_id = $2`, [aliceGroup, CAROL]);
   });
 
   test('после вступления видны профили участников группы', async () => {
@@ -287,6 +289,12 @@ describe('Приглашения', () => {
       attempt(db, `SELECT public.redeem_group_invite('EXPIRED-CODE')`),
     );
     assert.equal(res.ok, false, 'истёкшее приглашение сработало');
+    assert.match(res.error, /недействительно|истекло/);
+    const membership = await db.query(
+      `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [aliceGroup, CAROL],
+    );
+    assert.equal(membership.rows[0].n, 0, 'пользователь попал в группу по истёкшему коду');
   });
 
   test('вступивший не становится владельцем', async () => {
