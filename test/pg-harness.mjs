@@ -18,7 +18,9 @@
  */
 
 import { PGlite } from '@electric-sql/pglite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'supabase', 'migrations');
@@ -76,6 +78,92 @@ export async function createTestDatabase() {
   }
 
   return db;
+}
+
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Настоящий сервер PostgreSQL 17 (пакет embedded-postgres) с теми же
+ * миграциями — для проверок, которым нужно несколько соединений: гонки двух
+ * транзакций PGlite не воспроизводит, у него одно соединение.
+ *
+ * Возвращает `admin` (суперпользователь, RLS не действует), `connect()` для
+ * новых соединений и `stop()`, который закрывает соединения, останавливает
+ * сервер и удаляет его каталог. Сбой запуска — ошибка, а не пропуск теста.
+ */
+export async function createServerDatabase() {
+  const { default: EmbeddedPostgres } = await import('embedded-postgres');
+  const { default: pg } = await import('pg');
+
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'splitit-pg-'));
+  const port = await freePort();
+  const log = [];
+  const server = new EmbeddedPostgres({
+    databaseDir: path.join(dir, 'data'),
+    port,
+    user: 'postgres',
+    password: 'postgres',
+    persistent: false,
+    initdbFlags: ['--encoding=UTF8', '--locale=C'],
+    onLog: (m) => log.push(String(m)),
+    onError: (m) => log.push(String(m)),
+  });
+
+  const clients = [];
+  async function connect() {
+    const client = new pg.Client({ host: '127.0.0.1', port, user: 'postgres', password: 'postgres', database: 'postgres' });
+    await client.connect();
+    clients.push(client);
+    return client;
+  }
+
+  async function stop() {
+    for (const c of clients) await c.end().catch(() => {});
+    await server.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+
+  try {
+    await server.initialise();
+    await server.start();
+    const admin = await connect();
+    await admin.query(SUPABASE_SHIM);
+    for (const { file, sql } of readMigrations()) {
+      try {
+        await admin.query(sql);
+      } catch (e) {
+        throw new Error(`Миграция ${file} не применилась: ${e.message}`);
+      }
+    }
+    return { admin, connect, stop, port };
+  } catch (e) {
+    await stop().catch(() => {});
+    throw new Error(`${e.message}\n--- журнал postgres ---\n${log.slice(-30).join('\n')}`);
+  }
+}
+
+/**
+ * Делает соединение сервера «клиентом» uid до его закрытия: роль
+ * authenticated и claim, как asUser(), но без сброса — у каждой стороны гонки
+ * своё соединение.
+ */
+export async function becomeUser(client, userId) {
+  await client.query('SET ROLE authenticated');
+  await client.query(`SELECT set_config('request.jwt.claim.sub', $1, false)`, [userId]);
+  const who = await client.query('SELECT current_user AS role, auth.uid()::text AS uid, pg_backend_pid() AS pid');
+  if (who.rows[0].role !== 'authenticated' || who.rows[0].uid !== userId) {
+    throw new Error(`Соединение не стало ${userId}: ${JSON.stringify(who.rows[0])}`);
+  }
+  return who.rows[0].pid;
 }
 
 /**

@@ -18,37 +18,77 @@
 --      свои private-реализации.
 --   4. delete_my_account(): повтор для uid из реестра — 'already_deleted' без
 --      ошибки и без повторной обработки.
+--   5. Гонка удаления и записи. Без защиты запись, начатая до commit удаления,
+--      видит реестр в своём старом снимке (там uid ещё нет), ждёт блокировку
+--      строки и после commit записывает данные удалённого — например, возвращает
+--      имя и email в обезличенный профиль. Поэтому удаление и любая запись
+--      клиента от того же uid сериализуются advisory-блокировкой по uid:
+--      delete_my_account берёт её эксклюзивно первым действием, проверка
+--      private.is_deleted_account() — разделяемо, и только после неё читает
+--      реестр, на свежем снимке (VOLATILE plpgsql в READ COMMITTED). Итог:
+--      запись либо целиком до удаления (и удаление её обработает), либо после
+--      commit удаления (и увидит реестр). Проверку вызывают RESTRICTIVE-политика
+--      (в начале запроса, до блокировок строк), assert_account_active (первым
+--      действием RPC) и триггер на каждой таблице public с RLS — страховка
+--      для SECURITY DEFINER-путей, где проверки нет.
 --
 -- Деньги, обезличенные строки и ссылки на удалённый uid не меняются.
 --
 -- Тела функций ниже скопированы из последних миграций без изменений, кроме
 -- строки PERFORM private.assert_account_active() (и реестра в delete_my_account).
 
--- 1. Реестр.
+-- 1. Реестр. deleted_xact — транзакция удаления: в ней самой триггер из п. 5
+--    должен пропускать записи delete_my_account (подделать её клиент не может —
+--    реестр пишет только delete_my_account).
 CREATE TABLE IF NOT EXISTS private.deleted_accounts (
   user_id uuid PRIMARY KEY,
-  deleted_at timestamptz NOT NULL DEFAULT now()
+  deleted_at timestamptz NOT NULL DEFAULT now(),
+  deleted_xact xid8
 );
+-- Если реестр создан ранней версией этой миграции — без столбца.
+ALTER TABLE private.deleted_accounts ADD COLUMN IF NOT EXISTS deleted_xact xid8;
 ALTER TABLE private.deleted_accounts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.deleted_accounts FROM PUBLIC, anon, authenticated;
 
+-- Ключ advisory-блокировки «аккаунт uid». Клиентам не нужен.
+CREATE OR REPLACE FUNCTION private.account_lock_key(p_uid uuid)
+RETURNS bigint
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog
+AS $$
+  SELECT hashtextextended('splitit.account:' || p_uid::text, 0);
+$$;
+REVOKE ALL ON FUNCTION private.account_lock_key(uuid) FROM PUBLIC, anon, authenticated;
+
 -- Удалён ли вызывающий. Для anon (auth.uid() = NULL) — false. Нужна
 -- authenticated: на неё ссылаются политики. Сообщает только про себя.
+-- VOLATILE: запрос к реестру берёт свежий снимок уже после ожидания
+-- блокировки, иначе запрос, начатый до commit удаления, его не увидит.
 CREATE OR REPLACE FUNCTION private.is_deleted_account()
 RETURNS boolean
-LANGUAGE sql
-STABLE
+LANGUAGE plpgsql
+VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
-  SELECT EXISTS (SELECT 1 FROM private.deleted_accounts WHERE user_id = auth.uid());
+DECLARE
+  v_uid uuid := auth.uid();
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN false;
+  END IF;
+  -- Ждёт, пока идёт delete_my_account этого uid; держится до конца транзакции.
+  PERFORM pg_advisory_xact_lock_shared(private.account_lock_key(v_uid));
+  RETURN EXISTS (SELECT 1 FROM private.deleted_accounts WHERE user_id = v_uid);
+END;
 $$;
 
 -- Ошибка 42501 для удалённого аккаунта, иначе true (удобно в CASE внутри SQL-функций).
 CREATE OR REPLACE FUNCTION private.assert_account_active()
 RETURNS boolean
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
@@ -81,6 +121,56 @@ BEGIN
       'CREATE POLICY deny_deleted_account ON public.%I AS RESTRICTIVE FOR ALL TO authenticated
          USING (NOT (SELECT private.is_deleted_account()))
          WITH CHECK (NOT (SELECT private.is_deleted_account()))',
+      r.relname);
+  END LOOP;
+END
+$$;
+
+-- 2a. Триггер-страховка: любая запись от имени удалённого uid (прямая или
+--     изнутри SECURITY DEFINER, который обходит политики) отклоняется.
+--     Пропускаются: запросы без uid (service_role, GoTrue, владелец) и записи
+--     самой delete_my_account в её транзакции.
+CREATE OR REPLACE FUNCTION private.deny_deleted_account_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+BEGIN
+  IF v_uid IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock_shared(private.account_lock_key(v_uid));
+    IF EXISTS (
+      SELECT 1 FROM private.deleted_accounts d
+      WHERE d.user_id = v_uid
+        -- Запрет по умолчанию: NULL (старая запись или транзакция без xid) — не «своя».
+        AND NOT coalesce(d.deleted_xact = pg_current_xact_id_if_assigned(), false)
+    ) THEN
+      RAISE EXCEPTION 'Аккаунт удалён' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.deny_deleted_account_write() FROM PUBLIC, anon, authenticated;
+
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT c.relname
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS deny_deleted_account_write ON public.%I', r.relname);
+    EXECUTE format(
+      'CREATE TRIGGER deny_deleted_account_write BEFORE INSERT OR UPDATE OR DELETE ON public.%I
+         FOR EACH ROW EXECUTE FUNCTION private.deny_deleted_account_write()',
       r.relname);
   END LOOP;
 END
@@ -529,6 +619,11 @@ BEGIN
     RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
   END IF;
 
+  -- Первым делом: эксклюзивная блокировка аккаунта. Ждёт текущие записи
+  -- этого uid и не пускает новые до commit (см. п. 5 в шапке). Второй
+  -- одновременный вызов тоже ждёт и затем видит реестр.
+  PERFORM pg_advisory_xact_lock(private.account_lock_key(v_uid));
+
   -- Блокировка профиля: два одновременных вызова не работают по устаревшему
   -- снимку. Реестр проверяется после неё: второй вызов увидит запись первого.
   SELECT email INTO v_email FROM public.profiles WHERE id = v_uid FOR UPDATE;
@@ -542,7 +637,8 @@ BEGIN
 
   -- С этого момента у uid нет доступа (политики deny_deleted_account и
   -- assert_account_active), даже если токен ещё жив.
-  INSERT INTO private.deleted_accounts (user_id) VALUES (v_uid) ON CONFLICT (user_id) DO NOTHING;
+  INSERT INTO private.deleted_accounts (user_id, deleted_xact)
+  VALUES (v_uid, pg_current_xact_id()) ON CONFLICT (user_id) DO NOTHING;
 
   IF NOT v_profile_found THEN
     RETURN json_build_object('status', 'already_deleted');
