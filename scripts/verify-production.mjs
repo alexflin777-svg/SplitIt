@@ -25,11 +25,12 @@
  *   4. посторонний не видит чужую группу и её расходы;
  *   5. посторонний не может открыть группу по прямому id;
  *   6. вступление по коду работает, и данные становятся видны;
- *   7. код одноразовый: повторное использование отклоняется;
+ *   7. повторное вступление не дублирует членство; второй получатель вступает;
+ *      истёкший код отклоняется и не создаёт членство;
  *   8. вступивший не становится владельцем;
  *   9. выход из группы возвращает данные в недоступное состояние.
  *
- * Про уборку. Прогон создаёт два аккаунта и одно событие в той базе, на
+ * Про уборку. Прогон создаёт три аккаунта и одно событие в той базе, на
  * которую направлен. С переданным SUPABASE_SERVICE_ROLE_KEY скрипт удаляет их
  * в конце и проверяет результат тем же привилегированным контекстом.
  *
@@ -59,7 +60,7 @@ const { ok, check, step } = report;
 async function runScenario(state) {
   console.log(`Проверка ${config.url}\n${'─'.repeat(60)}`);
 
-  step('1. Регистрация двух аккаунтов');
+  step('1. Регистрация трёх аккаунтов');
   const accountA = makeAccount('a');
   const accountB = makeAccount('b');
   const A = await signUpAccount(apiClient, accountA);
@@ -68,8 +69,12 @@ async function runScenario(state) {
   const B = await signUpAccount(apiClient, accountB);
   state.userIds.push(B.userId);
   state.emails.push(accountB.email);
-  ok('оба аккаунта получили рабочую сессию');
-  check('идентификаторы различаются', A.userId !== B.userId);
+  const accountC = makeAccount('c');
+  const C = await signUpAccount(apiClient, accountC);
+  state.userIds.push(C.userId);
+  state.emails.push(accountC.email);
+  ok('три аккаунта получили рабочую сессию');
+  check('идентификаторы различаются', new Set([A.userId, B.userId, C.userId]).size === 3);
 
   step('2. Профиль создаётся триггером при регистрации');
   const profileA = await rest(`/profiles?id=eq.${A.userId}&select=id,full_name`, { token: A.token });
@@ -139,7 +144,10 @@ async function runScenario(state) {
   const invite = await rest('/group_invites', {
     token: A.token,
     method: 'POST',
-    body: { group_id: groupId, invite_code: code, created_by: A.userId },
+    body: {
+      group_id: groupId, invite_code: code, created_by: A.userId,
+      expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    },
   });
   check('владелец создал приглашение', invite.ok, JSON.stringify(invite.data));
 
@@ -158,7 +166,13 @@ async function runScenario(state) {
   check('вступление по коду сработало', redeem.ok && redeem.data === groupId, JSON.stringify(redeem.data));
 
   const repeat = await rpc('redeem_group_invite', { p_invite_code: code }, B.token);
-  check('код одноразовый', !repeat.ok, 'повторное использование прошло — код не расходуется');
+  const repeatedMembership = await rest(
+    `/group_members?group_id=eq.${groupId}&user_id=eq.${B.userId}&select=user_id`,
+    { token: A.token },
+  );
+  check('повторное вступление B не дублирует членство',
+    repeatedMembership.ok && repeatedMembership.data?.length === 1,
+    `redeem HTTP ${repeat.status}; членство: ${JSON.stringify(repeatedMembership.data)}`);
 
   step('6. После вступления данные видны');
   const bGroupsAfter = await rest('/groups?select=id,name', { token: B.token });
@@ -173,6 +187,40 @@ async function runScenario(state) {
     bProfiles.data?.length === 2,
     `видно профилей: ${bProfiles.data?.length}`,
   );
+
+  step('6а. Многоразовый код и срок действия');
+  const redeemC = await rpc('redeem_group_invite', { p_invite_code: code }, C.token);
+  const cGroup = await rest(`/groups?id=eq.${groupId}&select=id`, { token: C.token });
+  check('C вступает по тому же коду и видит событие',
+    redeemC.ok && redeemC.data === groupId && cGroup.ok && cGroup.data?.length === 1,
+    JSON.stringify({ redeem: redeemC.data, groups: cGroup.data }));
+
+  // Используем C после выхода: четвёртый аккаунт не нужен.
+  const leaveC = await rest(`/group_members?group_id=eq.${groupId}&user_id=eq.${C.userId}`, {
+    token: C.token, method: 'DELETE',
+  });
+  const cBeforeExpired = await rest(
+    `/group_members?group_id=eq.${groupId}&user_id=eq.${C.userId}&select=user_id`, { token: A.token },
+  );
+  if (!leaveC.ok || !cBeforeExpired.ok || cBeforeExpired.data?.length !== 0) {
+    throw new Error('C не вышел из группы перед проверкой истёкшего кода');
+  }
+  const expiredCode = `VERIFY-EXPIRED-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const expiredInvite = await rest('/group_invites', {
+    token: A.token, method: 'POST',
+    body: { group_id: groupId, invite_code: expiredCode, created_by: A.userId,
+      expires_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
+  });
+  if (!expiredInvite.ok) {
+    throw new Error(`Не удалось создать истёкшее приглашение: HTTP ${expiredInvite.status}`);
+  }
+  const expiredRedeem = await rpc('redeem_group_invite', { p_invite_code: expiredCode }, C.token);
+  const cAfterExpired = await rest(
+    `/group_members?group_id=eq.${groupId}&user_id=eq.${C.userId}&select=user_id`, { token: A.token },
+  );
+  check('истёкший код отклонён, C не попал в группу',
+    !expiredRedeem.ok && cAfterExpired.ok && cAfterExpired.data?.length === 0,
+    JSON.stringify({ redeem: expiredRedeem.data, membership: cAfterExpired.data }));
 
   step('7. Участник не становится владельцем');
   const rename = await rest(`/groups?id=eq.${groupId}`, {

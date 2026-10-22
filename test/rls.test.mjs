@@ -245,6 +245,18 @@ describe('Приглашения', () => {
     assert.equal(seen.expenses.length, 1, 'после вступления расходы не видны');
   });
 
+  test('тот же пользователь повторно по тому же коду не дублирует членство', async () => {
+    // Боб уже вступил в предыдущем тесте. Допустим и явный отказ RPC.
+    await asUser(db, BOB, () =>
+      attempt(db, `SELECT public.redeem_group_invite('SECRET-CODE')`),
+    );
+    const membership = await asUser(db, ALICE, () => db.query(
+      `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
+      [aliceGroup, BOB],
+    ));
+    assert.equal(membership.rows[0].n, 1, 'повторное вступление изменило число членств');
+  });
+
   test('код многоразовый до срока: второй получатель тоже вступает', async () => {
     const res = await asUser(db, CAROL, () =>
       attempt(db, `SELECT public.redeem_group_invite('SECRET-CODE')`),
