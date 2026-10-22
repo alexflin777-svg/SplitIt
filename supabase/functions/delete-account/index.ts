@@ -81,14 +81,15 @@ Deno.serve(async (req) => {
   });
   const { error: rpcError } = await asUser.rpc('delete_my_account');
   if (rpcError) {
-    console.error('delete-account rpc failed:', userId, rpcError.message);
+    // Только короткий код: ни id пользователя, ни текст ошибки в логи не идут.
+    console.error('delete-account rpc failed:', rpcError.code ?? 'unknown');
     return json({ error: 'could not delete account data' }, 500, origin);
   }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) {
     // Данные уже удалены/обезличены, но вход ещё возможен — повтор безопасен.
-    console.error('delete-account deleteUser failed:', userId, deleteError.message);
+    console.error('delete-account deleteUser failed:', deleteError.code ?? deleteError.status ?? 'unknown');
     return json({ error: 'could not delete login' }, 502, origin);
   }
 
