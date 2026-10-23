@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = '10 сентября 2026';
-const CONTACT = 'info@splitit-apps.com';
+const CONTACT = 'hello@konstantalabs.ru';
 
 export default function TermsPage() {
   return (

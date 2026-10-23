@@ -13,8 +13,12 @@ export const metadata: Metadata = {
   description: 'Какие данные обрабатывает SplitIT, зачем и как их удалить.',
 };
 
-const UPDATED = '10 сентября 2026';
-const CONTACT = 'info@splitit-apps.com';
+const UPDATED = '23 октября 2026';
+const CONTACT = 'hello@konstantalabs.ru';
+const DELETE_URL = 'https://konstantalabs.ru/splitit-delete.html';
+// Публично указывается только студия, без персональных данных владельца.
+const OPERATOR_RU = '«Константа Лабс»';
+const OPERATOR_EN = 'Konstanta Labs';
 
 export default function PrivacyPage() {
   return (
@@ -27,7 +31,7 @@ export default function PrivacyPage() {
         <p>
           SplitIT — приложение для учёта и деления общих расходов в поездках и группах
           (веб-версия на splitit-apps.com и приложение для Android). Оператор данных:
-          владелец сервиса SplitIT; контакт для вопросов о данных: {CONTACT}.
+          разработчик — {OPERATOR_RU}; контакт для вопросов о данных: {CONTACT}.
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Какие данные мы обрабатываем</h2>
@@ -64,9 +68,11 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Как удалить данные</h2>
         <p>
-          Напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим аккаунт
-          и связанные данные в течение 30 дней и подтвердим удаление ответным письмом. Данные из
-          списка ожидания удаляются по такому же запросу.
+          Как удалить аккаунт и что при этом остаётся у других участников событий — на странице{' '}
+          <a href={DELETE_URL} className="text-emerald-600 underline">{DELETE_URL}</a>. Без
+          приложения напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим
+          аккаунт и связанные данные в течение 30 дней и подтвердим удаление ответным письмом. Данные
+          из списка ожидания удаляются по такому же запросу.
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Изменения политики</h2>
@@ -77,11 +83,11 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Privacy summary (English)</h2>
         <p className="text-gray-600">
-          SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
+          SplitIT is developed by {OPERATOR_EN} (contact: {CONTACT}). SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
           create. Android contact names are read locally only with your permission and never
           uploaded. No location tracking, no ads, no selling of data. Data is stored in Supabase
-          with row-level security. To delete your account and data, e-mail {CONTACT} from your
-          registered address; deletion is completed within 30 days.
+          with row-level security. Account deletion instructions: {DELETE_URL}. Without the app, e-mail
+          {CONTACT} from your registered address; deletion is completed within 30 days.
         </p>
       </section>
 
