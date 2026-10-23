@@ -86,7 +86,7 @@ export default function PrivacyPage() {
           SplitIT is developed by {OPERATOR_EN} (contact: {CONTACT}). SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
           create. Android contact names are read locally only with your permission and never
           uploaded. No location tracking, no ads, no selling of data. Data is stored in Supabase
-          with row-level security. Account deletion instructions: {DELETE_URL}. Without the app, e-mail
+          with row-level security. Account deletion instructions: {DELETE_URL}. Without the app, e-mail{' '}
           {CONTACT} from your registered address; deletion is completed within 30 days.
         </p>
       </section>
