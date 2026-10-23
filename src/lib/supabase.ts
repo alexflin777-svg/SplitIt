@@ -4,6 +4,7 @@ import { Browser } from '@capacitor/browser';
 import { APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfMisconfigured } from './env';
 import { createCredential, verifyCredential, validatePassword, StoredCredential } from './credentials';
 import { t } from './i18n/t';
+import { AUTH_STORAGE_KEY, migrateAuthStorage } from './auth-storage';
 
 /**
  * Кастомная схема для deep-link обратно в приложение после OAuth на нативных
@@ -18,9 +19,11 @@ const NATIVE_AUTH_REDIRECT_URL = 'app.splitit.mobile://auth/callback';
  * Плейсхолдерных дефолтов здесь больше нет: клиент, который молча ходит в
  * несуществующий домен, хуже отсутствующего клиента — он маскирует поломку.
  */
+if (isSupabaseConfigured()) migrateAuthStorage();
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured()
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' },
+      auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce', storageKey: AUTH_STORAGE_KEY },
     })
   : null;
 
