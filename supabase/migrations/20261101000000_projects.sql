@@ -228,6 +228,9 @@ CREATE TABLE public.project_audit (
   actor_id uuid,
   action text NOT NULL,
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  -- Период записи (ставит project_log под блокировкой проекта): по нему, а не
+  -- по created_at, вышедший видит историю — now() одинаков во всей транзакции.
+  period_seq int NOT NULL CHECK (period_seq > 0),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX project_audit_project_idx ON public.project_audit (project_id, id);
@@ -281,27 +284,13 @@ AS $$
   FROM (SELECT private.project_visible_seq(p_project_id) AS v) s;
 $$;
 
--- История: вышедшему — до итога, с которым он вышел (closed_at = now() той же транзакции).
-CREATE FUNCTION private.project_audit_visible(p_project_id uuid, p_at timestamptz)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = pg_catalog, public, private
-AS $$
-  SELECT s.v = 2147483647 OR p_at <= (
-    SELECT closed_at FROM public.project_periods WHERE project_id = p_project_id AND seq = s.v
-  )
-  FROM (SELECT private.project_visible_seq(p_project_id) AS v) s;
-$$;
-
 DO $$
 DECLARE
   f text;
 BEGIN
   FOREACH f IN ARRAY ARRAY[
     'private.project_visible_seq(uuid)', 'private.project_period_visible(uuid, uuid)',
-    'private.project_terms_visible(uuid, uuid)', 'private.project_audit_visible(uuid, timestamptz)'
+    'private.project_terms_visible(uuid, uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', f);
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', f);
@@ -326,7 +315,7 @@ BEGIN
     ('project_quantities', 'private.project_period_visible(project_id, period_id)'),
     ('project_contribution_ledger', 'private.project_period_visible(project_id, period_id)'),
     ('project_transfers', 'private.project_period_visible(project_id, period_id)'),
-    ('project_audit', 'private.project_audit_visible(project_id, created_at)')
+    ('project_audit', 'period_seq <= private.project_visible_seq(project_id)')
   ) AS x(t, expr) LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC, anon, authenticated', t);
@@ -597,14 +586,19 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION private.project_log(p_project_id uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
+-- p_period_seq — период, к которому относится запись; по умолчанию последний
+-- (открытый) на момент записи, до первого периода — 1. Вызывающие держат
+-- блокировку проекта, поэтому итог не проскочит между выбором seq и записью.
+CREATE FUNCTION private.project_log(p_project_id uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb,
+                                    p_period_seq int DEFAULT NULL)
 RETURNS void
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  INSERT INTO public.project_audit (project_id, actor_id, action, payload)
-  VALUES (p_project_id, auth.uid(), p_action, coalesce(p_payload, '{}'::jsonb));
+  INSERT INTO public.project_audit (project_id, actor_id, action, payload, period_seq)
+  VALUES (p_project_id, auth.uid(), p_action, coalesce(p_payload, '{}'::jsonb), coalesce(
+    p_period_seq, (SELECT max(seq) FROM public.project_periods WHERE project_id = p_project_id), 1));
 $$;
 
 -- Баланс журнала долга (credit − repay − write_off) участника.
@@ -1021,7 +1015,7 @@ DECLARE
 BEGIN
   FOREACH f IN ARRAY ARRAY[
     'private.project_caller(uuid, boolean, boolean)', 'private.project_open_period(uuid)',
-    'private.project_log(uuid, text, jsonb)', 'private.project_debt(uuid, uuid)', 'private.project_rub(bigint)',
+    'private.project_log(uuid, text, jsonb, int)', 'private.project_debt(uuid, uuid)', 'private.project_rub(bigint)',
     'private.project_allocate(bigint, numeric[])', 'private.project_allocate_signed(bigint, numeric[])',
     'private.project_insert_terms(uuid, jsonb, int)', 'private.project_try_activate(uuid)',
     'private.project_calc(uuid, boolean)'
@@ -1631,7 +1625,7 @@ BEGIN
   END IF;
 
   PERFORM private.project_log(p_project_id, 'period_closed', jsonb_build_object(
-    'period_id', v_period.id, 'seq', v_period.seq, 'next_period_id', v_next_period));
+    'period_id', v_period.id, 'seq', v_period.seq, 'next_period_id', v_next_period), v_period.seq);
   RETURN v_snap;
 END;
 $$;
