@@ -64,6 +64,9 @@ const storedMembers = (page: Page) =>
 
 test('гость с расходом не удаляется — понятный текст, участник остаётся', async ({ page }) => {
   await seed(page);
+  // Крестиков на аватарах нет, пока не открыто управление участниками.
+  await expect(page.getByTestId('remove-member-m-2')).toHaveCount(0);
+  await page.getByTestId('members-manage').click();
   await page.getByTestId('remove-member-m-2').click();
   await expect(page.getByTestId('action-error')).toContainText('У гостя есть расходы — сначала перенесите или удалите их');
   await expect(page.getByTestId('remove-member-m-2')).toBeVisible();
@@ -72,6 +75,7 @@ test('гость с расходом не удаляется — понятны�
 
 test('гость без денег удаляется; у владельца кнопки удаления нет', async ({ page }) => {
   await seed(page);
+  await page.getByTestId('members-manage').click();
   await expect(page.getByTestId('remove-member-m-1')).toHaveCount(0);
   await page.getByTestId('remove-member-m-3').click();
   await expect(page.getByTestId('remove-member-m-3')).toHaveCount(0);

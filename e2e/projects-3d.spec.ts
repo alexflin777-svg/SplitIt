@@ -132,6 +132,8 @@ test('правка суммы меняет итог, удаление убира
   await expect(page).toHaveURL(/\/projects\/add\?.*op=/);
   await expect(page.getByTestId('op-amount')).toHaveValue('10000');
   await expect(page.getByTestId('op-type-fixed')).toBeVisible();
+  // Правка сохраняет запись, а не создаёт новую — и кнопка говорит об этом.
+  await expect(page.getByTestId('op-save')).toHaveText('Сохранить изменения');
   await page.getByTestId('op-amount').fill('12 000');
   await page.getByTestId('op-save').click();
   await expect(page).toHaveURL(new RegExp(`/projects/detail\\?id=${pid}`));
@@ -196,7 +198,78 @@ test('«Изменить условия» после отказа открыва
   await actAs(page, null);
 
   await page.goto(`/projects/detail?id=${pid}`);
+  // Владелец видит отказ и одно действие — без параллельного «Ждём согласия» по прежним условиям.
+  await expect(page.getByTestId('terms-declined')).toContainText('Боря не согласен');
+  await expect(page.getByTestId('terms-waiting')).toHaveCount(0);
   await page.getByTestId('project-declined-change').click();
   await expect(page).toHaveURL(new RegExp(`/projects/terms\\?id=${pid}`));
   await expect(page.getByTestId('member-row-0')).toContainText('1 500 ₽');
+});
+
+/** Прокрутка до конца: последний элемент ленты целиком выше закреплённой зоны; у зоны и навигации непрозрачный фон. */
+async function expectLastAboveDock(page: Page, dockId: string) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(200);
+  const r = await page.evaluate((id) => {
+    const dock = document.querySelector(`[data-testid="${id}"]`)!;
+    // У V1Screen перед зоной — распорка (aria-hidden), у главной — нет.
+    let last = dock.previousElementSibling!;
+    if (last.getAttribute('aria-hidden') === 'true') last = last.previousElementSibling!;
+    const nav = document.querySelector('[data-testid="bottom-nav"]');
+    const opaque = (el: Element | null) => !el || getComputedStyle(el).backgroundColor === 'rgb(242, 243, 245)';
+    return {
+      lastBottom: last.getBoundingClientRect().bottom,
+      dockTop: dock.getBoundingClientRect().top,
+      navTop: nav ? nav.getBoundingClientRect().top : Infinity,
+      btnBottom: [...dock.querySelectorAll('a, button')].at(-1)!.getBoundingClientRect().bottom,
+      opaque: opaque(dock) && opaque(nav),
+    };
+  }, dockId);
+  expect(r.lastBottom).toBeLessThanOrEqual(r.dockTop);
+  expect(r.lastBottom).toBeLessThanOrEqual(r.navTop);
+  // Главная кнопка целиком над навигацией, не подрезана её фоном.
+  expect(r.btnBottom).toBeLessThanOrEqual(r.navTop);
+  expect(r.opaque).toBe(true);
+}
+
+test('нижняя зона: последняя карточка целиком выше кнопки и навигации (главная, событие, итог события)', async ({ page }) => {
+  await loginAnya(page);
+  await page.evaluate(() => {
+    const members = ['u-anya', 'm-lena', 'm-sasha'].map((id, i) => ({ id, name: ['Аня', 'Лена', 'Саша'][i], avatar: 'А', role: i ? 'member' : 'owner' }));
+    const expenses = Array.from({ length: 8 }, (_, i) => ({
+      id: `e${i}`, title: `Расход ${i + 1}`, amount: 3000, currency: 'RUB', amountInGroupCurrency: 3000, category: 'other',
+      paidById: members[i % 3].id, splits: members.map((m) => ({ userId: m.id, amountOwed: 1000 })), createdAt: `2026-10-1${i}T10:00:00Z`,
+    }));
+    const groups = Array.from({ length: 6 }, (_, i) => ({
+      id: `g${i}`, name: `Событие ${i + 1}`, category: 'trip', currency: 'RUB', status: 'active', createdBy: 'u-anya',
+      members, expenses, settlements: [],
+    }));
+    window.localStorage.setItem('splitit_local_groups_data', JSON.stringify(groups));
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('home-create')).toBeVisible();
+  await expectLastAboveDock(page, 'home-dock');
+
+  await page.goto('/events/detail?id=g0');
+  await expect(page.getByTestId('close-event')).toBeVisible();
+  await expectLastAboveDock(page, 'v1-dock');
+
+  await page.getByTestId('close-event').click();
+  await expect(page.getByTestId('settle-lock')).toBeVisible();
+  await expectLastAboveDock(page, 'v1-dock');
+  // Пояснение о фиксации — над кнопкой, а не под ней.
+  const note = (await page.getByTestId('settle-lock-note').boundingBox())!;
+  const btn = (await page.getByTestId('settle-lock').boundingBox())!;
+  expect(note.y + note.height).toBeLessThanOrEqual(btn.y);
+
+  // Закрытое событие: кнопки внизу нет, но навигация есть — последний блок всё равно над ней.
+  await page.getByTestId('settle-lock').click();
+  await expect(page.getByTestId('v1-nav-spacer')).toBeAttached();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(200);
+  const closed = await page.evaluate(() => ({
+    lastBottom: document.querySelector('[data-testid="v1-nav-spacer"]')!.previousElementSibling!.getBoundingClientRect().bottom,
+    navTop: document.querySelector('[data-testid="bottom-nav"]')!.getBoundingClientRect().top,
+  }));
+  expect(closed.lastBottom).toBeLessThanOrEqual(closed.navTop);
 });

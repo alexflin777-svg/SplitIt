@@ -265,7 +265,7 @@ function AddRecord() {
             </div>
           ) : (
             <MainButton testId="op-save" disabled={disabled} onClick={() => void save()}>
-              {busy ? t('add.saving') : t('add.save')}
+              {busy ? t('add.saving') : editing ? t('add.saveEdit') : t('add.save')}
             </MainButton>
           )}
         </>

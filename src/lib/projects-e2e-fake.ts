@@ -388,7 +388,7 @@ export function createFakeProjectsClient() {
       const fail = failRaw ? (JSON.parse(failRaw) as { fn: string; mode: 'error' | 'lost' }) : null;
       const failing = fail?.fn === fn;
       if (failing) window.localStorage.removeItem(FAIL_KEY);
-      if (failing && fail.mode === 'error') return { data: null, error: { message: 'отказ базы (e2e)', code: 'P0001' } };
+      if (failing && fail.mode === 'error') return { data: null, error: { message: 'База отклонила запрос', code: 'P0001' } };
       const db = load();
       const actor = fakeActor();
       try {

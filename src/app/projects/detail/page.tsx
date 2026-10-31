@@ -75,6 +75,7 @@ function ProjectDetail() {
     .filter((x) => x.f.hours || x.f.pieces);
 
   const canSettle = isOwner && c.canClose && ops.length > 0;
+  const myTurn = !!me && c.waiting.includes(me.display_name) && !c.answered;
   // Ответы на последние предложенные условия (макет h1-bory-declined): кто принял, кто против.
   const lastAsk = data.terms
     .filter((x) => x.status === 'proposed' || x.status === 'rejected')
@@ -174,9 +175,10 @@ function ProjectDetail() {
           </p>
         </>
       )}
-      {c.pending && c.waiting.length > 0 && (
+      {/* После отказа владельцу нужен один ответ — «предложите другие»; пассивное «ждём» по прежним условиям его путает. */}
+      {c.pending && c.waiting.length > 0 && (myTurn || !c.declinedBy) && (
         <Plaque kind="info" testId="terms-waiting">
-          {me && c.waiting.includes(me.display_name) && !c.answered ? (
+          {myTurn ? (
             <Link href={routes.projectConsent(id)} className="font-bold text-v1-accent-ink underline" data-testid="consent-link">
               {t('project.consent.acceptCta')}
             </Link>

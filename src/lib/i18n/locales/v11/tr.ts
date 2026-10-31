@@ -269,6 +269,7 @@ export const messages: Record<string, string> = {
   'invite.v1.members': "{count} katılımcı",
   'invite.v1.members#one': "{count} katılımcı",
   'add.editTitle': "Kaydı düzenle",
+  'add.saveEdit': "Değişiklikleri kaydet",
   'add.delete': "Kaydı sil",
   'add.deleteConfirm': "“{title}” silinsin mi? Dönem toplamı yeniden hesaplanacak.",
   'add.deleteYes': "Evet, sil",

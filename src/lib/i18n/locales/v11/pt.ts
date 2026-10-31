@@ -275,6 +275,7 @@ export const messages: Record<string, string> = {
   'invite.v1.members#one': "{count} participante",
   'invite.v1.members#many': "{count} de participantes",
   'add.editTitle': "Editar registro",
+  'add.saveEdit': "Salvar alterações",
   'add.delete': "Excluir registro",
   'add.deleteConfirm': "Excluir “{title}”? O total do período será recalculado.",
   'add.deleteYes': "Sim, excluir",

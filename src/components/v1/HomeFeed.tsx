@@ -306,7 +306,7 @@ export default function HomeFeed({
         </>
       )}
 
-      <div className="fixed left-0 right-0 z-40 bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] px-4 pt-3 pb-1 bg-v1-bg">
+      <div data-testid="home-dock" className="fixed left-0 right-0 z-40 bottom-0 px-4 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] bg-v1-bg">
         <div className="max-w-md mx-auto">
           <MainButton href={routes.eventNew()} testId="home-create">
             <Plus className="w-6 h-6" aria-hidden="true" />

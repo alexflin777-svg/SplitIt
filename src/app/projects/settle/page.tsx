@@ -201,7 +201,8 @@ function Preview({
 
       {failure?.kind === 'refused' && (
         <Plaque kind="err" testId="settle-refused">
-          <b>{t('settle.refused')}</b> {failure.message} {t('settle.refusedTail', { month: capitalize(month) })}
+          {/* Сообщения базы — без точки в конце: иначе фраза слипается со следующей. */}
+          <b>{t('settle.refused')}</b> {/[.!?…]$/.test(failure.message.trim()) ? failure.message.trim() : `${failure.message.trim()}.`} {t('settle.refusedTail', { month: capitalize(month) })}
         </Plaque>
       )}
       {failure?.kind === 'lost' && (

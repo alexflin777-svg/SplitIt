@@ -97,6 +97,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [managingMembers, setManagingMembers] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -453,10 +454,17 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       <V1Screen
         testId="event-settle"
         dock={
-          <MainButton onClick={() => handleToggleCompleteEvent('completed')}>
-            <Lock className="w-5 h-5" aria-hidden="true" />
-            {t('eventDetail.finishSettlement')}
-          </MainButton>
+          <>
+            {/* Пояснение о фиксации — над кнопкой, в закреплённой зоне: видно до нажатия. */}
+            <Plaque kind="warn" testId="settle-lock-note">
+              <b className="block text-base">{t('event.v1.lockTitle')}</b>
+              {t('event.v1.lockBody')}
+            </Plaque>
+            <MainButton testId="settle-lock" onClick={() => handleToggleCompleteEvent('completed')}>
+              <Lock className="w-5 h-5" aria-hidden="true" />
+              {t('eventDetail.finishSettlement')}
+            </MainButton>
+          </>
         }
       >
         <TopNav back={routes.eventDetail(group.id)} />
@@ -472,12 +480,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </div>
         )}
         <EventSummary group={group} currentUserId={userProfile?.id} compact />
-        <div className="mt-3">
-          <Plaque kind="warn">
-            <b className="block text-base">{t('event.v1.lockTitle')}</b>
-            {t('event.v1.lockBody')}
-          </Plaque>
-        </div>
       </V1Screen>
     );
   }
@@ -638,7 +640,25 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       )}
 
       {/* Участники: крупные аватары по порядку события, «+ Позвать» в конце ряда. */}
-      <BlockHead title={t('eventDetail.members')} right={members.length} />
+      <BlockHead
+        title={t('eventDetail.members')}
+        right={
+          members.some(canRemoveMember) ? (
+            // Удаление — в режиме управления, не постоянным крестиком на каждом аватаре.
+            <>
+              {members.length} ·{' '}
+              <button type="button" data-testid="members-manage" onClick={() => setManagingMembers((v) => !v)}
+                aria-pressed={managingMembers}
+                className="py-3 -my-3 px-1 -mx-1 text-v1-accent-ink font-bold"
+              >
+                {managingMembers ? t('terms.done') : t('common.edit')}
+              </button>
+            </>
+          ) : (
+            members.length
+          )
+        }
+      />
       <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 pt-1 pb-1">
         {members.map((m: any, i: number) => (
           <div key={m.id} className="relative flex-none w-16 flex flex-col items-center gap-1.5">
@@ -646,7 +666,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
             <span className="w-full text-center text-[15px] font-medium truncate">
               {userProfile && m.id === userProfile.id ? t('project.you') : m.name}
             </span>
-            {canRemoveMember(m) && (
+            {managingMembers && canRemoveMember(m) && (
               <button
                 type="button"
                 data-testid={`remove-member-${m.id}`}

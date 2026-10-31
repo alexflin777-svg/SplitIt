@@ -55,17 +55,24 @@ export function V1Screen({ children, dock, testId }: { children: ReactNode; dock
     return () => ro.disconnect();
   }, [hasDock]);
   return (
-    <div data-testid={testId} className="font-v1 text-v1-ink bg-v1-bg -mx-4 -mt-4 px-4 pt-3 pb-6 min-h-[calc(100vh-4rem)] tabular-nums">
+    // -mb снимает нижний отступ main (layout.tsx): под экраном не видна полоса фона страницы; место под кнопкой даёт распорка.
+    <div
+      data-testid={testId}
+      className="font-v1 text-v1-ink bg-v1-bg -mx-4 -mt-4 -mb-[calc(10rem+env(safe-area-inset-bottom,0px))] px-4 pt-3 pb-6 min-h-[calc(100vh-4rem)] tabular-nums"
+    >
       {children}
       {/* Отступ прокрутки = высоте закреплённого блока: последний элемент не уходит под кнопку. */}
       {dock && <div aria-hidden="true" style={{ height: dockH }} />}
+      {/* Без кнопки, но с навигацией внизу (не focus-маршрут): место под навигацию. */}
+      {!dock && !focus && <div aria-hidden="true" data-testid="v1-nav-spacer" className="h-[calc(6rem+env(safe-area-inset-bottom,0px))]" />}
       {dock && (
         <div
           ref={dockRef}
           data-testid="v1-dock"
           className={cx(
             'fixed left-0 right-0 z-40 px-4 pt-3 bg-v1-bg',
-            focus ? 'bottom-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]' : 'bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] pb-1',
+            // Фон до низа экрана, под навигацией: между кнопкой и навигацией содержимое не просвечивает.
+            focus ? 'bottom-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]' : 'bottom-0 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]',
           )}
         >
           <div className="max-w-md mx-auto">{dock}</div>

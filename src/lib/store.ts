@@ -347,7 +347,7 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
       const groupId = fakeRedeemInvite(code);
       const exp = groupId ? fakeExpiry(groupId) : null;
       if (exp && Date.parse(exp) <= Date.now()) return { data: null, error: t('errors.inviteInvalidOrExpired') };
-      return groupId ? ok(groupId) : { data: null, error: 'Ссылка не найдена (e2e)' };
+      return groupId ? ok(groupId) : { data: null, error: t('errors.inviteInvalidOrExpired') };
     }
     return { data: null, error: 'Приглашения работают только с подключённым бэкендом.' };
   }
@@ -381,7 +381,7 @@ export async function getActiveInvite(groupId: string): Promise<RemoteResult<{ c
 export async function previewInvite(code: string): Promise<RemoteResult<remote.EventInvitePreview>> {
   if (!isMultiUser()) {
     const g = e2eInvites() ? localGroups().find((x) => x.id === fakeRedeemInvite(code)) : undefined;
-    if (!g) return { data: null, error: e2eInvites() ? 'Ссылка не найдена (e2e)' : LOCAL_INVITES };
+    if (!g) return { data: null, error: e2eInvites() ? t('errors.inviteInvalidOrExpired') : LOCAL_INVITES };
     const expiresAt = fakeExpiry(g.id);
     return ok({
       event_name: g.name,

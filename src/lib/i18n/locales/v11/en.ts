@@ -269,6 +269,7 @@ export const messages: Record<string, string> = {
   'invite.v1.members': "{count} participants",
   'invite.v1.members#one': "{count} participant",
   'add.editTitle': "Edit entry",
+  'add.saveEdit': "Save changes",
   'add.delete': "Delete entry",
   'add.deleteConfirm': "Delete “{title}”? The period total will be recalculated.",
   'add.deleteYes': "Yes, delete",

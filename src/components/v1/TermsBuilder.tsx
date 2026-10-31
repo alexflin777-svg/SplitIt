@@ -299,7 +299,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
                       ]}
                     />
                   </div>
-                  <div className={cx('grid gap-2', l.contribKind === 'item' ? 'grid-cols-[1.5fr_1fr]' : 'grid-cols-1')}>
+                  <div className={cx('grid gap-2', l.contribKind === 'item' ? 'grid-cols-[minmax(0,1fr)_9.5rem]' : 'grid-cols-1')}>
                     {l.contribKind === 'item' && (
                       <label className="flex flex-col gap-1">
                         <span className="text-sm font-semibold text-v1-muted">{t('terms.itemWhat')}</span>

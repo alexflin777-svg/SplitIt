@@ -263,6 +263,7 @@ export const messages: Record<string, string> = {
   'invite.v1.fromNobody': "イベントに招待されています",
   'invite.v1.members': "{count}人の参加者",
   'add.editTitle': "記録を編集",
+  'add.saveEdit': "変更を保存",
   'add.delete': "記録を削除",
   'add.deleteConfirm': "「{title}」を削除しますか？期間の合計が再計算されます。",
   'add.deleteYes': "削除する",

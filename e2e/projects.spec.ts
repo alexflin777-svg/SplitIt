@@ -187,6 +187,8 @@ test('проект: создать → позвать → условия → п�
   await page.evaluate(() => window.localStorage.setItem('splitit_fake_projects_fail', JSON.stringify({ fn: 'close_period', mode: 'error' })));
   await page.getByTestId('settle-close').click();
   await expect(page.getByTestId('settle-refused')).toBeVisible();
+  // Текст базы — отдельной фразой, без служебных пометок.
+  await expect(page.getByTestId('settle-refused')).toContainText('База отклонила запрос. ');
   // Обрыв связи: база зафиксировала, ответ потерян → «Проверить статус».
   await page.evaluate(() => window.localStorage.setItem('splitit_fake_projects_fail', JSON.stringify({ fn: 'close_period', mode: 'lost' })));
   await page.getByTestId('settle-close').click();
