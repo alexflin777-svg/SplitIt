@@ -7,7 +7,9 @@
  */
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { ChevronLeft, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 
@@ -31,13 +33,41 @@ export function Avatar({ name, index = 0, size = 'm' }: { name: string; index?: 
   );
 }
 
-/** Экран V1: своё поле и шрифт; dock — главная кнопка над нижней навигацией. */
+/**
+ * Экраны «Проекта» — сосредоточенные: без нижней навигации и «+ Событие» в шапке,
+ * чтобы не спорить с главной кнопкой (макеты h1–h3).
+ */
+export function isFocusRoute(pathname: string | null): boolean {
+  return !!pathname && pathname.startsWith('/projects/');
+}
+
+/** Экран V1: своё поле и шрифт; dock — главная кнопка внизу (над навигацией, если она есть). */
 export function V1Screen({ children, dock, testId }: { children: ReactNode; dock?: ReactNode; testId?: string }) {
+  const focus = isFocusRoute(usePathname());
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockH, setDockH] = useState(0);
+  const hasDock = !!dock;
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return setDockH(0);
+    const ro = new ResizeObserver(() => setDockH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasDock]);
   return (
-    <div data-testid={testId} className="font-v1 text-v1-ink bg-v1-bg -mx-4 -mt-4 px-4 pt-3 pb-44 min-h-[calc(100vh-4rem)] tabular-nums">
+    <div data-testid={testId} className="font-v1 text-v1-ink bg-v1-bg -mx-4 -mt-4 px-4 pt-3 pb-6 min-h-[calc(100vh-4rem)] tabular-nums">
       {children}
+      {/* Отступ прокрутки = высоте закреплённого блока: последний элемент не уходит под кнопку. */}
+      {dock && <div aria-hidden="true" style={{ height: dockH }} />}
       {dock && (
-        <div className="fixed left-0 right-0 z-40 bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] px-4 pt-3 pb-1 bg-v1-bg">
+        <div
+          ref={dockRef}
+          data-testid="v1-dock"
+          className={cx(
+            'fixed left-0 right-0 z-40 px-4 pt-3 bg-v1-bg',
+            focus ? 'bottom-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]' : 'bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] pb-1',
+          )}
+        >
           <div className="max-w-md mx-auto">{dock}</div>
         </div>
       )}

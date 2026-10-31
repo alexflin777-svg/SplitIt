@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { computeEventSummary } from '@/lib/event-summary';
 import EventInviteStep from '@/components/v1/EventInviteStep';
-import { MainButton } from '@/components/v1/ui';
-import confetti from 'canvas-confetti';
+import { Avatar, BlockHead, Header, MainButton, PillLink, Plaque, TopNav, V1Screen, avatarBg, cx } from '@/components/v1/ui';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
   renameGroup,
@@ -21,17 +20,11 @@ import {
 } from '@/lib/store';
 import { formatMoney } from '@/lib/currency';
 import {
-  ArrowLeft,
-  PlusCircle,
+  Plus,
   Scale,
   CreditCard,
   FileText,
   Share2,
-  CheckCircle2,
-  Calendar,
-  User,
-  Edit2,
-  UserPlus,
   X,
   Check,
   Pencil,
@@ -40,10 +33,10 @@ import {
   Send,
   MessageCircle,
   MessageSquare,
-  RotateCcw,
-  Sparkles,
-  PieChart,
   Users,
+  Lock,
+  ChevronDown,
+  ChevronRight,
   AlertTriangle,
 } from 'lucide-react';
 import { routes, absoluteInviteLink, hasPublicInviteOrigin } from '@/lib/routes';
@@ -116,7 +109,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showPhonebookModal, setShowPhonebookModal] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<any | null>(null);
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
 
   // Phonebook manual entry
@@ -222,6 +214,11 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
 
     // Одна ссылка на событие: действующая показывается снова, новая — только если её нет.
     const existing = await getActiveInvite(group.id);
+    // Не прочитали действующую — не создаём вторую вслепую.
+    if (existing.error) {
+      setInviteError(existing.error);
+      return null;
+    }
     const { data: code, error } = existing.data ? { data: existing.data.code, error: null } : await createInvite(group.id);
     if (error || !code) {
       setInviteError(error ?? t('eventDetail.errorCreateInviteFailed'));
@@ -418,451 +415,464 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   };
 
   const handleToggleCompleteEvent = async (targetStatus: 'completed' | 'active') => {
-    setShowCompleteModal(false);
-
     const { error } = await setGroupStatus(group.id, targetStatus);
     if (error) {
       setActionError(error);
       return;
     }
     await refreshGroup();
-
-    if (targetStatus === 'completed') {
-      try {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      } catch (e) {
-        console.warn('Confetti not available', e);
-      }
-    }
+    // С экрана «Подвести итог» — обратно на событие, уже закрытое.
+    if (targetStatus === 'completed') router.replace(routes.eventDetail(group.id));
   };
 
-  return (
-    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
-      {actionError && (
-        <div role="alert" data-testid="action-error" className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center justify-between">
-          <p className="text-xs font-bold text-rose-700">{actionError}</p>
-          <button onClick={() => setActionError(null)} aria-label={t('eventDetail.cancel')} className="text-rose-500 hover:text-rose-700">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      {/* Header Nav */}
-      <div className="flex items-center justify-between">
-        <Link
-          href="/"
-          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        
-        {isEditingName ? (
-          <div className="flex items-center gap-1.5 flex-1 max-w-[200px] mx-2">
-            <input
-              type="text"
-              value={editedName}
-              onChange={(e) => setEditedName(e.target.value)}
-              className="w-full px-2 py-1 text-xs font-bold border border-blue-400 rounded-lg focus:outline-none dark:bg-slate-900 dark:text-white"
-            />
-            <button
-              onClick={handleSaveGroupName}
-              className="p-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-            >
-              <Check className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : (
-          <div className="text-center flex items-center gap-1.5 cursor-pointer" onClick={() => setIsEditingName(true)}>
-            <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{group.name}</h2>
-            <Edit2 className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
+  const expenses = group.expenses || [];
+  const members = group.members || [];
+  const currency = group.currency || 'RUB';
+  // Цвет аватара — по порядку участников события (avatarBg), как на остальных экранах V1.
+  const memberIdx = (id: string) => members.findIndex((m: any) => m.id === id);
+  const ownerName = members.find((m: any) => m.id === group.createdBy)?.name ?? t('eventDetail.defaultMember');
+  const mineLabel = myNet > 0 ? t('event.v1.owedToYou') : myNet < 0 ? t('event.v1.youOwe') : t('event.v1.even');
+  const mineAmount = formatMoney(Math.abs(myNet), currency);
+
+  const errorPlaque = actionError && (
+    <Plaque kind="err" testId="action-error">
+      <span className="flex items-start justify-between gap-2">
+        <span>{actionError}</span>
+        <button onClick={() => setActionError(null)} aria-label={t('eventDetail.cancel')} className="text-v1-muted">
+          <X className="w-5 h-5" />
+        </button>
+      </span>
+    </Plaque>
+  );
+
+  // «Подвести итог» — отдельный экран V1 в том же маршруте (?settle=1): переводы и одна кнопка.
+  // Закрыть может только владелец и только непустое событие — иначе обычный экран.
+  if (searchParams.get('settle') === '1' && !isCompleted && isOwner && expenses.length > 0) {
+    const transfersCount = computeEventSummary(group).transfers.length;
+    return (
+      <V1Screen
+        testId="event-settle"
+        dock={
+          <MainButton onClick={() => handleToggleCompleteEvent('completed')}>
+            <Lock className="w-5 h-5" aria-hidden="true" />
+            {t('eventDetail.finishSettlement')}
+          </MainButton>
+        }
+      >
+        <TopNav back={routes.eventDetail(group.id)} />
+        <Header title={t('summary.transfersTitle')} sub={`${group.name} · ${formatMoney(totalExpenses, currency)}`} />
+        {errorPlaque}
+        {transfersCount > 0 && (
+          <div className="relative overflow-hidden isolate mb-2 px-5 pt-[18px] pb-5 rounded-tile bg-v1-trip">
+            <p className="text-[26px] leading-[1.1] font-extrabold tracking-[-0.02em]">
+              {t('event.v1.settleLeft', { count: transfersCount })}
+            </p>
+            <p className="mt-2 max-w-[14em] text-base text-v1-ink2 relative z-[1]">{t('event.v1.settleLeftBody')}</p>
+            <img src="/v1/receipts.png" alt="" className="absolute w-[112px] -right-3 -bottom-6 pointer-events-none" />
           </div>
         )}
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setShowInviteModal(true);
-              void ensureInviteLink();
-            }}
-            className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs"
-            title={t('eventDetail.invitePeople')}
-          >
-            <Share2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          </button>
-          {(!isMultiUser() || userProfile?.id === group.createdBy) && (
-            <button
-              onClick={() => setShowDeleteEventModal(true)}
-              className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-xs"
-              title={t('eventDetail.deleteEvent')}
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          )}
+        <EventSummary group={group} currentUserId={userProfile?.id} compact />
+        <div className="mt-3">
+          <Plaque kind="warn">
+            <b className="block text-base">{t('event.v1.lockTitle')}</b>
+            {t('event.v1.lockBody')}
+          </Plaque>
         </div>
-      </div>
+      </V1Screen>
+    );
+  }
 
-      {/* Completed Status Verification Banner */}
-      {isCompleted && (
+  const moreLink = 'w-full flex items-center gap-3 min-h-16 py-3 pr-4 pl-3 bg-v1-card rounded-row text-base font-semibold text-left';
+  const moreIcon = 'w-10 h-10 rounded-full bg-v1-bg grid place-items-center flex-none';
+
+  return (
+    <V1Screen
+      testId="event-detail"
+      dock={
+        // Одна главная кнопка внизу (V1): владельцу — «Подвести итог», остальным — «Добавить расход».
+        !isCompleted &&
+        (isOwner && expenses.length > 0 ? (
+          <MainButton testId="close-event" onClick={() => router.push(routes.eventDetail(group.id, { settle: 1 }))}>
+            {t('event.v1.settle')}
+          </MainButton>
+        ) : (
+          <MainButton testId="event-add-expense" href={routes.expenseNew(group.id)}>
+            {expenses.length ? t('eventDetail.actionExpense') : t('event.v1.addFirst')}
+          </MainButton>
+        ))
+      }
+    >
+      <TopNav
+        back={routes.home()}
+        right={
+          isCompleted ? (
+            isOwner && (
+              <PillLink onClick={() => handleToggleCompleteEvent('active')}>
+                <Lock className="w-5 h-5" aria-hidden="true" />
+                {t('eventDetail.resume')}
+              </PillLink>
+            )
+          ) : (
+            <PillLink
+              onClick={() => {
+                setShowInviteModal(true);
+                void ensureInviteLink();
+              }}
+            >
+              <Users className="w-5 h-5" aria-hidden="true" />
+              {t('event.v1.invite')}
+            </PillLink>
+          )
+        }
+      />
+
+      {isEditingName ? (
+        <div className="pt-1 pb-4 flex items-center gap-2">
+          <input
+            type="text"
+            autoFocus
+            value={editedName}
+            aria-label={t('eventNew.nameLabel')}
+            onChange={(e) => setEditedName(e.target.value)}
+            className="flex-1 min-w-0 h-12 px-4 rounded-full bg-v1-card outline-none text-xl font-extrabold"
+          />
+          <button
+            onClick={handleSaveGroupName}
+            aria-label={t('eventDetail.ok')}
+            className="w-12 h-12 rounded-full bg-v1-ink text-white grid place-items-center flex-none"
+          >
+            <Check className="w-5 h-5" />
+          </button>
+        </div>
+      ) : (
+        <Header
+          title={
+            isCompleted ? (
+              t('event.v1.closedTitle')
+            ) : (
+              <button type="button" onClick={() => setIsEditingName(true)} className="text-left">
+                {group.name}
+                <Pencil className="inline-block ml-2 w-5 h-5 text-v1-muted align-baseline" aria-hidden="true" />
+              </button>
+            )
+          }
+          sub={
+            isCompleted
+              ? group.name
+              : expenses.length
+                ? t('event.v1.totalAll', { total: formatMoney(totalExpenses, currency) })
+                : t('event.v1.noExpensesSub')
+          }
+        />
+      )}
+
+      {errorPlaque}
+
+      {searchParams.get('joined') === '1' && (
+        <Plaque kind="ok" testId="event-joined">
+          <b>{t('event.v1.joinedTitle')}</b> {t('event.v1.joinedBody', { name: ownerName })}
+        </Plaque>
+      )}
+
+      {isCompleted ? (
+        // Спокойный мятный итог вместо насыщенно-зелёной панели. Градиент едва заметный,
+        // но остаётся: регрессия close-event проверяет, что фон баннера не сброшен .stitch-card.
         <div
           data-testid="closed-banner"
-          className="stitch-card p-4 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white space-y-3 shadow-lg border-emerald-500"
+          className={cx(
+            'relative overflow-hidden isolate rounded-tile px-5 pt-[18px] pb-5 bg-gradient-to-br',
+            myNet < 0 ? 'from-v1-minus to-[#FCD3B8]' : 'from-v1-plus to-[#C6EAD1]',
+          )}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-100" />
-              <span className="font-extrabold text-sm">{t('eventDetail.completedBanner')}</span>
-            </div>
-            {isOwner && (
+          <span className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-v1-card text-[15px] font-bold">
+            <Lock className="w-4 h-4" aria-hidden="true" />
+            {t('eventDetail.completedBanner')}
+          </span>
+          {myBalance && (
+            <>
+              <p className="mt-3 text-base font-semibold text-v1-ink2">{mineLabel}</p>
+              <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]">{mineAmount}</p>
+            </>
+          )}
+          <p className="mt-2 max-w-[15em] text-[15px] text-v1-ink2 relative z-[1]">{t('eventDetail.completedNote')}</p>
+          {group.category === 'trip' && (
+            <img src="/v1/trip.png" alt="" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
+          )}
+        </div>
+      ) : (
+        (myBalance || expenses.length === 0) && (
+          // Без расходов — голубое пустое состояние V1 (макет h4-joined).
+          <div
+            data-testid="event-mine"
+            className={cx(
+              'relative overflow-hidden isolate rounded-tile px-5 pt-[18px] pb-5',
+              expenses.length === 0 ? 'bg-v1-trip' : myNet < 0 ? 'bg-v1-minus' : 'bg-v1-plus',
+            )}
+          >
+            {myBalance && (
+              <>
+                <p className="text-base font-semibold text-v1-ink2">{mineLabel}</p>
+                <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]">{mineAmount}</p>
+              </>
+            )}
+            <p className="mt-2 max-w-[15em] text-[15px] text-v1-ink2 relative z-[1]">
+              {expenses.length === 0
+                ? t('event.v1.emptyHint')
+                : t('event.v1.paidShare', {
+                    paid: formatMoney(myBalance?.paid ?? 0, currency),
+                    share: formatMoney(myBalance?.owes ?? 0, currency),
+                  })}
+            </p>
+            {group.category === 'trip' && (
+              <img src="/v1/trip.png" alt="" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
+            )}
+          </div>
+        )
+      )}
+
+      {isCompleted && (
+        <>
+          <BlockHead title={t('event.v1.transfers')} />
+          <EventSummary group={group} currentUserId={userProfile?.id} />
+        </>
+      )}
+
+      {/* Участники: крупные аватары по порядку события, «+ Позвать» в конце ряда. */}
+      <BlockHead title={t('eventDetail.members')} right={members.length} />
+      <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 pt-1 pb-1">
+        {members.map((m: any, i: number) => (
+          <div key={m.id} className="relative flex-none w-16 flex flex-col items-center gap-1.5">
+            <Avatar name={m.name} index={i} size="l" />
+            <span className="w-full text-center text-[15px] font-medium truncate">
+              {userProfile && m.id === userProfile.id ? t('project.you') : m.name}
+            </span>
+            {canRemoveMember(m) && (
               <button
-                onClick={() => handleToggleCompleteEvent('active')}
-                className="text-[10px] font-bold bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg flex items-center gap-1"
+                type="button"
+                data-testid={`remove-member-${m.id}`}
+                onClick={() => void handleRemoveMember(m)}
+                disabled={removingMemberId !== null}
+                aria-label={t('eventDetail.removeGuest', { name: m.name })}
+                title={t('eventDetail.removeGuest', { name: m.name })}
+                className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-v1-card shadow-sm grid place-items-center text-v1-muted"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span>{t('eventDetail.resume')}</span>
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
           </div>
-          <p className="text-xs text-emerald-100 font-medium">
-            {t('eventDetail.completedNote')}
-          </p>
-          <EventSummary group={group} currentUserId={userProfile?.id} />
-        </div>
-      )}
-
-      {myBalance && (
-        <div
-          data-testid="event-mine"
-          className={`font-v1 text-v1-ink rounded-tile px-5 pt-[18px] pb-5 ${myNet < 0 ? 'bg-v1-minus' : 'bg-v1-plus'}`}
-        >
-          <p className="text-base font-semibold text-v1-ink2">
-            {myNet > 0 ? t('event.v1.owedToYou') : myNet < 0 ? t('event.v1.youOwe') : t('event.v1.even')}
-          </p>
-          <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]">
-            {formatMoney(Math.abs(myNet), group.currency || 'RUB')}
-          </p>
-          <p className="mt-2 text-[15px] text-v1-ink2">
-            {t('event.v1.paidShare', {
-              paid: formatMoney(myBalance.paid, group.currency || 'RUB'),
-              share: formatMoney(myBalance.owes, group.currency || 'RUB'),
-            })}
-          </p>
-        </div>
-      )}
-
-      {/* Main Group Summary Card with Category Breakdown Chart Diagram */}
-      <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white shadow-xl relative overflow-hidden space-y-4 border-slate-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-300">
-                {t('eventDetail.totalSpent')}
-              </span>
-              <span
-                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  isCompleted ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'bg-blue-500/30 text-blue-200 border border-blue-400/30'
-                }`}
-              >
-                {isCompleted ? t('eventDetail.statusCompleted') : t('eventDetail.statusActive')}
-              </span>
-            </div>
-            <h3 className="text-3xl font-extrabold mt-1">
-              {formatMoney(totalExpenses, group.currency || 'RUB')}
-            </h3>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white">
-            <PieChart className="w-6 h-6 text-blue-400" />
-          </div>
-        </div>
-
-        {/* Dynamic Category Breakdown Progress Bar Diagram */}
-        {totalExpenses > 0 && (
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-              <span>{t('eventDetail.categoryChartTitle')}</span>
-              <span>{t('eventDetail.categoryCount', { count: categorySegments.length })}</span>
-            </div>
-
-            <div className="h-3 w-full rounded-full bg-slate-800/80 overflow-hidden flex shadow-inner border border-white/10">
-              {categorySegments.map((seg) => (
-                <div
-                  key={seg.key}
-                  style={{ width: `${seg.percent}%` }}
-                  className={`h-full ${seg.config.color} transition-all duration-500`}
-                  title={`${seg.config.label}: ${seg.percent}% (${formatMoney(seg.sum, group.currency)})`}
-                />
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pt-1 no-scrollbar text-[11px]">
-              {categorySegments.map((seg) => (
-                <div
-                  key={seg.key}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 whitespace-nowrap"
-                >
-                  <span className={`w-2 h-2 rounded-full ${seg.config.color}`} />
-                  <span className="font-medium text-slate-200">
-                    {seg.config.emoji} {seg.config.label}
-                  </span>
-                  <span className="font-extrabold text-white">{seg.percent}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons Grid */}
-        <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/10">
-          {isCompleted ? (
-            <span
-              aria-disabled="true"
-              title={t('summary.lockedHint')}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/5 text-center opacity-50 cursor-not-allowed"
-            >
-              <PlusCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
-            </span>
-          ) : (
-            <Link
-              href={routes.expenseNew(group.id)}
-              className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
-            >
-              <PlusCircle className="w-5 h-5 text-blue-400" />
-              <span className="text-[10px] font-bold">{t('eventDetail.actionExpense')}</span>
-            </Link>
-          )}
-
-          <Link
-            href={routes.eventBalance(group.id)}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
-          >
-            <Scale className="w-5 h-5 text-emerald-400" />
-            <span className="text-[10px] font-bold">{t('eventDetail.actionBalance')}</span>
-          </Link>
-
-          <Link
-            href={routes.eventSettle(group.id)}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
-          >
-            <CreditCard className="w-5 h-5 text-amber-400" />
-            <span className="text-[10px] font-bold">{t('eventDetail.actionSettle')}</span>
-          </Link>
-
-          <Link
-            href={routes.eventExport(group.id)}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-center"
-          >
-            <FileText className="w-5 h-5 text-purple-400" />
-            <span className="text-[10px] font-bold">{t('eventDetail.actionReport')}</span>
-          </Link>
-        </div>
-
+        ))}
+        <button type="button" onClick={() => setIsAddingMember(true)} className="flex-none w-16 flex flex-col items-center gap-1.5">
+          <span className="w-14 h-14 rounded-full bg-v1-card grid place-items-center">
+            <Plus className="w-6 h-6" aria-hidden="true" />
+          </span>
+          <span className="text-[15px] font-medium">{t('event.v1.call')}</span>
+        </button>
       </div>
 
-      {/* Одна главная кнопка внизу (V1): владельцу — «Подвести итог», остальным — «Добавить расход». */}
-      {!isCompleted && (
-        <div className="fixed left-0 right-0 z-40 bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] px-4 pt-3 pb-1 font-v1 bg-[#f8f9ff] dark:bg-[#0b0f19]">
-          <div className="max-w-md mx-auto">
-            {isOwner && (group.expenses || []).length > 0 ? (
-              <MainButton testId="close-event" onClick={() => setShowCompleteModal(true)}>
-                {t('event.v1.settle')}
-              </MainButton>
-            ) : (
-              <MainButton testId="event-add-expense" href={routes.expenseNew(group.id)}>
-                {(group.expenses || []).length ? t('eventDetail.actionExpense') : t('event.v1.addFirst')}
-              </MainButton>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Group Members Bar */}
-      <div className="stitch-card p-4 space-y-2 bg-white dark:bg-slate-800">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {t('eventDetail.membersCount', { count: group.members?.length || 0 })}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSelectFromPhonebook}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800"
-              title={t('eventDetail.pickFromContacts')}
-            >
-              <Phone className="w-3 h-3" />
-              <span>{t('eventDetail.contacts')}</span>
-            </button>
-            <button
-              onClick={() => setIsAddingMember(true)}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-lg border border-blue-100 dark:border-blue-800"
-            >
-              <UserPlus className="w-3 h-3" />
-              <span>{t('eventNew.add')}</span>
-            </button>
-          </div>
-        </div>
-
-        {isAddingMember && (
-          <div className="flex items-center gap-2 pt-1 pb-2">
+      {isAddingMember && (
+        <div className="mt-3 space-y-2">
+          <div className="flex gap-2">
             <input
               type="text"
+              autoFocus
               placeholder={t('eventDetail.newMemberPlaceholder')}
               value={newMemberName}
               onChange={(e) => setNewMemberName(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none dark:bg-slate-900 dark:text-white"
+              className="flex-1 min-w-0 h-11 px-4 rounded-full bg-v1-card outline-none text-base font-semibold"
             />
-            <button
-              onClick={() => addMemberByName(newMemberName)}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold"
-            >
+            <button onClick={() => addMemberByName(newMemberName)} className="h-11 px-4 rounded-full bg-v1-ink text-white font-bold">
               {t('eventDetail.ok')}
             </button>
-            <button onClick={() => setIsAddingMember(false)} className="text-slate-400">
-              <X className="w-4 h-4" />
+            <button
+              onClick={() => setIsAddingMember(false)}
+              aria-label={t('eventDetail.cancel')}
+              className="w-11 h-11 rounded-full bg-v1-card grid place-items-center flex-none"
+            >
+              <X className="w-5 h-5" />
             </button>
           </div>
-        )}
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {(group.members || []).map((m: any) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex-shrink-0"
-            >
-              <span className="text-base w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={m.avatar} /></span>
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[10rem]">{m.name}</span>
-              {canRemoveMember(m) && (
-                <button
-                  type="button"
-                  data-testid={`remove-member-${m.id}`}
-                  onClick={() => void handleRemoveMember(m)}
-                  disabled={removingMemberId !== null}
-                  aria-label={t('eventDetail.removeGuest', { name: m.name })}
-                  title={t('eventDetail.removeGuest', { name: m.name })}
-                  className="-mr-1.5 p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
+          <button
+            type="button"
+            onClick={handleSelectFromPhonebook}
+            title={t('eventDetail.pickFromContacts')}
+            className="h-11 px-4 rounded-full bg-v1-card inline-flex items-center gap-2 font-semibold text-[15px]"
+          >
+            <Phone className="w-4 h-4" aria-hidden="true" />
+            {t('eventDetail.contacts')}
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Expenses Feed */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-            {t('eventDetail.transactionsFeed', { count: (group.expenses || []).length })}
-          </h4>
-          {!isCompleted && (
-            <Link
-              href={routes.expenseNew(group.id)}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>{t('eventNew.add')}</span>
-            </Link>
-          )}
-        </div>
-
-        {(group.expenses || []).length === 0 ? (
-          <div className="stitch-card p-6 text-center text-slate-500 dark:text-slate-400 text-xs bg-white dark:bg-slate-800">
-            {t('eventDetail.noExpensesYet')}
+      {/* Расходы: белые строки V1. Без расходов блока нет — пустое состояние выше. */}
+      {expenses.length > 0 && (
+        <>
+          <div className="flex items-center justify-between gap-3 mt-[22px] mb-3">
+            <h2 className="text-xl leading-tight font-extrabold tracking-[-0.01em]">
+              {t('event.v1.expenses', { count: expenses.length })}
+            </h2>
+            {!isCompleted && (
+              <Link
+                href={routes.expenseNew(group.id)}
+                className="h-11 px-4 rounded-full bg-v1-card inline-flex items-center gap-1.5 font-bold text-[15px]"
+              >
+                <Plus className="w-5 h-5" aria-hidden="true" />
+                {t('eventNew.add')}
+              </Link>
+            )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {(group.expenses || []).slice(0, expenseLimit).map((expense: any) => {
+          <div className="space-y-2">
+            {expenses.slice(0, expenseLimit).map((expense: any) => {
               // Плательщика нет среди участников — пишем «Участник», а не
               // приписываем расход первому участнику, как раньше.
-              const paidByMember = (group.members || []).find((m: any) => m.id === expense.paidById);
+              const paidByMember = members.find((m: any) => m.id === expense.paidById);
+              // Доля в расчёте события — в валюте события (как в computeEventSummary).
+              const mySplit = userProfile ? (expense.splits || []).find((s: any) => s.userId === userProfile.id) : undefined;
 
               return (
-                <div key={expense.id} data-testid="expense-card" className="stitch-card p-4 space-y-3 group hover:border-blue-300 transition-all bg-white dark:bg-slate-800">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden" data-testid="expense-payer-avatar">
-                        <MemberAvatar avatar={paidByMember?.avatar} />
-                      </div>
-                      <div className="min-w-0">
-                        <h5 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-2 break-words">{expense.title}</h5>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-2 break-words">
-                          {t('eventDetail.paidByName')}{' '}
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
-                        </p>
-                      </div>
+                <div key={expense.id} data-testid="expense-card" className="bg-v1-card rounded-row py-3 pl-3 pr-4">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cx(
+                        'w-10 h-10 rounded-full flex-none grid place-items-center overflow-hidden text-base font-bold',
+                        avatarBg(memberIdx(expense.paidById)),
+                      )}
+                      data-testid="expense-payer-avatar"
+                    >
+                      <MemberAvatar avatar={paidByMember?.avatar} />
                     </div>
-
-                    <div className="flex items-start gap-3 flex-shrink-0">
-                      <div className="text-right">
-                        <span className="block font-extrabold text-slate-900 dark:text-white text-base whitespace-nowrap" data-testid="expense-amount">
-                          {formatMoney(expense.amount, expense.currency || group.currency)}
+                    <div className="flex-1 min-w-0">
+                      <h5 className="text-base font-semibold leading-tight line-clamp-2 break-words">{expense.title}</h5>
+                      <p className="mt-0.5 text-[14px] text-v1-muted leading-snug line-clamp-2 break-words">
+                        {t('eventDetail.paidByName')}{' '}
+                        <span className="font-semibold text-v1-ink2">{paidByMember?.name || t('eventDetail.defaultMember')}</span>
+                      </p>
+                    </div>
+                    <div className="text-right flex-none">
+                      <span className="block text-[17px] font-bold tracking-[-0.01em] whitespace-nowrap" data-testid="expense-amount">
+                        {formatMoney(expense.amount, expense.currency || group.currency)}
+                      </span>
+                      {expense.currency !== group.currency && (
+                        <span className="block text-[14px] text-v1-muted whitespace-nowrap">
+                          ≈ {formatMoney(expense.amountInGroupCurrency, group.currency)}
                         </span>
-                        {expense.currency !== group.currency && (
-                          <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">
-                            ≈ {formatMoney(expense.amountInGroupCurrency, group.currency)}
-                          </span>
-                        )}
-                      </div>
-
-                      {!isCompleted && (
-                      <div className="flex items-center gap-1 pl-1 border-l border-slate-100 dark:border-slate-700">
-                        <Link
-                          href={routes.expenseEdit(group.id, expense.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-all"
-                          title={t('eventDetail.editExpense')}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Link>
-                        <button
-                          onClick={() => setExpenseToDelete(expense)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-all"
-                          title={t('eventDetail.deleteExpenseTitle')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      )}
+                      {mySplit && (
+                        <span className="block text-[14px] text-v1-muted whitespace-nowrap">
+                          {t('event.v1.yours', { amount: formatMoney(mySplit.amountOwed || 0, currency) })}
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 font-semibold text-[10px] uppercase">
-                        {resolveSplitMode(expense) === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}
-                      </span>
-                      <span className="truncate" data-testid="expense-members-count">• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
-                    </div>
+                  <div className="mt-1.5 pl-[52px] flex items-center justify-between gap-2 text-[14px] text-v1-muted">
+                    <span className="min-w-0 truncate">
+                      {resolveSplitMode(expense) === 'equal' ? t('eventDetail.splitEqual') : t('eventDetail.splitShares')}{' '}
+                      <span data-testid="expense-members-count">• {t('eventDetail.membersCountShort', { count: (expense.splits || []).length })}</span>
+                      {/* Дата берётся только из записи. Прежний fallback на
+                          Date.now() рисовал сегодняшнее число у расхода без
+                          даты — выдуманное значение и расхождение гидратации. */}
+                      {expense.createdAt
+                        ? ` · ${new Date(expense.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                        : null}
+                    </span>
 
-                    {expense.createdAt ? (
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        {/* Дата берётся только из записи. Прежний fallback на
-                            Date.now() рисовал сегодняшнее число у расхода без
-                            даты — выдуманное значение и расхождение гидратации. */}
-                        {new Date(expense.createdAt).toLocaleDateString(undefined, {
-                          day: 'numeric',
-                          month: 'short',
-                        })}
+                    {!isCompleted && (
+                      <span className="flex items-center gap-1 flex-none">
+                        <Link
+                          href={routes.expenseEdit(group.id, expense.id)}
+                          className="w-10 h-10 rounded-full grid place-items-center text-v1-ink2 hover:bg-v1-bg"
+                          title={t('eventDetail.editExpense')}
+                          aria-label={t('eventDetail.editExpense')}
+                        >
+                          <Pencil className="w-[18px] h-[18px]" aria-hidden="true" />
+                        </Link>
+                        <button
+                          onClick={() => setExpenseToDelete(expense)}
+                          className="w-10 h-10 rounded-full grid place-items-center text-v1-ink2 hover:bg-v1-bg"
+                          title={t('eventDetail.deleteExpenseTitle')}
+                          aria-label={t('eventDetail.deleteExpenseTitle')}
+                        >
+                          <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
+                        </button>
                       </span>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               );
             })}
-            {(group.expenses || []).length > expenseLimit ? (
+            {expenses.length > expenseLimit ? (
               <button
                 type="button"
                 onClick={() => setExpenseLimit((limit) => limit + DEFAULT_EXPENSE_PAGE_SIZE)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
+                className="w-full h-[52px] rounded-full bg-v1-card font-bold text-base"
               >
-                {t('eventDetail.showMoreExpenses', { count: Math.min(DEFAULT_EXPENSE_PAGE_SIZE, (group.expenses || []).length - expenseLimit) })}
+                {t('eventDetail.showMoreExpenses', { count: Math.min(DEFAULT_EXPENSE_PAGE_SIZE, expenses.length - expenseLimit) })}
               </button>
             ) : null}
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* Прежняя тёмная панель — вниз, в сворачиваемый «Подробнее»: итог по категориям,
+          Баланс / Расчёт / Отчёт и редкие действия. */}
+      <details className="group mt-[22px]" data-testid="event-more">
+        <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer h-[52px] px-5 rounded-full bg-v1-card flex items-center justify-between font-bold text-base">
+          {t('event.v1.more')}
+          <ChevronDown className="w-5 h-5 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="mt-2 space-y-2">
+          {totalExpenses > 0 && (
+            <div className="bg-v1-card rounded-row px-4 py-3">
+              <div className="flex items-center justify-between gap-3 text-base font-semibold">
+                <span>{t('eventDetail.totalSpent')}</span>
+                <span className="font-bold whitespace-nowrap">{formatMoney(totalExpenses, currency)}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {categorySegments.map((seg) => (
+                  <span key={seg.key} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-v1-bg text-[14px] font-semibold">
+                    <span className={`w-2 h-2 rounded-full ${seg.config.color}`} aria-hidden="true" />
+                    {seg.config.emoji} {seg.config.label} {seg.percent}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <Link href={routes.eventBalance(group.id)} className={moreLink}>
+            <span className={moreIcon}><Scale className="w-5 h-5" aria-hidden="true" /></span>
+            <span className="flex-1">{t('eventDetail.actionBalance')}</span>
+            <ChevronRight className="w-5 h-5 text-v1-muted" aria-hidden="true" />
+          </Link>
+          <Link href={routes.eventSettle(group.id)} className={moreLink}>
+            <span className={moreIcon}><CreditCard className="w-5 h-5" aria-hidden="true" /></span>
+            <span className="flex-1">{t('eventDetail.actionSettle')}</span>
+            <ChevronRight className="w-5 h-5 text-v1-muted" aria-hidden="true" />
+          </Link>
+          <Link href={routes.eventExport(group.id)} className={moreLink}>
+            <span className={moreIcon}><FileText className="w-5 h-5" aria-hidden="true" /></span>
+            <span className="flex-1">{t('eventDetail.actionReport')}</span>
+            <ChevronRight className="w-5 h-5 text-v1-muted" aria-hidden="true" />
+          </Link>
+          {isCompleted && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowInviteModal(true);
+                void ensureInviteLink();
+              }}
+              className={moreLink}
+            >
+              <span className={moreIcon}><Users className="w-5 h-5" aria-hidden="true" /></span>
+              <span className="flex-1">{t('eventDetail.invitePeople')}</span>
+            </button>
+          )}
+          {(!isMultiUser() || userProfile?.id === group.createdBy) && (
+            <button type="button" onClick={() => setShowDeleteEventModal(true)} className={cx(moreLink, 'text-v1-danger')}>
+              <span className={moreIcon}><Trash2 className="w-5 h-5" aria-hidden="true" /></span>
+              <span className="flex-1">{t('eventDetail.deleteEvent')}</span>
+            </button>
+          )}
+        </div>
+      </details>
 
       {/* Phonebook Contacts Picker Modal */}
       {showPhonebookModal && (
@@ -988,40 +998,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         </div>
       )}
 
-      {/* Complete Event Confirmation Modal */}
-      {showCompleteModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div className="text-center space-y-1.5">
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventDetail.completeEventTitle')}</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                {t('eventDetail.completeEventBody')}
-              </p>
-            </div>
-            <EventSummary group={group} compact />
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCompleteModal(false)}
-                className="py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 transition-all"
-              >
-                {t('eventDetail.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleCompleteEvent('completed')}
-                className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-500/20 transition-all"
-              >
-                {t('eventDetail.finishSettlement')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Delete Event Modal */}
       {showDeleteEventModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1136,6 +1112,6 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </div>
         </div>
       )}
-    </div>
+    </V1Screen>
   );
 }

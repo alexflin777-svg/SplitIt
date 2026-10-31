@@ -138,6 +138,10 @@ test('проект: создать → позвать → условия → п�
   await page.goto(`/projects/consent?id=${projectId}`);
   await expect(page.getByTestId('consent-for-me')).toContainText('30 000 ₽');
   await expect(page.getByTestId('consent-for-me')).toContainText('40 % остатка');
+  // Пример: при 0 ч Вики — 50 000; при тех же 10 ч, что видела Аня, — 44 000 (макет h1-bory).
+  await expect(page.getByTestId('consent-example')).toContainText('50 000 ₽');
+  await fill(page, 'consent-hours-1', '10');
+  await expect(page.getByTestId('consent-example')).toContainText('44 000 ₽');
   await page.getByTestId('consent-accept').click();
   await expect(page.getByTestId('terms-accepted')).toBeVisible();
 
@@ -193,8 +197,20 @@ test('проект: создать → позвать → условия → п�
   await expect(page.getByTestId('settle-done')).toBeVisible();
   await expect(page.getByTestId('settled-card')).toContainText('51 000 ₽');
   await expect(page.getByTestId('settle-done')).toContainText('отмечено 0 из 2');
+  // Боря — получатель, не отправитель: отмечать чужие переводы ему нечем (Codex 3в, мутация canMark).
+  const settledUrl = page.url();
+  await asBorya(page);
+  await page.reload();
+  await expect(page.getByTestId('settle-done')).toContainText('отмечено 0 из 2');
+  await expect(page.getByTestId('mark-one')).toHaveCount(0);
+  await expect(page.getByTestId('mark-all')).toHaveCount(0);
+  await asAnya(page);
+  await page.goto(settledUrl);
   await page.getByTestId('mark-one').first().click();
   await expect(page.getByTestId('settle-done')).toContainText('отмечено 1 из 2');
+  // Отмечен перевод Вике 41 000 — сверху остаток Боре (макет h2-settled-1).
+  await expect(page.getByTestId('settled-card')).toContainText('Осталось перевести');
+  await expect(page.getByTestId('settled-main')).toHaveText('10 000 ₽');
   await page.getByTestId('mark-all').click();
   await expect(page.getByTestId('settle-done')).toContainText('отмечено 2 из 2');
   await expect(page.getByTestId('settle-all-marked')).toBeVisible();

@@ -21,7 +21,6 @@ import type { PeriodRow, ProjectData } from '@/lib/projects-store';
 import { capitalize, consentState, formatQty, formatRub, monthName } from '@/lib/project-ui';
 import { projects } from '@/lib/projects-client';
 import { routes } from '@/lib/routes';
-import { t as tPlain } from '@/lib/i18n/t';
 import { useI18n } from '@/lib/i18n/provider';
 import { Avatar, BlockHead, Card, Header, MainButton, Plaque, Segment, Skeleton, TopNav, V1Screen, cx } from '@/components/v1/ui';
 import { DebtJournal, LoadError, PaidMark, RouteShell, TransferRow, memberIndex, memberName } from '@/components/v1/project-bits';
@@ -154,12 +153,11 @@ function Preview({
     const r = await projects.closePeriod(projectId, period.revision);
     setBusy(null);
     if (r.data) return onClosed(period.id);
-    const msg = r.error ?? '';
-    if (msg === tPlain('errors.noServerConnection') || msg.includes('ответ не прочитан')) setFailure({ kind: 'lost' });
-    else if (msg.includes('Данные изменились')) {
+    if (r.failure === 'conflict') {
       await reload();
       setFailure({ kind: 'changed' });
-    } else setFailure({ kind: 'refused', message: msg });
+    } else if (r.failure === 'refused') setFailure({ kind: 'refused', message: r.error ?? '' });
+    else setFailure({ kind: 'lost' }); // неизвестный исход — только «Проверить статус»
   };
 
   const check = async () => {
@@ -220,7 +218,11 @@ function Preview({
           </Plaque>
         </>
       )}
-      {failure?.kind === 'changed' && <Plaque kind="info">{t('settle.changed')}</Plaque>}
+      {failure?.kind === 'changed' && (
+        <Plaque kind="info" testId="settle-changed">
+          {t('settle.changed')}
+        </Plaque>
+      )}
 
       {res.profit < 0 && (
         <div className="rounded-tile bg-v1-minus px-5 py-[18px] mb-2" data-testid="settle-loss">
@@ -277,6 +279,9 @@ function Settled({
   const todo = transfers.filter((x) => !marked(x.fromId, x.toId) && canMark(x.fromId));
   const mine = snap.members.find((m) => m.memberId === me?.id);
   const myOut = transfers.filter((x) => x.fromId === me?.id);
+  const myLeft = myOut.filter((x) => !marked(x.fromId, x.toId));
+  // Часть своих переводов отмечена — главная цифра становится остатком (макет h2-settled-1).
+  const partly = myLeft.length > 0 && myLeft.length < myOut.length;
   const allDone = done === transfers.length;
 
   const mark = async (list: typeof transfers) => {
@@ -332,12 +337,24 @@ function Settled({
           {t('settled.badge', { date: fmtDate(period.closed_at, locale) })}
         </span>
         <p className="text-base font-semibold text-v1-ink2">
-          {allDone ? t('settled.allSettled') : !mine || mine.transfer === 0 ? t('settled.even') : mine.transfer < 0 ? t('settled.youSend') : t('settled.youGet')}
+          {allDone
+            ? t('settled.allSettled')
+            : partly
+              ? t('settled.leftToSend')
+              : !mine || mine.transfer === 0
+                ? t('settled.even')
+                : mine.transfer < 0
+                  ? t('settled.youSend')
+                  : t('settled.youGet')}
         </p>
-        {mine && mine.transfer !== 0 && <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]">{formatRub(Math.abs(mine.transfer))}</p>}
+        {mine && mine.transfer !== 0 && (
+          <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]" data-testid="settled-main">
+            {formatRub(partly ? myLeft.reduce((s, x) => s + x.amount, 0) : Math.abs(mine.transfer))}
+          </p>
+        )}
         <p className="mt-2 text-[15px] text-v1-ink2">
-          {myOut.length > 0 && !allDone
-            ? `${myOut.map((x) => `${memberName(data, x.toId)} — ${formatRub(x.amount)}`).join(', ')}. `
+          {myLeft.length > 0 && !allDone
+            ? `${myLeft.map((x) => `${memberName(data, x.toId)} — ${formatRub(x.amount)}`).join(', ')}. `
             : ''}
           {t('settled.nextOpen')}
         </p>

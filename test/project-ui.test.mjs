@@ -218,6 +218,58 @@ describe('адрес возврата после входа (SCENARIOS-AUDIT §4
     }
     assert.equal(takeReturnPath('/', s), '/');
   });
+  test('управляющие символы, слеши и кодированный обход — не путь приложения (Codex 3в №1)', () => {
+    for (const bad of ['/\t/evil.example', '/\n/evil.example', '/\r//evil', '/\\evil', '//evil', 'https://evil',
+      '/%09/evil', '/%5c%5cevil', '/%2F%2Fevil', 'javascript:alert(1)', '/ok\u0000', '/ /evil', ' /x']) {
+      assert.equal(safeReturnPath(bad), null, JSON.stringify(bad));
+    }
+    for (const ok of ['/', '/invite?code=ABC', '/projects/join?code=x-1', '/events/detail?id=1#top', '/a%20b']) {
+      assert.equal(safeReturnPath(ok), ok, ok);
+    }
+  });
+});
+
+describe('close_period: отказ только по кодам базы (Codex 3в №3)', () => {
+  const stub = (res) => ({ rpc: async () => (res instanceof Error ? Promise.reject(res) : res) });
+  const close = async (res) => {
+    const { createProjectsStore } = await import('../src/lib/projects-store.ts');
+    return createProjectsStore(stub(res)).closePeriod('p', 1);
+  };
+  test('504 шлюза, сетевая ошибка, исключение клиента, неизвестный код → «неизвестно», без «ничего не изменилось»', async () => {
+    for (const res of [
+      { data: null, error: { message: 'Gateway Timeout', code: '' }, status: 504 },
+      { data: null, error: { message: '<html>502 Bad Gateway</html>' }, status: 502 },
+      { data: null, error: { message: 'TypeError: Failed to fetch', details: '', hint: '', code: '' }, status: 0 },
+      { data: null, error: { message: 'AbortError: timeout', code: '20' }, status: 0 },
+      { data: null, error: { message: 'internal', code: 'XX000' }, status: 500 },
+      new Error('socket hang up'),
+    ]) {
+      const r = await close(res);
+      assert.equal(r.data, null);
+      assert.equal(r.failure, 'unknown', JSON.stringify(res.error ?? String(res)));
+      assert.doesNotMatch(r.error, /ничего не изменилось/);
+    }
+  });
+  test('явные коды базы: P0409 — данные изменились, P0001/42501 — подтверждённый отказ', async () => {
+    const stale = await close({ data: null, error: { message: 'Данные изменились — посмотрите итог ещё раз', code: 'P0409' }, status: 409 });
+    assert.equal(stale.failure, 'conflict');
+    assert.equal((await close({ data: null, error: { message: 'Долг по вкладу ушёл бы в минус', code: 'P0001' }, status: 400 })).failure, 'refused');
+    assert.equal((await close({ data: null, error: { message: 'только владелец', code: '42501' }, status: 403 })).failure, 'refused');
+  });
+  test('итог записан, ответ не прочитан → «неизвестно»', async () => {
+    assert.equal((await close({ data: { members: 'битый' }, error: null, status: 200 })).failure, 'unknown');
+  });
+});
+
+describe('без флага e2e и без бэкенда store отвечает ошибкой (Codex 3в №2)', () => {
+  test('createProjectsStore(null): все вызовы — «нет бэкенда», без данных', async () => {
+    const { createProjectsStore } = await import('../src/lib/projects-store.ts');
+    const s = createProjectsStore(null);
+    for (const r of [await s.fetchProjects(), await s.fetchProject('p'), await s.closePeriod('p', 1), await s.createInvite('p')]) {
+      assert.equal(r.data, null);
+      assert.ok(r.error);
+    }
+  });
 });
 
 describe('e2e-фейк store: сквозной сценарий §3а.4', () => {

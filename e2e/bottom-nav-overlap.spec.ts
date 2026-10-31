@@ -20,7 +20,9 @@ import { GRADUATION_GROUP } from '../test/fixtures/realistic-groups';
  */
 
 const NAV = 'nav';
-const CARD = '.stitch-card';
+// Экраны V1 (1.1.0) — главная и событие — рисуют карточки без .stitch-card: без
+// этих селекторов проверка на них молча находила ноль карточек.
+const CARD = '.stitch-card, [data-testid="expense-card"], [data-testid="event-tile"], [data-testid="project-tile"]';
 
 /**
  * Фикстура Чекера: 10 человек, 7 расходов, девять переводов. Дефект нашли
@@ -92,6 +94,8 @@ test.describe('Нижняя навигация не перекрывает со�
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.waitForTimeout(300);
 
+      // Пустая выборка — не «перекрытий нет», а сломанная проверка.
+      expect(await page.locator(CARD).count()).toBeGreaterThan(0);
       expect(await overlappingCards(page)).toEqual([]);
     });
   }

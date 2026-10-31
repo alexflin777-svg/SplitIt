@@ -1,4 +1,5 @@
 import { APP_URL } from './env';
+import { e2eInvites } from './e2e-invites';
 
 /**
  * Единая точка формирования ссылок (инвариант И-2).
@@ -89,7 +90,8 @@ function publicAppOrigin(): string {
   const publicRuntimeOrigin = /^https:\/\/(?!localhost(?::|$)|127\.0\.0\.1(?::|$))[^\s]+$/i.test(runtimeOrigin)
     ? runtimeOrigin
     : '';
-  return APP_URL || publicRuntimeOrigin;
+  // e2e-подмена приглашений (только build:test по флагу): ссылка от localhost.
+  return APP_URL || publicRuntimeOrigin || (e2eInvites() ? runtimeOrigin : '');
 }
 
 export function hasPublicInviteOrigin(): boolean {

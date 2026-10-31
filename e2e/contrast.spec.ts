@@ -58,7 +58,8 @@ async function findInvisibleWhiteText(page: Page) {
 
     const problems: string[] = [];
 
-    for (const card of Array.from(document.querySelectorAll('.stitch-card'))) {
+    // Экраны V1 (1.1.0) рисуют карточки без .stitch-card — проверяем и их.
+    for (const card of Array.from(document.querySelectorAll('.stitch-card, [data-testid="expense-card"], [data-testid="event-tile"], [data-testid="project-tile"]'))) {
       // Карточка объявила градиент классами, но он не применился — ровно тот
       // случай, который делал сумму расходов невидимой.
       if (card.className.includes('bg-gradient-') && getComputedStyle(card).backgroundImage === 'none') {

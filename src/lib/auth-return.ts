@@ -15,9 +15,22 @@ function storage(): KV | null {
   return typeof window === 'undefined' ? null : window.localStorage;
 }
 
+// Только символы URI (RFC 3986): без пробелов, управляющих, «\» и юникода — браузер их «чинит».
+const URI_PATH = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]*$/;
+// После раскодирования: «/%09/evil» и «/%2F%2Fevil» не должны стать «//evil».
+const BAD_DECODED = /[\x00-\x1f\x7f\\]|^\/\//;
+const PROBE_ORIGIN = 'https://splitit.invalid';
+
 export function safeReturnPath(value: string | null | undefined): string | null {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return null;
-  return value;
+  if (!value || !URI_PATH.test(value) || value.startsWith('//')) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return null; // битая %-последовательность — не путь приложения
+  }
+  if (BAD_DECODED.test(decoded)) return null;
+  return new URL(value, PROBE_ORIGIN).origin === PROBE_ORIGIN ? value : null;
 }
 
 /** Запомнить путь; небезопасный не запоминается. */

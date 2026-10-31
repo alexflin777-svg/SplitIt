@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "splitit-e2e-projects-fake": [
+        "./src/lib/projects-e2e-fake.ts"
       ]
     }
   },

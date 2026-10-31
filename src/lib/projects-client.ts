@@ -10,19 +10,19 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createProjectsStore } from './projects-store';
 import type { RemoteResult } from './remote-store';
 import { getActiveSession, supabase } from './supabase';
-import { createFakeProjectsClient, fakeActor } from './projects-e2e-fake';
 import { t } from './i18n/t';
+// Только в build:test это фейк; в обычной сборке — пустой модуль (next.config.mjs).
+import * as e2eFake from 'splitit-e2e-projects-fake';
 
-const E2E_FAKE = !supabase && process.env.NEXT_PUBLIC_OCR_TEST_HOOK === '1';
+const fake = process.env.NEXT_PUBLIC_OCR_TEST_HOOK === '1' && !supabase && typeof window !== 'undefined' ? e2eFake : null;
 
-const client: SupabaseClient | null =
-  supabase ?? (E2E_FAKE && typeof window !== 'undefined' ? (createFakeProjectsClient() as unknown as SupabaseClient) : null);
+const client: SupabaseClient | null = supabase ?? (fake ? (fake.createFakeProjectsClient() as unknown as SupabaseClient) : null);
 
 export const projects = createProjectsStore(client);
 
 /** auth.uid() вызывающего: с ним сравниваются user_id участников и owner_id. */
 export async function currentUserId(): Promise<string | null> {
-  if (E2E_FAKE) return fakeActor()?.id ?? null;
+  if (fake) return fake.fakeActor()?.id ?? null;
   return (await getActiveSession())?.id ?? null;
 }
 

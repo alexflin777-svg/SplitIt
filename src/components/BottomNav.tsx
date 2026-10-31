@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Home, Users, User, LogIn, LogOut } from 'lucide-react';
 import { getActiveSession, signOutUser } from '@/lib/supabase';
 import { useI18n } from '@/lib/i18n/provider';
+import { isFocusRoute } from '@/components/v1/ui';
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -27,6 +28,8 @@ export default function BottomNav() {
     { href: '/friends', label: t('nav.friends'), icon: Users },
     { href: '/profile', label: t('nav.profile'), icon: User },
   ];
+
+  if (isFocusRoute(pathname)) return null;
 
   const handleAuthAction = async () => {
     if (isAuthenticated) {

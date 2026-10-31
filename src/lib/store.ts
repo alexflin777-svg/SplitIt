@@ -24,6 +24,7 @@ import { getSavedGroups, saveGroups, getActiveSession, saveLocalSession } from '
 import type { UserProfile } from './supabase';
 import { t } from './i18n/t';
 import type { SplitMode } from './split-rescale';
+import { e2eInvites, fakeActiveInvite, fakeCreateInvite, fakeDisableInvite, fakeRedeemInvite } from './e2e-invites';
 
 export type { Group, GroupMember, GroupExpense, GroupRealtimeChange, GroupSettlement, RemoteResult } from './remote-store';
 
@@ -328,6 +329,7 @@ export async function addSettlement(
  */
 export async function createInvite(groupId: string): Promise<RemoteResult<string>> {
   if (!isMultiUser()) {
+    if (e2eInvites()) return ok(fakeCreateInvite(groupId));
     return {
       data: null,
       error: 'Приглашения работают только с подключённым бэкендом: событие хранится на этом устройстве.',
@@ -341,6 +343,10 @@ export async function createInvite(groupId: string): Promise<RemoteResult<string
 
 export async function redeemInvite(code: string): Promise<RemoteResult<string>> {
   if (!isMultiUser()) {
+    if (e2eInvites()) {
+      const groupId = fakeRedeemInvite(code);
+      return groupId ? ok(groupId) : { data: null, error: 'Ссылка не найдена (e2e)' };
+    }
     return { data: null, error: 'Приглашения работают только с подключённым бэкендом.' };
   }
   return remote.redeemInvite(code);
@@ -348,14 +354,23 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
 
 const LOCAL_INVITES = 'Приглашения работают только с подключённым бэкендом: событие хранится на этом устройстве.';
 
+/** Есть ли приглашения в событие: сетевой режим или e2e-подмена (e2e-invites.ts). */
+export function invitesAvailable(): boolean {
+  return isMultiUser() || e2eInvites();
+}
+
 /** Действующая ссылка события, если есть (иначе null) — экран не плодит коды. */
 export async function getActiveInvite(groupId: string): Promise<RemoteResult<{ code: string; expiresAt: string | null } | null>> {
-  if (!isMultiUser()) return { data: null, error: LOCAL_INVITES };
+  if (!isMultiUser()) return e2eInvites() ? ok(fakeActiveInvite(groupId)) : { data: null, error: LOCAL_INVITES };
   return remote.fetchActiveInvite(groupId);
 }
 
 export async function disableInvite(groupId: string, code: string): Promise<RemoteResult<null>> {
-  if (!isMultiUser()) return { data: null, error: LOCAL_INVITES };
+  if (!isMultiUser()) {
+    if (!e2eInvites()) return { data: null, error: LOCAL_INVITES };
+    fakeDisableInvite(code);
+    return ok(null);
+  }
   return remote.disableInvite(groupId, code);
 }
 

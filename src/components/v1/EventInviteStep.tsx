@@ -74,7 +74,9 @@ export default function EventInviteStep({ group, isOwner, onDone }: { group: Gro
       {invite && (
         <>
           <div className="flex items-center gap-3 pl-[18px] pr-2.5 py-2.5 rounded-card bg-v1-card">
-            <span className="flex-1 min-w-0 truncate text-base font-semibold">{link ?? t('eventDetail.noPublicUrlError')}</span>
+            <span className="flex-1 min-w-0 truncate text-base font-semibold" data-testid="event-invite-link">
+              {link ?? t('eventDetail.noPublicUrlError')}
+            </span>
             <button
               type="button"
               disabled={!link}

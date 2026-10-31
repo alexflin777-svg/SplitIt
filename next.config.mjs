@@ -39,6 +39,14 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_URL: resolvePublicAppUrl(),
   },
+  // e2e-фейк «Проекта» — только в build:test; в обычной сборке на его месте пустой
+  // модуль, иначе сборщик кладёт фейк в out/ (проверка — scripts/check-no-fake.mjs).
+  turbopack: {
+    resolveAlias: {
+      'splitit-e2e-projects-fake':
+        process.env.NEXT_PUBLIC_OCR_TEST_HOOK === '1' ? './src/lib/projects-e2e-fake.ts' : './src/lib/projects-e2e-fake.off.ts',
+    },
+  },
 };
 
 export default nextConfig;

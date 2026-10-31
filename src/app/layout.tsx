@@ -2,11 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
-import { PlusCircle } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
-import { routes } from '@/lib/routes';
 import { I18nProvider } from '@/lib/i18n/provider';
-import HeaderNavLabel from '@/components/HeaderNavLabel';
+import HeaderNewEventLink from '@/components/HeaderNewEventLink';
 import { PushInit } from '@/components/PushInit';
 import { NativeAuthInit } from '@/components/NativeAuthInit';
 
@@ -84,13 +82,7 @@ export default function RootLayout({
             </Link>
 
             <div className="flex items-center gap-2">
-              <Link
-                href={routes.eventNew()}
-                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span><HeaderNavLabel /></span>
-              </Link>
+              <HeaderNewEventLink />
             </div>
           </div>
         </header>

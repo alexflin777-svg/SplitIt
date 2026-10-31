@@ -92,7 +92,12 @@ function useRaw() {
   const [raw, setRaw] = useState<Record<string, string>>({});
   const get = (key: string, fallback: string) => raw[key] ?? fallback;
   const set = (key: string, v: string) => setRaw((r) => ({ ...r, [key]: v }));
-  return { get, set };
+  /** Набранный текст не разбирается: в условиях осталось прежнее число — дальше идти нельзя. */
+  const bad = (key: string, parse: (s: string) => number | null) => {
+    const v = raw[key];
+    return v !== undefined && v.trim() !== '' && parse(v) === null;
+  };
+  return { get, set, bad, reset: () => setRaw({}) };
 }
 
 export default function TermsBuilder(props: TermsBuilderProps) {
@@ -122,6 +127,18 @@ export default function TermsBuilder(props: TermsBuilderProps) {
   );
   const errorsOf = (id: string) => check.errors.filter((e) => e.memberId === id);
   const globalErrors = check.errors.filter((e) => !e.memberId);
+  /** Видимые поля участника с неразобранным текстом (скрытые поля в условия не идут). */
+  const rawBad = (id: string) => {
+    const l = terms.lines.find((x) => x.memberId === id);
+    if (!l) return false;
+    const i = idx(id);
+    return (
+      (terms.contribEnabled && (raw.bad(`contrib-${i}`, parseRub) || raw.bad(`writeoff-${i}`, parseRub))) ||
+      (l.rate.type !== 'none' && raw.bad(`rate-${i}`, parseRub)) ||
+      (terms.remainderMethod === 'percent' && l.inRemainder && raw.bad(`share-${i}`, parseQty))
+    );
+  };
+  const anyRawBad = members.some((m) => rawBad(m.id));
 
   const patchLine = (id: string, patch: Partial<TermLine>) => {
     setEdited(true);
@@ -173,6 +190,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
                 onClick={() => {
                   setPreset(p);
                   setEdited(false);
+                  raw.reset();
                   setTerms(applyPreset(p, members.map((m) => m.id)));
                 }}
                 className={cx(
@@ -206,12 +224,22 @@ export default function TermsBuilder(props: TermsBuilderProps) {
     const sumBad = terms.remainderMethod === 'percent' && shareSum !== 10_000;
     const debt = props.ledgerDebt?.[editing] ?? 0;
     const contribOpen = l.contribNew > 0 || showContrib[editing] || l.contribKind === 'item';
+    const memberBad = rawBad(editing);
+    // С неразобранным полем не уходим: иначе в условиях молча останется прежнее число.
+    const leave = () => {
+      if (!memberBad) setStep('setup');
+    };
     return (
       <V1Screen
         testId="terms-member"
         dock={
           <>
-            <MainButton testId="member-done" disabled={errs.length > 0 || sumBad} onClick={() => setStep('setup')}>
+            {memberBad && (
+              <p className="mb-2 text-center text-[15px] font-semibold text-v1-danger" role="alert" data-testid="terms-raw-error">
+                {t('terms.rawInvalid')}
+              </p>
+            )}
+            <MainButton testId="member-done" disabled={errs.length > 0 || sumBad || memberBad} onClick={leave}>
               {t('terms.done')}
             </MainButton>
             {sumBad && (
@@ -222,13 +250,13 @@ export default function TermsBuilder(props: TermsBuilderProps) {
           </>
         }
       >
-        <TopNav onBack={() => setStep('setup')} />
+        <TopNav onBack={leave} />
         <Header title={t('terms.member.title')} sub={`${props.projectName} · ${m.name}`} />
-        <Card className={cx('px-4 pt-3.5 pb-3', (errs.length > 0 || sumBad) && 'shadow-[inset_0_0_0_2px_#D93A2B]')} testId={`member-card-${idx(editing)}`}>
+        <Card className={cx('px-4 pt-3.5 pb-3', (errs.length > 0 || sumBad || memberBad) && 'shadow-[inset_0_0_0_2px_#D93A2B]')} testId={`member-card-${idx(editing)}`}>
           <div className="flex items-center gap-3">
             <Avatar name={m.name} index={idx(editing)} size="s" />
             <span className="flex-1 font-bold text-base">{m.name}</span>
-            <button type="button" onClick={() => setStep('setup')} aria-label={t('terms.collapse')} className="w-9 h-9 rounded-full bg-v1-bg grid place-items-center">
+            <button type="button" onClick={leave} disabled={memberBad} aria-label={t('terms.collapse')} className="w-9 h-9 rounded-full bg-v1-bg grid place-items-center disabled:opacity-40">
               <ChevronUp className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
           </div>
@@ -371,7 +399,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
       <V1Screen
         testId="terms-setup"
         dock={
-          <MainButton testId="terms-next" disabled={check.errors.length > 0} onClick={() => setStep('preview')}>
+          <MainButton testId="terms-next" disabled={check.errors.length > 0 || anyRawBad} onClick={() => setStep('preview')}>
             {t('terms.next.preview')}
           </MainButton>
         }
@@ -423,7 +451,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
             <Row
               key={l.memberId}
               testId={`member-row-${idx(l.memberId)}`}
-              className={errorsOf(l.memberId).length ? 'shadow-[inset_0_0_0_2px_#D93A2B]' : undefined}
+              className={errorsOf(l.memberId).length || rawBad(l.memberId) ? 'shadow-[inset_0_0_0_2px_#D93A2B]' : undefined}
               onClick={() => {
                 setEditing(l.memberId);
                 setStep('member');
@@ -436,6 +464,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
           ))}
         </div>
         <div className="mt-3">
+          {anyRawBad && <Plaque kind="err">{t('terms.rawInvalid')}</Plaque>}
           {check.errors.map((e) => (
             <Plaque key={`${e.memberId ?? ''}${e.message}`} kind="err">
               {e.message}
@@ -461,6 +490,7 @@ export default function TermsBuilder(props: TermsBuilderProps) {
       error={submitError}
       onBack={() => setStep('setup')}
       onSend={async () => {
+        if (anyRawBad || check.errors.length > 0) return setStep('setup');
         setBusy(true);
         setSubmitError(null);
         const err = await props.onSubmit(terms, preset);

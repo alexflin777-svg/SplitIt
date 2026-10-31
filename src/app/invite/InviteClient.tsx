@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, Clock, Lock, LogIn, Mail } from 'lucide-react';
-import { redeemInvite, isMultiUser } from '@/lib/store';
+import { redeemInvite, invitesAvailable } from '@/lib/store';
 import { getActiveSession, signInWithGoogle, UserProfile } from '@/lib/supabase';
 import { rememberReturnPath } from '@/lib/auth-return';
 import { routes } from '@/lib/routes';
@@ -43,7 +43,7 @@ export default function InviteClient() {
   // эффекта (P1-6): нет кода в ссылке или приложение собрано без бэкенда.
   const staticError = !code
     ? t('invite.errorNoCode')
-    : !isMultiUser()
+    : !invitesAvailable()
       ? t('invite.errorLocalOnly')
       : null;
 
@@ -67,7 +67,8 @@ export default function InviteClient() {
       setState({ kind: 'error', message: error ?? t('invite.errorRedeemFailed') });
       return;
     }
-    router.push(routes.eventDetail(groupId));
+    // joined=1 — экран события показывает подтверждение вступления (макет h4-joined).
+    router.push(routes.eventDetail(groupId, { joined: 1 }));
   };
 
   const google = async () => {

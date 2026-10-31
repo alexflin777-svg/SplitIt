@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane, Home, Utensils, Sparkles, Check, UserPlus, X, Globe, Users } from 'lucide-react';
+import { Plane, Home, Utensils, Sparkles, Check, Plus, X } from 'lucide-react';
 import { CURRENCIES } from '@/lib/currency';
 import { getActiveSession, UserProfile } from '@/lib/supabase';
 import { useSavedFriends } from '@/lib/data-hooks';
@@ -12,6 +12,7 @@ import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
 import MemberAvatar from '@/components/MemberAvatar';
 import KindPicker from '@/components/v1/KindPicker';
+import { Avatar, Chip, MainButton, Plaque, TopNav, V1Screen } from '@/components/v1/ui';
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function NewEventPage() {
   const [category, setCategory] = useState<'trip' | 'restaurant' | 'home' | 'party' | 'other'>('trip');
   const [currency, setCurrency] = useState('RUB');
   const [memberInput, setMemberInput] = useState('');
+  const [showMemberInput, setShowMemberInput] = useState(false);
   const [members, setMembers] = useState<string[]>([t('eventNew.defaultYou')]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -100,203 +102,149 @@ export default function NewEventPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-md mx-auto overflow-x-hidden px-1 pb-24">
-      {/* Header Bar */}
-      <div className="flex items-center justify-between">
-        <Link href="/" className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all shadow-xs">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventNew.title')}</h2>
-        <div className="w-9" />
-      </div>
-
+    <V1Screen
+      testId="event-new"
+      dock={
+        <MainButton testId="btn-create-event" onClick={handleCreate} disabled={isCreating || createdEventId !== null}>
+          {isCreating ? t('eventNew.creating') : t('eventNew.submit')}
+        </MainButton>
+      }
+    >
+      <TopNav back={routes.home()} close />
       <KindPicker value="event" />
 
-      <div className="space-y-5">
-        {/* Event Name Card */}
-        <div className="stitch-card p-5 space-y-3 bg-white dark:bg-slate-800">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {t('eventNew.nameLabel')}
-          </label>
+      <label className="mt-2 block px-6 py-3.5 rounded-card bg-v1-card">
+        <span className="block text-[15px] text-v1-muted">{t('project.new.name')}</span>
+        <input
+          type="text"
+          required
+          placeholder={t('eventNew.namePlaceholder')}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full bg-transparent outline-none text-[17px] font-bold placeholder:text-v1-muted placeholder:font-medium placeholder:text-[15px]"
+        />
+      </label>
+
+      {/* Категория и валюта — одной компактной строкой чипов и полем, без служебных подписей. */}
+      <div className="mt-2 -mx-4 px-4 flex gap-2 overflow-x-auto no-scrollbar">
+        {categories.map((cat) => {
+          const Icon = cat.icon;
+          return (
+            <Chip key={cat.id} on={category === cat.id} onClick={() => setCategory(cat.id as any)}>
+              <Icon className="w-5 h-5" aria-hidden="true" />
+              {cat.label}
+            </Chip>
+          );
+        })}
+      </div>
+
+      <label className="mt-2 block px-6 py-3.5 rounded-card bg-v1-card">
+        <span className="block text-[15px] text-v1-muted">{t('eventNew.currency')}</span>
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          className="w-full bg-transparent outline-none text-[17px] font-bold"
+        >
+          {Object.values(CURRENCIES).map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.code} — {c.name} ({c.symbol})
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {/* В сетевом режиме имена становятся гостями события (group_participants),
+          люди с аккаунтом присоединяются по приглашению. */}
+      <div className="flex items-center justify-between gap-3 mt-[22px] mb-3">
+        <h2 className="text-xl leading-tight font-extrabold tracking-[-0.01em]">
+          {t('eventNew.membersLabel', { count: members.length })}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setShowMemberInput(true)}
+          className="h-11 px-4 rounded-full bg-v1-card inline-flex items-center gap-1.5 font-bold text-[15px] flex-none"
+        >
+          <Plus className="w-5 h-5" aria-hidden="true" />
+          {t('project.new.byName')}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {members.map((m, idx) => (
+          <span
+            key={idx}
+            className="h-11 inline-flex items-center gap-2 pl-1.5 pr-4 rounded-full bg-v1-accent-soft text-v1-accent-ink shadow-[inset_0_0_0_2px_var(--v1-accent)] font-semibold text-[15px]"
+          >
+            <Avatar name={m} index={idx} size="s" />
+            {m}
+            {idx > 0 && (
+              <button
+                type="button"
+                onClick={() => handleRemoveMember(m)}
+                aria-label={t('eventDetail.removeGuest', { name: m })}
+                className="ml-1 text-v1-muted"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {showMemberInput && (
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAddMember();
+          }}
+        >
           <input
             type="text"
-            required
-            placeholder={t('eventNew.namePlaceholder')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            autoFocus
+            placeholder={t('eventNew.memberPlaceholder')}
+            value={memberInput}
+            onChange={(e) => setMemberInput(e.target.value)}
+            className="flex-1 min-w-0 h-11 px-4 rounded-full bg-v1-card outline-none text-base font-semibold"
           />
+          <button type="submit" className="h-11 px-4 rounded-full bg-v1-ink text-white font-bold">
+            {t('eventNew.add')}
+          </button>
+        </form>
+      )}
+
+      {/* Быстрый выбор из сохранённых друзей (только локальный режим). */}
+      {savedFriends.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {savedFriends.map((friend) => {
+            const isAdded = members.includes(friend.name);
+            return (
+              <Chip key={friend.id} on={isAdded} onClick={() => handleToggleSavedFriend(friend.name)}>
+                <span className="w-6 h-6 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0">
+                  <MemberAvatar avatar={friend.avatar} />
+                </span>
+                {friend.name}
+                {isAdded && <Check className="w-4 h-4" aria-hidden="true" />}
+              </Chip>
+            );
+          })}
         </div>
+      )}
 
-        {/* Category Choice */}
-        <div className="stitch-card p-5 space-y-3 bg-white dark:bg-slate-800">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {t('eventNew.categoryLabel')}
-          </label>
-          <div className="grid grid-cols-2 gap-2.5">
-            {categories.map((cat) => {
-              const Icon = cat.icon;
-              const isSelected = category === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCategory(cat.id as any)}
-                  className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/60 ring-2 ring-blue-500/20'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${cat.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{cat.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      {multiUser && <p className="mt-2.5 text-[15px] leading-snug text-v1-muted">{t('eventNew.multiUserNote')}</p>}
 
-        {/* Currency Selection */}
-        <div className="stitch-card p-5 space-y-3 bg-white dark:bg-slate-800">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-blue-500" />
-              <span>{t('eventNew.currency')}</span>
-            </label>
-          </div>
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            {Object.values(CURRENCIES).map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code} — {c.name} ({c.symbol})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* В сетевом режиме имена становятся гостями события (group_participants),
-            люди с аккаунтом присоединяются по приглашению. */}
-          <div className="stitch-card p-5 space-y-4 bg-white dark:bg-slate-800">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-            {t('eventNew.membersLabel', { count: members.length })}
-          </label>
-
-          {/* Quick Friend Selection Chips */}
-          {savedFriends.length > 0 && (
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <Users className="w-3.5 h-3.5 text-blue-500" />
-                <span>{t('eventNew.quickPickFriends')}</span>
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {savedFriends.map((friend) => {
-                  const isAdded = members.includes(friend.name);
-                  return (
-                    <button
-                      key={friend.id}
-                      type="button"
-                      onClick={() => handleToggleSavedFriend(friend.name)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
-                        isAdded
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <span className="w-5 h-5 rounded-full overflow-hidden inline-flex items-center justify-center flex-shrink-0"><MemberAvatar avatar={friend.avatar} /></span>
-                      <span>{friend.name}</span>
-                      {isAdded && <Check className="w-3.5 h-3.5" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder={t('eventNew.memberPlaceholder')}
-              value={memberInput}
-              onChange={(e) => setMemberInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddMember();
-                }
-              }}
-              className="flex-1 h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-            <button
-              type="button"
-              onClick={handleAddMember}
-              className="px-4 h-11 rounded-xl bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>{t('eventNew.add')}</span>
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            {members.map((m, idx) => (
-              <span
-                key={idx}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-extrabold flex items-center gap-1.5 border border-slate-200/80 dark:border-slate-600"
-              >
-                <span>{m}</span>
-                {idx > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(m)}
-                    className="text-slate-400 hover:text-red-500"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-          </div>
-
-        {/* Action Button */}
-        {createError && (
-          <div
-            role="alert"
-            data-testid="create-error"
-            className="p-3 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
-          >
+      {createError && (
+        <div className="mt-3">
+          <Plaque kind="err" testId="create-error">
             {createError}
             {createdEventId && (
-              <Link
-                href={routes.eventDetail(createdEventId)}
-                className="mt-2 block text-center px-3 py-2 rounded-lg bg-white border border-rose-200 text-rose-800"
-              >
+              <Link href={routes.eventDetail(createdEventId)} className="mt-2 block font-bold underline">
                 {t('eventNew.openCreatedEvent')}
               </Link>
             )}
-          </div>
-        )}
-
-        {multiUser && (
-          <div className="stitch-card p-4 bg-blue-50 border-blue-200 text-[11px] text-blue-900 mb-3">
-            {t('eventNew.multiUserNote')}
-          </div>
-        )}
-
-        <button
-          id="btn-create-event"
-          type="button"
-          onClick={handleCreate}
-          disabled={isCreating || createdEventId !== null}
-          className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-extrabold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-98"
-        >
-          {isCreating ? t('eventNew.creating') : t('eventNew.createAndOpen')}
-        </button>
-      </div>
-    </div>
+          </Plaque>
+        </div>
+      )}
+    </V1Screen>
   );
 }

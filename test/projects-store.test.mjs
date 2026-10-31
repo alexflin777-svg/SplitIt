@@ -181,13 +181,13 @@ describe('вызовы и ошибки', () => {
     assert.equal(prop.args.p_terms.lines[1].leaves, true);
   });
 
-  test('ошибка базы: человеческое сообщение как есть, сеть — «нет связи», сбой итога — «ничего не изменилось»', async () => {
+  test('ошибка базы: человеческое сообщение как есть, сеть — «нет связи», неизвестный сбой итога — не «отказ»', async () => {
     const stale = { code: 'P0409', message: 'Данные изменились — посмотрите итог ещё раз' };
     let next = stale;
     const store = createProjectsStore(fakeClient({ rpc: async () => ({ data: null, error: next }) }));
     assert.equal((await store.closePeriod(P, 7)).error, stale.message);
     next = { code: 'XX000', message: 'internal' };
-    assert.equal((await store.closePeriod(P, 7)).error, 'Не удалось зафиксировать — ничего не изменилось');
+    assert.deepEqual(await store.closePeriod(P, 7), { data: null, error: 'internal', failure: 'unknown' });
     next = { message: 'TypeError: Failed to fetch' };
     assert.equal((await store.acceptTerms('t1')).error, t('errors.noServerConnection'));
     next = { code: '23505', message: 'duplicate key' };

@@ -11,7 +11,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, ChevronDown, Users } from 'lucide-react';
 import { simulatePreview } from '@/lib/project-calc';
 import { ledgerBalance, toCalcMember, toCalcTerms } from '@/lib/projects-store';
-import { consentState, formatQty, formatRub, lineSummary } from '@/lib/project-ui';
+import { consentState, formatQty, formatRub, lineSummary, parseQty, quantityFields } from '@/lib/project-ui';
 import { projects } from '@/lib/projects-client';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
@@ -27,6 +27,7 @@ function Consent() {
   const [all, setAll] = useState(false);
   const [busy, setBusy] = useState<'accept' | 'decline' | null>(null);
   const [actError, setActError] = useState<string | null>(null);
+  const [hours, setHours] = useState<Record<string, string>>({});
 
   if (!id || !project) {
     return (
@@ -57,7 +58,10 @@ function Consent() {
   const acceptedNames = data.members
     .filter((m) => m.kind === 'user' && m.user_id !== pending.proposed_by && m.id !== me.id && !c.waiting.includes(m.display_name))
     .map((m) => m.display_name);
-  const sample = simulatePreview({ members, terms, ledgerDebt: ledgerBalance(data.ledger) }).after;
+  // Примерные часы — как в предпросмотре у предлагающего: без них ставка за час на примере = 0.
+  const needHours = members.filter((m) => quantityFields(terms.lines.find((l) => l.memberId === m.id), terms.remainderMethod).hours);
+  const quantities = Object.fromEntries(needHours.map((m) => [m.id, { hours: parseQty(hours[m.id] ?? '') ?? 0, pieces: 0 }]));
+  const sample = simulatePreview({ members, terms, ledgerDebt: ledgerBalance(data.ledger), quantities }).after;
   const split =
     terms.remainderMethod === 'percent'
       ? terms.lines.filter((l) => l.inRemainder).map((l) => formatQty(l.shareBp)).join(' / ')
@@ -122,7 +126,29 @@ function Consent() {
             <li key={x}>· {x}</li>
           ))}
         </ul>
-        <p className="mt-2.5 text-[15px] text-v1-ink2">{t('consent.example', { amount: formatRub(sample.perPerson[me.id]?.owed ?? 0) })}</p>
+        <p className="mt-2.5 text-[15px] text-v1-ink2" data-testid="consent-example">
+          {t('consent.example', { amount: formatRub(sample.perPerson[me.id]?.owed ?? 0) })}
+        </p>
+        {needHours.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {needHours.map((m) => (
+              <label key={m.id} className="inline-flex items-center gap-1.5 h-11 px-3.5 rounded-full bg-white/70 text-[15px] font-semibold">
+                {t('terms.preview.approxHours', { name: m.name })}
+                <input
+                  inputMode="decimal"
+                  value={hours[m.id] ?? ''}
+                  placeholder="0"
+                  aria-label={t('terms.preview.approxHours', { name: m.name })}
+                  aria-invalid={parseQty(hours[m.id] ?? '0') === null || undefined}
+                  data-testid={`consent-hours-${memberIndex(data, m.id)}`}
+                  onChange={(e) => setHours((h) => ({ ...h, [m.id]: e.target.value }))}
+                  className="w-12 bg-transparent outline-none text-right font-extrabold"
+                />
+                {t('project.qty.h')}
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="my-2 px-3.5 py-3 rounded-row bg-v1-card text-base leading-snug font-semibold">

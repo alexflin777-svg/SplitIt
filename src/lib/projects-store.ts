@@ -375,6 +375,11 @@ interface DbError {
 /** Коды, у которых сообщение базы написано для человека (миграция 20261101000000). */
 const HUMAN_CODES = new Set(['42501', '22023', 'P0002', 'P0409', 'P0423', '28000']);
 
+/** Коды, которые бросает сама функция базы: ответ дошёл, транзакция откатилась. */
+const DB_REFUSAL_CODES = new Set([...HUMAN_CODES, 'P0001', '23505', '23514']);
+
+export type CloseFailure = 'conflict' | 'refused' | 'unknown';
+
 function translate(error: DbError, fallback?: string): string {
   const m = error.message.toLowerCase();
   if (m.includes('fetch') || m.includes('network')) return t('errors.noServerConnection');
@@ -564,19 +569,30 @@ export function createProjectsStore(client: SupabaseClient | null) {
         p_pieces: q.pieces ?? null,
       }),
 
-    /** revision — значение периода в момент предпросмотра («пока ты смотрел», §5). */
-    async closePeriod(projectId: string, revision: number): Promise<RemoteResult<PeriodSnapshot>> {
-      const res = await rpc<unknown>(
-        'close_period',
-        { p_project_id: projectId, p_revision: revision },
-        'Не удалось зафиксировать — ничего не изменилось',
-      );
-      if (res.error) return { data: null, error: res.error };
+    /**
+     * revision — значение периода в момент предпросмотра («пока ты смотрел», §5).
+     * failure: 'refused'/'conflict' — база явно отказала кодом, транзакция откатилась;
+     * 'unknown' — связь, 5xx, таймаут, непрочитанный ответ: итог мог записаться.
+     */
+    async closePeriod(projectId: string, revision: number): Promise<RemoteResult<PeriodSnapshot> & { failure?: CloseFailure }> {
+      if (!client) return { data: null, error: t('errors.noBackend'), failure: 'refused' };
+      let res: { data: unknown; error: DbError | null; status?: number };
       try {
-        return { data: mapSnapshot(res.data), error: null };
+        res = await client.rpc('close_period', { p_project_id: projectId, p_revision: revision });
+      } catch (e) {
+        return { data: null, error: `${t('errors.noServerConnection')} (${(e as Error).message})`, failure: 'unknown' };
+      }
+      const { data, error, status } = res;
+      if (error) {
+        const confirmed = !!error.code && DB_REFUSAL_CODES.has(error.code) && !(status !== undefined && status >= 500);
+        const failure: CloseFailure = !confirmed ? 'unknown' : error.code === 'P0409' ? 'conflict' : 'refused';
+        return { data: null, error: translate(error), failure };
+      }
+      try {
+        return { data: mapSnapshot(data), error: null };
       } catch (e) {
         // Итог в базе уже зафиксирован — не прочитан только ответ.
-        return { data: null, error: `Итог зафиксирован, но ответ не прочитан: ${(e as Error).message}` };
+        return { data: null, error: `Итог зафиксирован, но ответ не прочитан: ${(e as Error).message}`, failure: 'unknown' };
       }
     },
 

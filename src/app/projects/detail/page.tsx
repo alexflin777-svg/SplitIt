@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, UserPlus } from 'lucide-react';
+import { Check, Plus, UserPlus, X } from 'lucide-react';
 import { calculatePeriod } from '@/lib/project-calc';
 import { buildPeriodInput, toCalcTerms } from '@/lib/projects-store';
 import type { OperationRow } from '@/lib/projects-store';
@@ -75,6 +75,16 @@ function ProjectDetail() {
     .filter((x) => x.f.hours || x.f.pieces);
 
   const canSettle = isOwner && c.canClose && ops.length > 0;
+  // Ответы на последние предложенные условия (макет h1-bory-declined): кто принял, кто против.
+  const lastAsk = data.terms
+    .filter((x) => x.status === 'proposed' || x.status === 'rejected')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .at(-1);
+  const consentRows = lastAsk
+    ? data.members
+        .filter((m) => m.kind === 'user' && m.status === 'active' && m.user_id !== lastAsk.proposed_by)
+        .map((m) => ({ m, d: data.approvals.find((a) => a.terms_id === lastAsk.id && a.user_id === m.user_id)?.decision }))
+    : [];
   const closed = data.periods.filter((p) => p.status === 'closed').reverse();
   const opLine = (o: OperationRow) => {
     const who = memberName(data, o.member_id);
@@ -87,7 +97,11 @@ function ProjectDetail() {
     <V1Screen
       testId="project-screen"
       dock={
-        canSettle ? (
+        c.declinedBy && isOwner ? (
+          <MainButton href={routes.projectTerms(id)} testId="project-declined-change">
+            {t('project.consent.change')}
+          </MainButton>
+        ) : canSettle ? (
           <MainButton href={routes.projectSettle(id)} testId="project-settle">
             {t('project.settle')}
           </MainButton>
@@ -131,6 +145,34 @@ function ProjectDetail() {
         <Plaque kind="err" testId="terms-declined">
           <b>{t('project.consent.declined', { name: c.declinedBy })}</b>
         </Plaque>
+      )}
+      {c.declinedBy && consentRows.length > 0 && (
+        <>
+          <BlockHead
+            title={t('project.consent.list')}
+            right={t('home.v1.ofN', { n: consentRows.filter((r) => r.d === 'accept').length, total: consentRows.length })}
+          />
+          <div className="flex flex-col gap-1.5" data-testid="consent-list">
+            {consentRows.map(({ m, d }) => (
+              <Row
+                key={m.id}
+                left={<Avatar name={m.display_name} index={memberIndex(data, m.id)} />}
+                title={m.display_name}
+                meta={d === 'accept' ? t('project.consent.yes') : d === 'decline' ? t('project.consent.no') : t('project.consent.none')}
+                right={
+                  d ? (
+                    <span className={cx('w-10 h-10 rounded-full grid place-items-center', d === 'accept' ? 'bg-v1-plus' : 'bg-[#FFD6D3] text-v1-danger')}>
+                      {d === 'accept' ? <Check className="w-5 h-5" aria-hidden="true" /> : <X className="w-5 h-5" aria-hidden="true" />}
+                    </span>
+                  ) : undefined
+                }
+              />
+            ))}
+          </div>
+          <p className="mt-2 mb-3 px-1 text-[15px] text-v1-muted">
+            {t('project.consent.again', { names: consentRows.map((r) => r.m.display_name).join(', ') })}
+          </p>
+        </>
       )}
       {c.pending && c.waiting.length > 0 && (
         <Plaque kind="info" testId="terms-waiting">
