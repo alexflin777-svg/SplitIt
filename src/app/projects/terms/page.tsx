@@ -34,7 +34,15 @@ function ChangeTerms() {
 
   const { data } = project;
   const open = data.periods.find((p) => p.status === 'open')!;
-  const current = toCalcTerms(data.terms.find((x) => x.id === open.terms_id)!, data.lines);
+  // После «Не согласен» правят отклонённое предложение, а не действующие условия
+  // (тот же «последний запрос», что и в списке согласий на экране проекта).
+  const lastAsk = data.terms
+    .filter((x) => x.status === 'proposed' || x.status === 'rejected')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .at(-1);
+  const active = data.terms.find((x) => x.id === open.terms_id)!;
+  const declined = lastAsk?.status === 'rejected' && lastAsk.created_at > active.created_at ? lastAsk : null;
+  const current = toCalcTerms(declined ?? active, data.lines);
   const members = data.members.filter((m) => m.status === 'active').map(toCalcMember);
   const lines: TermLine[] = members.map(
     (m) =>
@@ -42,7 +50,11 @@ function ChangeTerms() {
       ({ ...(current.lines.find((l) => l.memberId === m.id) ?? emptyLine(m.id)), contribNew: 0, debtWriteOff: 0 }),
   );
   // В периоде 1 вклады первоначальной версии ещё не в журнале — новая версия их заменяет.
-  const initial = open.seq === 1 ? { ...current, lines: members.map((m) => current.lines.find((l) => l.memberId === m.id) ?? emptyLine(m.id)) } : { ...current, lines };
+  // Отклонённое предложение в журнал не попало — его вклады и списания берутся как были.
+  const initial =
+    open.seq === 1 || declined
+      ? { ...current, lines: members.map((m) => current.lines.find((l) => l.memberId === m.id) ?? emptyLine(m.id)) }
+      : { ...current, lines };
 
   return (
     <TermsBuilder

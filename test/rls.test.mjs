@@ -296,10 +296,18 @@ describe('Приглашения', () => {
   });
 
   test('истёкшее приглашение не работает', async () => {
+    // Срок считает база (20261101000100): событие закрыто 31 день назад → срок
+    // ссылки истёк. Клиентский expires_at игнорируется, поэтому «вчера» не задать.
+    const old = await db.query(
+      `INSERT INTO public.groups (name, created_by, status, completed_at)
+       VALUES ('Старое событие', $1, 'completed', NOW() - INTERVAL '31 days') RETURNING id`,
+      [ALICE],
+    );
+    const oldGroup = old.rows[0].id;
     await db.query(
       `INSERT INTO public.group_invites (group_id, invite_code, created_by, expires_at)
-       VALUES ($1, 'EXPIRED-CODE', $2, NOW() - INTERVAL '1 day')`,
-      [aliceGroup, ALICE],
+       VALUES ($1, 'EXPIRED-CODE', $2, NOW() + INTERVAL '1 day')`,
+      [oldGroup, ALICE],
     );
 
     const res = await asUser(db, CAROL, () =>
@@ -309,7 +317,7 @@ describe('Приглашения', () => {
     assert.match(res.error, /недействительно|истекло/);
     const membership = await db.query(
       `SELECT count(*)::int AS n FROM public.group_members WHERE group_id = $1 AND user_id = $2`,
-      [aliceGroup, CAROL],
+      [oldGroup, CAROL],
     );
     assert.equal(membership.rows[0].n, 0, 'пользователь попал в группу по истёкшему коду');
   });

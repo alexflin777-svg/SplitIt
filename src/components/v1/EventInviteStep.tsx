@@ -3,8 +3,8 @@
 /**
  * «Позови друзей» сразу после создания события (макет h4-invite; SCENARIOS-AUDIT
  * §4 п. 5). Одна ссылка на событие: существующая показывается снова, новая
- * выпускается только если действующей нет. Срок — по факту базы (14 дней,
- * ставит клиент); правило «пока открыто и 30 дней после» требует миграции.
+ * выпускается только если действующей нет. Срок ставит база: пока событие
+ * открыто и 30 дней после закрытия (20261101000100).
  */
 
 import { useEffect, useState } from 'react';
@@ -29,13 +29,17 @@ export default function EventInviteStep({ group, isOwner, onDone }: { group: Gro
       if (r.data) return setInvite(r.data);
       const made = await createInvite(group.id);
       if (!alive) return;
-      if (made.data) setInvite({ code: made.data, expiresAt: new Date(Date.now() + 14 * 864e5).toISOString() });
-      else setError(made.error);
+      if (!made.data) return setError(made.error);
+      // Срок новой ссылки знает только база — перечитываем строку.
+      const fresh = await getActiveInvite(group.id);
+      if (!alive) return;
+      if (fresh.data) setInvite(fresh.data);
+      else setError(fresh.error ?? t('eventDetail.errorCreateInviteFailed'));
     });
     return () => {
       alive = false;
     };
-  }, [group.id]);
+  }, [group.id, t]);
 
   const link = invite ? absoluteInviteLink(invite.code) : null;
   const guests = (group.members ?? []).filter((m) => m.isGuest || (!isMultiUser() && m.id !== group.createdBy && m.role !== 'owner'));

@@ -345,6 +345,8 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
   if (!isMultiUser()) {
     if (e2eInvites()) {
       const groupId = fakeRedeemInvite(code);
+      const exp = groupId ? fakeExpiry(groupId) : null;
+      if (exp && Date.parse(exp) <= Date.now()) return { data: null, error: t('errors.inviteInvalidOrExpired') };
       return groupId ? ok(groupId) : { data: null, error: 'Ссылка не найдена (e2e)' };
     }
     return { data: null, error: 'Приглашения работают только с подключённым бэкендом.' };
@@ -359,10 +361,37 @@ export function invitesAvailable(): boolean {
   return isMultiUser() || e2eInvites();
 }
 
+/** Срок ссылки по правилу базы (20261101000100) — для e2e-подмены. */
+function fakeExpiry(groupId: string): string | null {
+  const g = localGroups().find((x) => x.id === groupId);
+  return !g || g.status === 'active' ? null : new Date(Date.parse(g.updatedAt ?? g.createdAt) + 30 * 86_400_000).toISOString();
+}
+
 /** Действующая ссылка события, если есть (иначе null) — экран не плодит коды. */
 export async function getActiveInvite(groupId: string): Promise<RemoteResult<{ code: string; expiresAt: string | null } | null>> {
-  if (!isMultiUser()) return e2eInvites() ? ok(fakeActiveInvite(groupId)) : { data: null, error: LOCAL_INVITES };
+  if (!isMultiUser()) {
+    if (!e2eInvites()) return { data: null, error: LOCAL_INVITES };
+    const code = fakeActiveInvite(groupId);
+    return ok(code ? { code, expiresAt: fakeExpiry(groupId) } : null);
+  }
   return remote.fetchActiveInvite(groupId);
+}
+
+/** Что видно по ссылке до входа: название, кто зовёт, сколько участников, срок. */
+export async function previewInvite(code: string): Promise<RemoteResult<remote.EventInvitePreview>> {
+  if (!isMultiUser()) {
+    const g = e2eInvites() ? localGroups().find((x) => x.id === fakeRedeemInvite(code)) : undefined;
+    if (!g) return { data: null, error: e2eInvites() ? 'Ссылка не найдена (e2e)' : LOCAL_INVITES };
+    const expiresAt = fakeExpiry(g.id);
+    return ok({
+      event_name: g.name,
+      inviter_name: g.members.find((m) => m.role === 'owner')?.name ?? null,
+      member_count: g.members.length,
+      is_active: !expiresAt || Date.parse(expiresAt) > Date.now(),
+      expires_at: expiresAt,
+    });
+  }
+  return remote.previewInvite(code);
 }
 
 export async function disableInvite(groupId: string, code: string): Promise<RemoteResult<null>> {

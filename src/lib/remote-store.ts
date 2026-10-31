@@ -487,31 +487,40 @@ function randomInviteCode(): string {
 }
 
 /**
- * Ссылка-приглашение содержит многоразовый до expires_at (14 дней) код, а не id группы. По id вступить
+ * Ссылка-приглашение содержит многоразовый код, а не id группы. По id вступить
  * нельзя: политика на group_members разрешает прямую запись только владельцу.
+ * Срок ставит база (20261101000100): пока событие открыто и 30 дней после.
  */
-export async function createInvite(
-  groupId: string,
-  createdBy: string,
-  ttlHours = 24 * 14,
-): Promise<RemoteResult<string>> {
+export async function createInvite(groupId: string, createdBy: string): Promise<RemoteResult<string>> {
   if (!supabase) return fail(noBackend());
 
   const code = randomInviteCode();
-  const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
-
-  const { error } = await supabase
-    .from('group_invites')
-    .insert({ group_id: groupId, invite_code: code, created_by: createdBy, expires_at: expiresAt });
+  const { error } = await supabase.from('group_invites').insert({ group_id: groupId, invite_code: code, created_by: createdBy });
 
   return error ? fail(translate(error)) : { data: code, error: null };
 }
 
-/**
- * Действующая ссылка события (одна на событие, а не новая на каждое открытие
- * экрана). Срок по-прежнему ставит клиент при создании: правило «пока событие
- * открыто и 30 дней после» требует миграции (SCENARIOS-AUDIT §4 п. 3).
- */
+/** Что видно по ссылке до входа (preview_group_invite): без сумм и списка участников. */
+export interface EventInvitePreview {
+  event_name: string;
+  inviter_name: string | null;
+  member_count: number;
+  is_active: boolean;
+  /** null — событие открыто, ссылка работает, пока его не закроют, и 30 дней после. */
+  expires_at: string | null;
+}
+
+export async function previewInvite(code: string): Promise<RemoteResult<EventInvitePreview>> {
+  if (!supabase) return fail(noBackend());
+  const { data, error } = await supabase.rpc('preview_group_invite', { p_code: code });
+  if (error) {
+    const m = error.message.toLowerCase();
+    return fail(m.includes('недействительно') || m.includes('истекло') ? t('errors.inviteInvalidOrExpired') : translate(error));
+  }
+  return { data: data as EventInvitePreview, error: null };
+}
+
+/** Действующая ссылка события (одна на событие, а не новая на каждое открытие экрана). */
 export async function fetchActiveInvite(groupId: string): Promise<RemoteResult<{ code: string; expiresAt: string | null } | null>> {
   if (!supabase) return fail(noBackend());
   const { data, error } = await supabase

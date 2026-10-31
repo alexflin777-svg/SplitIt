@@ -8,13 +8,13 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Minus, Plus, Users, Clock } from 'lucide-react';
+import { Minus, Plus, Users, Clock, Trash2 } from 'lucide-react';
 import { toCalcTerms } from '@/lib/projects-store';
 import { MAX_HOURS, MAX_PIECES, formatQty, formatRub, hoursPurpose, monthName, parseQty, parseRub, quantityFields, rateTimes } from '@/lib/project-ui';
 import { projects } from '@/lib/projects-client';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { Avatar, Card, Chip, Header, MainButton, Plaque, Segment, Skeleton, TopNav, V1Screen, cx } from '@/components/v1/ui';
+import { Avatar, Card, Chip, Header, MainButton, PillLink, Plaque, SecondButton, Segment, Skeleton, TopNav, V1Screen, cx } from '@/components/v1/ui';
 import { LoadError, RouteShell, memberIndex } from '@/components/v1/project-bits';
 import { useProject } from '@/components/v1/useProject';
 
@@ -27,9 +27,11 @@ function AddRecord() {
   const kindParam = (params.get('type') as Kind) || 'income';
   const { t, locale } = useI18n();
   const { project, error, reload } = useProject(id);
-  const [kind, setKind] = useState<Kind>(kindParam);
-  const [amount, setAmount] = useState('');
-  const [title, setTitle] = useState('');
+  const [kindState, setKind] = useState<Kind>(kindParam);
+  // null — поле не трогали: при правке показывается сохранённое значение.
+  const [amount, setAmount] = useState<string | null>(null);
+  const [title, setTitle] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [refundOf, setRefundOf] = useState<string | null>(params.get('of'));
   const [hours, setHours] = useState<string | null>(null);
@@ -51,8 +53,24 @@ function AddRecord() {
   const month = monthName(open.opened_at, locale);
   const terms = toCalcTerms(data.terms.find((x) => x.id === open.terms_id)!, data.lines);
   const active = data.members.filter((m) => m.status === 'active');
-  const who = memberId ?? me?.id ?? active[0]?.id ?? null;
   const back = routes.projectDetail(id);
+  // Правка (?op=): только операции открытого периода — их и загружает useProject.
+  const opId = params.get('op');
+  const editing = opId ? ops.find((o) => o.id === opId) ?? null : null;
+  const kind: Kind = editing ? (editing.op_type === 'income_refund' ? 'refund' : editing.op_type) : kindState;
+  const who = memberId ?? editing?.member_id ?? me?.id ?? active[0]?.id ?? null;
+
+  if (opId && (!editing || !(editing.created_by === uid || isOwner))) {
+    return (
+      <V1Screen testId="edit-op">
+        <TopNav back={back} close />
+        <Header title={t('add.editTitle')} sub={`${data.project.name} · ${month}`} />
+        <Plaque kind="info" testId="edit-op-unavailable">
+          {editing ? t('add.editNotAllowed') : t('add.editClosed')}
+        </Plaque>
+      </V1Screen>
+    );
+  }
 
   // ---------------------------------------------------------------- часы и штуки
   if (kind === 'qty') {
@@ -175,10 +193,14 @@ function AddRecord() {
   }
 
   // ---------------------------------------------------------------- деньги
-  const cents = parseRub(amount);
+  const amountText = amount ?? (editing ? formatQty(editing.amount) : '');
+  const titleText = title ?? editing?.title ?? '';
+  const cents = parseRub(amountText);
   const incomes = ops.filter((o) => o.op_type === 'income');
-  const income = kind === 'refund' ? incomes.find((o) => o.id === refundOf) ?? null : null;
-  const refunded = income ? ops.filter((o) => o.refund_of === income.id).reduce((s, o) => s + o.amount_in_project_currency, 0) : 0;
+  const income = kind === 'refund' ? incomes.find((o) => o.id === (editing ? editing.refund_of : refundOf)) ?? null : null;
+  const refunded = income
+    ? ops.filter((o) => o.refund_of === income.id && o.id !== editing?.id).reduce((s, o) => s + o.amount_in_project_currency, 0)
+    : 0;
   const maxRefund = income ? income.amount_in_project_currency - refunded : 0;
   const tooMuch = kind === 'refund' && !!cents && cents > maxRefund;
   const whoLine = terms.lines.find((l) => l.memberId === who);
@@ -189,13 +211,25 @@ function AddRecord() {
     if (!cents || !who) return;
     setBusy(true);
     setSaveError(null);
-    const res = await projects.addOperation(id, {
-      type: kind === 'refund' ? 'income_refund' : kind === 'expense' ? 'expense' : 'income',
-      amount: cents,
-      memberId: who,
-      refundOf: income?.id,
-      title: title.trim() || undefined,
-    });
+    const res = editing
+      ? // memberId — только если выбрали другого: участник записи мог выйти, база такого не примет.
+        await projects.editOperation(editing.id, { amount: cents, memberId: memberId ?? undefined, title: titleText.trim() })
+      : await projects.addOperation(id, {
+          type: kind === 'refund' ? 'income_refund' : kind === 'expense' ? 'expense' : 'income',
+          amount: cents,
+          memberId: who,
+          refundOf: income?.id,
+          title: titleText.trim() || undefined,
+        });
+    setBusy(false);
+    if (res.error) return setSaveError(res.error);
+    router.push(back);
+  };
+  const remove = async () => {
+    if (!editing) return;
+    setBusy(true);
+    setSaveError(null);
+    const res = await projects.deleteOperation(editing.id);
     setBusy(false);
     if (res.error) return setSaveError(res.error);
     router.push(back);
@@ -211,15 +245,53 @@ function AddRecord() {
               {t('add.failed', { error: saveError })}
             </Plaque>
           )}
-          <MainButton testId="op-save" disabled={disabled} onClick={() => void save()}>
-            {busy ? t('add.saving') : t('add.save')}
-          </MainButton>
+          {editing && confirmDelete ? (
+            <div className="rounded-card bg-[#FFE9E7] px-4 py-3" data-testid="op-delete-confirm">
+              <p className="text-[15px] font-semibold">
+                {t('add.deleteConfirm', { title: editing.title || t(`project.op.type.${editing.op_type}`) })}
+              </p>
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <SecondButton onClick={() => setConfirmDelete(false)}>{t('add.deleteNo')}</SecondButton>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void remove()}
+                  data-testid="op-delete-yes"
+                  className="h-[52px] mt-2 rounded-full bg-v1-danger text-white font-bold text-base disabled:opacity-50"
+                >
+                  {t('add.deleteYes')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <MainButton testId="op-save" disabled={disabled} onClick={() => void save()}>
+              {busy ? t('add.saving') : t('add.save')}
+            </MainButton>
+          )}
         </>
       }
     >
-      <TopNav back={back} close />
-      <Header title={kind === 'refund' ? t('add.refundTitle') : t('add.title')} sub={`${data.project.name} · ${month}`} />
-      {kind !== 'refund' ? (
+      <TopNav
+        back={back}
+        close
+        right={
+          editing && !confirmDelete ? (
+            <PillLink onClick={() => setConfirmDelete(true)} testId="op-delete">
+              <Trash2 className="w-5 h-5" aria-hidden="true" />
+              {t('add.delete')}
+            </PillLink>
+          ) : undefined
+        }
+      />
+      <Header
+        title={editing ? t('add.editTitle') : kind === 'refund' ? t('add.refundTitle') : t('add.title')}
+        sub={`${data.project.name} · ${month}`}
+      />
+      {editing ? (
+        <p className="mb-3 px-1 text-[15px] text-v1-muted" data-testid="op-type-fixed">
+          {t(`project.op.type.${editing.op_type}`)} · {t('add.editTypeFixed')}
+        </p>
+      ) : kind !== 'refund' ? (
         <Segment<Kind>
           value={kind}
           onChange={setKind}
@@ -245,7 +317,7 @@ function AddRecord() {
           <input
             inputMode="decimal"
             autoFocus
-            value={amount}
+            value={amountText}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0"
             aria-label={t('add.amount')}
@@ -255,7 +327,7 @@ function AddRecord() {
           <span className="text-v1-ink2">₽</span>
         </label>
         <input
-          value={title}
+          value={titleText}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={120}
           placeholder={kind === 'expense' ? t('add.whatExpense') : t('add.whatIncome')}

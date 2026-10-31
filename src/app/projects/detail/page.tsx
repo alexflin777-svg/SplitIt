@@ -261,9 +261,9 @@ function ProjectDetail() {
         <Card className="text-[15px] text-v1-ink2">{t('project.feed.empty')}</Card>
       ) : (
         <div className="flex flex-col gap-1.5" data-testid="project-feed">
-          {[...ops].reverse().map((o) => (
+          {[...ops].reverse().map((o) => {
+            const row = (
             <Row
-              key={o.id}
               className={o.op_type === 'income' ? 'bg-v1-accent-soft' : undefined}
               left={
                 <span className="w-10 h-10 rounded-full bg-v1-bg grid place-items-center flex-none">
@@ -279,7 +279,16 @@ function ProjectDetail() {
               meta={`${fmtDay(o.occurred_on, locale)} · ${opLine(o)}`}
               right={`${o.op_type === 'income' ? '+' : o.op_type === 'income_refund' ? '−' : ''}${formatRub(o.amount_in_project_currency)}`}
             />
-          ))}
+            );
+            // Править и удалять может автор или владелец (как private.project_lock_operation).
+            return o.created_by === uid || isOwner ? (
+              <Link key={o.id} href={routes.projectAdd(id, { op: o.id })} data-testid="op-edit">
+                {row}
+              </Link>
+            ) : (
+              <div key={o.id}>{row}</div>
+            );
+          })}
           {ops.some((o) => o.op_type === 'income') && (
             <Link
               href={routes.projectAdd(id, { type: 'refund' })}

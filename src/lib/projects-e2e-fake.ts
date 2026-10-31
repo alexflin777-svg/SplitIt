@@ -295,6 +295,46 @@ function call(db: Db, fn: string, a: Row, uid: string | null, name: string): unk
       bump(db, a.p_project_id);
       return opId;
     }
+    case 'edit_operation':
+    case 'delete_operation': {
+      // Порядок проверок — как private.project_lock_operation / edit_operation / delete_operation.
+      const op = db.project_operations.find((o) => o.id === a.p_operation_id);
+      if (!op) throw new DbError('Операция не найдена или недоступна', 'P0002');
+      caller(db, op.project_id, uid);
+      if (op.created_by !== uid && db.projects.find((p) => p.id === op.project_id)?.owner_id !== uid) {
+        throw new DbError('Править и удалять операцию может автор или владелец', '42501');
+      }
+      const refunds = db.project_operations.filter((o) => o.refund_of === op.id);
+      const closed = db.project_periods.find((p) => p.id === op.period_id)?.status !== 'open';
+      if (fn === 'delete_operation') {
+        if (refunds.length) throw new DbError('Сначала удалите возвраты по этому доходу', 'P0409');
+        if (closed) throw new DbError('Период закрыт: операцию нельзя удалить', 'P0423');
+        db.project_operations.splice(db.project_operations.indexOf(op), 1);
+        bump(db, op.project_id);
+        return null;
+      }
+      if (a.p_member_id != null && !db.project_members.some((m) => m.id === a.p_member_id && m.project_id === op.project_id && m.status === 'active')) {
+        throw new DbError('Участник не из этого проекта', '22023');
+      }
+      const amount = a.p_amount ?? op.amount;
+      if (!(amount > 0)) throw new DbError('Сумма должна быть больше нуля', '22023');
+      const pc = Math.round(amount * op.exchange_rate);
+      const others = (incomeId: string) =>
+        db.project_operations.filter((o) => o.refund_of === incomeId && o.id !== op.id).reduce((s, o) => s + o.amount_in_project_currency, 0);
+      if (op.op_type === 'income_refund') {
+        const inc = db.project_operations.find((o) => o.id === op.refund_of)!;
+        if (others(inc.id) + pc > inc.amount_in_project_currency) throw new DbError('Возвраты по доходу больше дохода', '22023');
+      } else if (op.op_type === 'income' && pc < refunds.reduce((s, o) => s + o.amount_in_project_currency, 0)) {
+        throw new DbError('Возвраты по доходу больше дохода', '22023');
+      }
+      if (closed) throw new DbError('Период закрыт: операцию нельзя изменить', 'P0423');
+      Object.assign(op, {
+        amount, amount_in_project_currency: pc, member_id: a.p_member_id ?? op.member_id,
+        title: a.p_title == null ? op.title : String(a.p_title).trim(),
+      });
+      bump(db, op.project_id);
+      return op.id;
+    }
     case 'set_quantity': {
       caller(db, a.p_project_id, uid);
       const project = db.projects.find((p) => p.id === a.p_project_id)!;

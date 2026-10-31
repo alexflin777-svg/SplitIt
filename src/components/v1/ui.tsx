@@ -98,14 +98,14 @@ export function TopNav({ back, onBack, right, close }: { back?: string; onBack?:
   );
 }
 
-export function PillLink({ href, children, onClick }: { href?: string; children: ReactNode; onClick?: () => void }) {
+export function PillLink({ href, children, onClick, testId }: { href?: string; children: ReactNode; onClick?: () => void; testId?: string }) {
   const cls = 'h-11 px-[18px] pl-3.5 rounded-full bg-v1-card inline-flex items-center gap-2 font-semibold text-[15px]';
   return href ? (
-    <Link href={href} className={cls}>
+    <Link href={href} className={cls} data-testid={testId}>
       {children}
     </Link>
   ) : (
-    <button type="button" onClick={onClick} className={cls}>
+    <button type="button" onClick={onClick} className={cls} data-testid={testId}>
       {children}
     </button>
   );
