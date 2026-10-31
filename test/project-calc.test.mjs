@@ -427,6 +427,69 @@ describe('§3а.6 короткие примеры', () => {
     assert.deepEqual(per(after, 'owed'), [43_200, 33_200, 23_600]);
   });
 
+  test('предпросмотр «на прошлом периоде» с новым вкладом Ани 5 000: стало 46 200 / 31 200 / 22 600', () => {
+    // Декабрь §3а.5, предложено: Вике фикс 12 000, Аня вносит 5 000 деньгами.
+    // Долг стало: Аня 0 + 5 000 − 0 = 5 000; Боря 10 000 + 0 − 0 = 10 000; ΣD 15 000.
+    // P 100 000 → R 15 000 (5 000 / 10 000 / 0); S 20 000 + 0 + 12 000 = 32 000;
+    // O 100 000 − 15 000 − 32 000 = 53 000 → 40/40/20 = 21 200 / 21 200 / 10 600.
+    // Положено: Аня 5 000 + 20 000 + 21 200 = 46 200; Боря 10 000 + 21 200 = 31 200;
+    // Вика 12 000 + 10 600 = 22 600 (Σ 100 000 ✓). Было — как в декабре: 43 800 / 33 800 / 22 400.
+    const proposed = {
+      ...T_MIXED,
+      lines: T_MIXED.lines.map((l) =>
+        l.memberId === V
+          ? { ...l, rate: { type: 'period', amount: rub(12_000) } }
+          : l.memberId === A
+            ? { ...l, contribNew: rub(5_000), contribKind: 'money' }
+            : { ...l, contribNew: 0 },
+      ),
+    };
+    const { before, after } = simulatePreview(
+      deepFreeze({
+        members: MEMBERS,
+        terms: proposed,
+        operations: [income(Bo, 100_000)],
+        quantities: { v: { hours: 700 } },
+        baseline: { terms: T_MIXED, debtAtStart: { b: rub(10_000) } },
+        contributionsTotal: { b: rub(30_000) },
+      }),
+    );
+    checkInvariants(before);
+    checkInvariants(after);
+    assert.deepEqual(per(before, 'owed'), [43_800, 33_800, 22_400]);
+    assert.deepEqual(per(after, 'contributionBack'), [5_000, 10_000, 0]);
+    assert.deepEqual(per(after, 'rate'), [20_000, 0, 12_000]);
+    assert.equal(after.remainder, rub(53_000));
+    assert.deepEqual(per(after, 'remainderShare'), [21_200, 21_200, 10_600]);
+    assert.deepEqual(per(after, 'owed'), [46_200, 31_200, 22_600]);
+    assert.deepEqual(per(after, 'transfer'), [46_200, -68_800, 22_600]);
+  });
+
+  test('предпросмотр «по вкладам»: было весами 10 000 / 5 000 / 0, стало — с новым вкладом Вики 15 000', () => {
+    // Доход 30 000 на карту Вики, долга на начало нет.
+    // Было: веса 10 000 / 5 000 / 0, R 0, O 30 000 → 20 000 / 10 000 / 0.
+    // Стало: долг Вики 15 000 → R 15 000; O 15 000, веса 10 000 / 5 000 / 15 000 →
+    // 5 000 / 2 500 / 7 500; положено 5 000 / 2 500 / 22 500 (Σ 30 000 ✓).
+    const baseTerms = { contribEnabled: true, remainderMethod: 'contributions', lines: [A, Bo, V].map((id) => line(id)) };
+    const proposed = { ...baseTerms, lines: [line(A), line(Bo), line(V, { contribNew: rub(15_000), contribKind: 'money' })] };
+    const { before, after } = simulatePreview(
+      deepFreeze({
+        members: MEMBERS,
+        terms: proposed,
+        operations: [income(V, 30_000)],
+        baseline: { terms: baseTerms, debtAtStart: {} },
+        contributionsTotal: { a: rub(10_000), b: rub(5_000), v: 0 },
+      }),
+    );
+    checkInvariants(before);
+    checkInvariants(after);
+    assert.deepEqual(per(before, 'remainderShare'), [20_000, 10_000, 0]);
+    assert.deepEqual(per(before, 'owed'), [20_000, 10_000, 0]);
+    assert.deepEqual(per(after, 'contributionBack'), [0, 0, 15_000]);
+    assert.deepEqual(per(after, 'remainderShare'), [5_000, 2_500, 7_500]);
+    assert.deepEqual(per(after, 'owed'), [5_000, 2_500, 22_500]);
+  });
+
   const T_CONTRIB = { contribEnabled: true, remainderMethod: 'contributions', lines: [A, Bo, V].map((id) => line(id)) };
   const CONTRIB_TOTAL = { a: rub(10_000), b: rub(5_000), v: 0 };
 
@@ -558,6 +621,16 @@ describe('§3а.6 короткие примеры', () => {
     assert.deepEqual(close.entries, []);
     assert.equal(close.debtAtNextStart.b, 0);
   });
+
+  test('closePeriodDebt: отрицательные и дробные копейки отклоняются', () => {
+    const base = { members: MEMBERS, debtAtStart: { b: rub(10_000) }, repaid: {} };
+    assert.throws(() => closePeriodDebt({ ...base, repaid: { b: -1 } }), /целые неотрицательные копейки/);
+    assert.throws(() => closePeriodDebt({ ...base, repaid: { b: 0.5 } }), /целые неотрицательные копейки/);
+    assert.throws(() => closePeriodDebt({ ...base, debtAtStart: { b: 1.5 } }), /целые неотрицательные копейки/);
+    const next = (over) => ({ ...T_V, lines: T_V.lines.map((l) => (l.memberId === Bo ? { ...l, ...over } : l)) });
+    assert.throws(() => closePeriodDebt({ ...base, nextTerms: next({ debtWriteOff: -1 }) }), /целые неотрицательные копейки/);
+    assert.throws(() => closePeriodDebt({ ...base, nextTerms: next({ contribNew: 0.5 }) }), /целые неотрицательные копейки/);
+  });
 });
 
 describe('§4 округление и пограничные случаи', () => {
@@ -664,6 +737,33 @@ describe('§3а.7 validateTerms — отрицательные проверки'
     assert.deepEqual(msgs(withLine(t, Bo, { debtWriteOff: rub(10_000) }), leaving), []);
     const noLine = { ...t, lines: t.lines.filter((l) => l.memberId !== Bo) };
     assert.ok(msgs(noLine, leaving).includes('Сначала верните или спишите весь долг: Боря 10 000 ₽'));
+  });
+
+  test('выключение блока 2: должник без строки в условиях тоже должен списать весь долг', () => {
+    const noBo = { ...T_B, lines: T_B.lines.filter((l) => l.memberId !== Bo).map((l) => (l.memberId === A ? { ...l, shareBp: 8000 } : l)) };
+    assert.deepEqual(msgs(noBo), ['Сначала верните или спишите весь долг: Боря 10 000 ₽']);
+    assert.deepEqual(msgs(noBo, { ...ctx, stage: 'accept' }), ['Боря: долг вырос до 10 000 ₽ — предложите условия заново']);
+    // Со строкой и неполным списанием — одно сообщение, не два.
+    assert.deepEqual(msgs(withLine(T_B, Bo, { debtWriteOff: rub(4_000) })), ['Сначала верните или спишите весь долг: Боря 10 000 ₽']);
+  });
+
+  test('выходящий участник не может вносить новый вклад', () => {
+    // Сценарий ревью: Боря выходит, долг 10 000, X = 10 000, новый денежный вклад 5 000, блок 2 вкл.
+    const t = withLine(withLine(T_MIXED, Bo, { inRemainder: false, shareBp: 0, debtWriteOff: rub(10_000), contribNew: rub(5_000), contribKind: 'money', contribNote: undefined }), A, {
+      shareBp: 8000,
+    });
+    assert.deepEqual(msgs(t, { ...ctx, leaving: [Bo] }), ['Выходящий участник не может вносить новый вклад']);
+    assert.deepEqual(msgs(withLine(t, Bo, { contribNew: 0 }), { ...ctx, leaving: [Bo] }), []);
+  });
+
+  test('«по %» 50/50/0 при «все участвуют» отклоняется, хотя сумма 100 %', () => {
+    const t = { ...T_A_PCT, lines: T_A_PCT.lines.map((l, k) => ({ ...l, shareBp: [5000, 5000, 0][k] })) };
+    assert.deepEqual(msgs(t, { members: MEMBERS }), ['Вика: участвует в остатке, а доля 0 %']);
+  });
+
+  test('денежный вклад 0,5 копейки отклоняется', () => {
+    const t = withLine(T_V, Bo, { contribNew: 0.5, contribKind: 'money', contribNote: undefined });
+    assert.deepEqual(msgs(t, { members: MEMBERS }), ['Вклад не может быть меньше нуля']);
   });
 
   test('последнее согласие после роста долга выше X', () => {

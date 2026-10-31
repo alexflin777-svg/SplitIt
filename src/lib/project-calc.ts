@@ -446,6 +446,11 @@ export function closePeriodDebt(input: ClosePeriodDebtInput): {
   const writeOff: LedgerEntry[] = [];
   const credit: LedgerEntry[] = [];
   const debt: Record<string, number> = {};
+  const cents = (n: number) => {
+    if (!Number.isSafeInteger(n) || n < 0) throw new Error(`closePeriodDebt: ожидаются целые неотрицательные копейки, получено ${n}`);
+  };
+  [...Object.values(input.debtAtStart), ...Object.values(input.repaid)].forEach(cents);
+  for (const l of lines.values()) [l.debtWriteOff, l.contribNew].forEach(cents);
   for (const id of order) {
     const R = input.repaid[id] ?? 0;
     const rest = (input.debtAtStart[id] ?? 0) - R;
@@ -476,6 +481,7 @@ export interface PreviewInput {
   baseline?: { terms: Terms; debtAtStart: Record<string, number> };
   /** «На примере»: доход примера, копейки; по умолчанию 100 000 ₽ первому участнику. */
   sampleIncome?: number;
+  /** Накопленные вклады до предлагаемой версии (вес «было»); к «стало» добавляются contribNew из terms. */
   contributionsTotal?: Record<string, number>;
 }
 
@@ -498,13 +504,16 @@ export function simulatePreview(input: PreviewInput): { after: PeriodResult; bef
     { type: 'income' as const, memberId: members[0].id, amount: input.sampleIncome ?? 10_000_000 },
   ];
   const quantities = input.quantities ?? {};
+  // Вес «по вкладам» стало = накопленные + предлагаемые новые; было — только накопленные.
+  const totalAfter = { ...input.contributionsTotal };
+  for (const l of input.terms.lines) totalAfter[l.memberId] = (totalAfter[l.memberId] ?? 0) + l.contribNew;
   const after = calculatePeriod({
     members,
     terms: input.terms,
     operations,
     quantities,
     debtAtStart: debt,
-    contributionsTotal: input.contributionsTotal,
+    contributionsTotal: totalAfter,
   });
   if (isExample) {
     // В режиме «на примере» количества — примерные, подпись другая.
@@ -588,7 +597,6 @@ export function validateTerms(
   }
 
   for (const l of terms.lines) {
-    const name = nameOf.get(l.memberId) ?? l.memberId;
     const a = l.rate.amount;
     if (!Number.isInteger(a) || a < 0) {
       errors.push({ memberId: l.memberId, message: 'Ставка не может быть меньше нуля' });
@@ -604,30 +612,24 @@ export function validateTerms(
       errors.push({ memberId: l.memberId, message: 'Вклад не может быть меньше нуля' });
     } else if (l.contribKind === 'item' && (!l.contribNote?.trim() || l.contribNew <= 0)) {
       errors.push({ memberId: l.memberId, message: 'Опиши вещь и укажи оценку' });
+    } else if (leaving.has(l.memberId) && l.contribNew > 0) {
+      errors.push({ memberId: l.memberId, message: 'Выходящий участник не может вносить новый вклад' });
     }
 
     const d = debt[l.memberId] ?? 0;
     const X = l.debtWriteOff;
     if (!Number.isInteger(X) || X < 0) {
       errors.push({ memberId: l.memberId, message: 'Сумма списания не может быть меньше нуля' });
-      continue;
-    }
-    const mustClear = d > 0 && (!terms.contribEnabled || leaving.has(l.memberId));
-    if (stage === 'accept') {
-      if (mustClear && X < d) {
-        errors.push({ memberId: l.memberId, message: `${name}: долг вырос до ${formatRub(d)} — предложите условия заново` });
-      }
-    } else if (X > d) {
+    } else if (stage === 'propose' && X > d) {
       errors.push({ memberId: l.memberId, message: `Можно списать не больше ${formatRub(d)}` });
-    } else if (mustClear && X < d) {
-      errors.push({ memberId: l.memberId, message: `Сначала верните или спишите весь долг: ${name} ${formatRub(d)}` });
     }
   }
 
-  // Выходящий может не иметь строки в новой версии — его долг всё равно должен быть списан.
-  for (const id of leaving) {
-    const d = debt[id] ?? 0;
-    if (d > 0 && !terms.lines.some((l) => l.memberId === id)) {
+  // Должник может не иметь строки в новой версии — при выходе или выключении блока 2 долг всё равно списывается целиком.
+  const lineOf = new Map(terms.lines.map((l) => [l.memberId, l]));
+  for (const [id, d] of Object.entries(debt)) {
+    const X = lineOf.get(id)?.debtWriteOff ?? 0;
+    if (d > 0 && (!terms.contribEnabled || leaving.has(id)) && Number.isInteger(X) && X >= 0 && X < d) {
       const name = nameOf.get(id) ?? id;
       errors.push({
         memberId: id,
