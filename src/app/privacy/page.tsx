@@ -13,9 +13,10 @@ export const metadata: Metadata = {
   description: 'Какие данные обрабатывает SplitIT, зачем и как их удалить.',
 };
 
-const UPDATED = '10 октября 2026';
-const CONTACT = 'info@splitit-apps.com';
-// Публично указывается только компания, без персональных данных владельца (правило владельца, G5).
+const UPDATED = '23 октября 2026';
+const CONTACT = 'hello@konstantalabs.ru';
+const DELETE_URL = 'https://konstantalabs.ru/splitit-delete.html';
+// Публично указывается только студия, без персональных данных владельца.
 const OPERATOR_RU = '«Константа Лабс»';
 const OPERATOR_EN = 'Konstanta Labs';
 
@@ -29,8 +30,8 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-semibold text-gray-900">Кто мы</h2>
         <p>
           SplitIT — приложение для учёта и деления общих расходов в поездках и группах
-          (веб-версия на splitit-apps.com и приложение для Android). Оператор данных и
-          разработчик: {OPERATOR_RU}; контакт для вопросов о данных: {CONTACT}.
+          (веб-версия на splitit-apps.com и приложение для Android). Оператор данных:
+          разработчик — {OPERATOR_RU}; контакт для вопросов о данных: {CONTACT}.
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Какие данные мы обрабатываем</h2>
@@ -67,18 +68,11 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Как удалить данные</h2>
         <p>
-          В приложении: «Профиль» → «Удалить аккаунт» — удаление происходит сразу. Без приложения —
-          заявка на странице{' '}
-          <Link href="/delete-account" className="text-emerald-600 underline">/delete-account</Link>.
-          В общих событиях ваши расходы сохраняются под именем «Удалённый пользователь», чтобы не
-          сломать итоги других участников: суммы и названия расходов остаются видны участникам
-          этого события, но больше не связаны с вашим именем, email и телефоном. Фото чеков
-          приложение не хранит: распознавание идёт на устройстве.
-        </p>
-        <p>
-          Или напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим аккаунт
-          и связанные данные в течение 30 дней и подтвердим удаление ответным письмом. Данные из
-          списка ожидания удаляются по такому же запросу.
+          Как удалить аккаунт и что при этом остаётся у других участников событий — на странице{' '}
+          <a href={DELETE_URL} className="text-emerald-600 underline">{DELETE_URL}</a>. Без
+          приложения напишите на {CONTACT} с адреса, на который зарегистрирован аккаунт, — мы удалим
+          аккаунт и связанные данные в течение 30 дней и подтвердим удаление ответным письмом. Данные
+          из списка ожидания удаляются по такому же запросу.
         </p>
 
         <h2 className="text-lg font-semibold text-gray-900">Изменения политики</h2>
@@ -89,13 +83,11 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-semibold text-gray-900">Privacy summary (English)</h2>
         <p className="text-gray-600">
-          SplitIT is developed and operated by {OPERATOR_EN} (data controller; contact: {CONTACT}).
-          SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
+          SplitIT is developed by {OPERATOR_EN} (contact: {CONTACT}). SplitIT processes your e-mail and profile name (sign-in), and the group/expense data you
           create. Android contact names are read locally only with your permission and never
           uploaded. No location tracking, no ads, no selling of data. Data is stored in Supabase
-          with row-level security. To delete your account and data, use Profile → Delete account in the app, the request
-          form at <Link href="/delete-account" className="underline">/delete-account</Link>, or e-mail {CONTACT} from your
-          registered address; requests are completed within 30 days.
+          with row-level security. Account deletion instructions: {DELETE_URL}. Without the app, e-mail{' '}
+          {CONTACT} from your registered address; deletion is completed within 30 days.
         </p>
       </section>
 
