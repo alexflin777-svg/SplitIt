@@ -17,6 +17,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { Avatar, BlockHead, Header, MainButton, Plaque, Row, SecondButton, Skeleton, TopNav, V1Screen } from '@/components/v1/ui';
 import { LoadError, RouteShell, memberIndex } from '@/components/v1/project-bits';
 import { useProject } from '@/components/v1/useProject';
+import QrTile from '@/components/v1/QrTile';
 
 function Invite() {
   const params = useSearchParams();
@@ -137,6 +138,7 @@ function Invite() {
       {code === null && <Plaque kind="info">{t('invite.p.disabled')}</Plaque>}
       {code && (
         <>
+          <QrTile link={link} title={t('qr.allNear')} />
           <div className="flex items-center gap-3 mt-2 pl-[18px] pr-2.5 py-2.5 rounded-card bg-v1-card">
             <span className="flex-1 min-w-0 truncate text-base font-semibold" data-testid="invite-link" data-code={code}>
               {shown}

@@ -389,6 +389,11 @@ export const messages: Record<string, string> = {
   'eventInvite.tileBody': `Arkadaşların bağlantıyı açar, giriş yapar ve doğrudan etkinliğe düşer.`,
   'eventInvite.until': `Bağlantı {date} tarihine kadar çalışır. İstediğin zaman kapatabilirsin.`,
   'eventInvite.noExpiry': `Bağlantı etkinlik açık olduğu sürece ve kapandıktan sonra 30 gün daha çalışır. İstediğin zaman kapatabilirsin.`,
+  'qr.label': 'Davet bağlantısının QR kodu',
+  'qr.missing': 'QR kod yok: bu davetin henüz telefonda açılabilen bir bağlantısı yok.',
+  'qr.hint': 'Kamerayı koda doğrultsunlar',
+  'qr.allNear': 'Herkes yakında mı?',
+  'qr.friendsNear': 'Arkadaşlar yakında mı?',
 
   'event.v1.owedToYou': `Sana borçlular`,
   'event.v1.youOwe': `Borçlusun`,

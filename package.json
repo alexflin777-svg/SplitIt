@@ -17,7 +17,7 @@
     "pretest": "npm run test:unit && npm run test:rls && npm run build:test",
     "test:rls": "tsx --test --test-concurrency=1 test/rls.test.mjs test/realistic-rls.test.mjs test/group-participants-rls.test.mjs test/waitlist-rls.test.mjs test/launch-hardening-rls.test.mjs test/account-deletion-rls.test.mjs test/guest-expenses-rls.test.mjs test/expense-split-mode-rls.test.mjs test/guest-settlements-rls.test.mjs test/remove-guest-rls.test.mjs test/deleted-account-access-rls.test.mjs test/deleted-account-race.test.mjs test/projects-rls.test.mjs test/projects-parity.test.mjs test/projects-race.test.mjs test/event-invites-rls.test.mjs",
     "build:test": "NEXT_PUBLIC_OCR_TEST_HOOK=1 NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= NEXT_PUBLIC_UPDATE_MANIFEST_URL= NEXT_PUBLIC_APP_URL= VERCEL_PROJECT_PRODUCTION_URL= next build",
-    "test:unit": "tsx --test test/auth-storage.test.mjs test/debt-simplification.test.mjs test/currency.test.mjs test/ocr.test.mjs test/realistic-scenarios.test.mjs test/telegram-auth.test.mjs test/event-summary.test.mjs test/native-permissions.test.mjs test/signup-profile.test.mjs test/remote-guests.test.mjs test/item-split.test.mjs test/split-rescale.test.mjs test/all-expenses.test.mjs test/ui-labels.test.mjs test/i18n-check.test.mjs test/push-policy.test.mjs test/project-calc.test.mjs test/projects-store.test.mjs test/project-ui.test.mjs",
+    "test:unit": "tsx --test test/auth-storage.test.mjs test/debt-simplification.test.mjs test/currency.test.mjs test/ocr.test.mjs test/realistic-scenarios.test.mjs test/telegram-auth.test.mjs test/event-summary.test.mjs test/native-permissions.test.mjs test/signup-profile.test.mjs test/remote-guests.test.mjs test/item-split.test.mjs test/split-rescale.test.mjs test/all-expenses.test.mjs test/ui-labels.test.mjs test/i18n-check.test.mjs test/push-policy.test.mjs test/project-calc.test.mjs test/projects-store.test.mjs test/project-ui.test.mjs test/qr.test.mjs",
     "verify:prod": "node scripts/verify-production.mjs",
     "verify:realtime": "node scripts/verify-realtime.mjs",
     "canary": "node scripts/canary.mjs"
@@ -37,6 +37,7 @@
     "framer-motion": "^11.11.11",
     "lucide-react": "^0.454.0",
     "next": "^16.3.0",
+    "qrcode-generator": "2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "swr": "^2.5.1",

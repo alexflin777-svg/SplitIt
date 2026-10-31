@@ -382,6 +382,11 @@ export const messages: Record<string, string> = {
   'eventInvite.tileBody': '友だちはリンクを開いてログインするだけで、そのままイベントに入れます。',
   'eventInvite.until': 'リンクは{date}まで使えます。いつでも無効にできます。',
   'eventInvite.noExpiry': 'リンクはイベントが開いている間と、終了後さらに30日間有効です。いつでも無効にできます。',
+  'qr.label': '招待リンクのQRコード',
+  'qr.missing': 'QRコードはありません：この招待にはまだスマホで開けるリンクがありません。',
+  'qr.hint': 'コードにカメラを向けてもらいましょう',
+  'qr.allNear': 'みんな近くにいる？',
+  'qr.friendsNear': '友だちが近くにいる？',
 
   'event.v1.owedToYou': '受け取れる金額',
   'event.v1.youOwe': '支払う金額',

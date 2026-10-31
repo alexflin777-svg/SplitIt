@@ -14,6 +14,7 @@ import type { Group } from '@/lib/store';
 import { absoluteInviteLink } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
 import { Avatar, BlockHead, Header, MainButton, PillLink, Plaque, Row, Skeleton, TopNav, V1Screen } from './ui';
+import QrTile from './QrTile';
 
 export default function EventInviteStep({ group, isOwner, onDone }: { group: Group; isOwner: boolean; onDone: () => void }) {
   const { t, locale } = useI18n();
@@ -77,7 +78,8 @@ export default function EventInviteStep({ group, isOwner, onDone }: { group: Gro
       {invite === null && !error && <Plaque kind="info">{t('invite.p.disabled')}</Plaque>}
       {invite && (
         <>
-          <div className="flex items-center gap-3 pl-[18px] pr-2.5 py-2.5 rounded-card bg-v1-card">
+          <QrTile link={link} title={t('qr.friendsNear')} />
+          <div className="flex items-center gap-3 mt-2 pl-[18px] pr-2.5 py-2.5 rounded-card bg-v1-card">
             <span className="flex-1 min-w-0 truncate text-base font-semibold" data-testid="event-invite-link">
               {link ?? t('eventDetail.noPublicUrlError')}
             </span>

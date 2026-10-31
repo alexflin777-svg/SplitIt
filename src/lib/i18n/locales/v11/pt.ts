@@ -396,6 +396,11 @@ export const messages: Record<string, string> = {
   'eventInvite.tileBody': 'Os amigos abrem o link, entram e caem direto no evento.',
   'eventInvite.until': 'O link funciona até {date}. Você pode desativá-lo a qualquer momento.',
   'eventInvite.noExpiry': 'O link funciona enquanto o evento estiver aberto e por mais 30 dias depois do fechamento. Você pode desativá-lo a qualquer momento.',
+  'qr.label': 'QR code do link de convite',
+  'qr.missing': 'Sem QR code: este convite ainda não tem um link que abra no celular.',
+  'qr.hint': 'Peça para apontarem a câmera para o código',
+  'qr.allNear': 'Todos por perto?',
+  'qr.friendsNear': 'Amigos por perto?',
 
   'event.v1.owedToYou': 'Devem a você',
   'event.v1.youOwe': 'Você deve',

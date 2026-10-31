@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { qrMatrix, qrPath } from '../src/lib/qr';
 
 /**
  * Этап 3г: превью приглашения события и срок ссылки, правка и удаление записи
@@ -95,6 +96,26 @@ test('шаг «Позови друзей»: срок ссылки по прав�
   await eventWithLink(page, 'active');
   await page.goto('/events/detail?id=g1&invite=1');
   await expect(page.getByTestId('event-invite-step')).toContainText('пока событие открыто');
+});
+
+test('QR на «Позови друзей» и «Позови участников» кодирует показанную ссылку; без публичной ссылки — текст', async ({ page }) => {
+  const qrOf = async (linkTestId: string) => {
+    await expect(page.getByTestId('invite-qr')).toBeVisible();
+    const link = await page.getByTestId(linkTestId).innerText();
+    expect(await page.getByTestId('invite-qr').locator('path').getAttribute('d')).toBe(qrPath(qrMatrix(link)!));
+  };
+  await eventWithLink(page, 'active');
+  await page.goto('/events/detail?id=g1&invite=1');
+  await qrOf('event-invite-link');
+
+  await createSolo(page, 'Фотостудия');
+  await qrOf('invite-link');
+
+  // Без e2e-origin у localhost нет публичной ссылки: QR не рисуется, честный текст.
+  await page.evaluate(() => window.localStorage.removeItem('splitit_e2e_invites'));
+  await page.reload();
+  await expect(page.getByTestId('invite-qr-missing')).toContainText('QR-кода нет');
+  await expect(page.getByTestId('invite-qr')).toHaveCount(0);
 });
 
 test('правка суммы меняет итог, удаление убирает запись; не-автор не видит кнопок', async ({ page }) => {

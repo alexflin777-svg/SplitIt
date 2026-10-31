@@ -382,6 +382,11 @@ export const messages: Record<string, string> = {
   'eventInvite.tileBody': '朋友打开链接、登录，就直接进入活动。',
   'eventInvite.until': '链接有效期至 {date}，你随时可以停用。',
   'eventInvite.noExpiry': '活动开放期间以及结束后 30 天内，链接都有效。你随时可以停用。',
+  'qr.label': '邀请链接二维码',
+  'qr.missing': '没有二维码：此邀请还没有可在手机上打开的链接。',
+  'qr.hint': '让他们用相机对准二维码',
+  'qr.allNear': '大家都在旁边？',
+  'qr.friendsNear': '朋友在旁边？',
 
   'event.v1.owedToYou': '别人欠你',
   'event.v1.youOwe': '你欠别人',
