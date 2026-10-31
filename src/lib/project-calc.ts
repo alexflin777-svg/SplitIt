@@ -167,7 +167,8 @@ export function allocate(total: number, weights: number[]): number[] {
 function allocateSigned(total: number, weights: number[]): number[] {
   if (total === 0) return weights.map(() => 0);
   const parts = allocate(Math.abs(total), weights);
-  return total < 0 ? parts.map((x) => -x) : parts;
+  // 0 - x, а не -x: у веса 0 доля 0, а не −0 (в базе −0 нет).
+  return total < 0 ? parts.map((x) => 0 - x) : parts;
 }
 
 /** ставка × количество(сотые) / 100, половина копейки — вверх. */

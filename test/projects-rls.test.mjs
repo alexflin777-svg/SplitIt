@@ -543,6 +543,16 @@ describe('прямая запись мимо функций и неизменя�
     }
   });
 
+  test('TRUNCATE любой таблицы проекта отклоняется даже владельцем БД', async () => {
+    const before = await fingerprint(db);
+    for (const t of TABLES) {
+      const r = await run(db, `TRUNCATE public.${t} CASCADE`);
+      assert.equal(r.ok, false, `TRUNCATE ${t} прошёл`);
+      assert.match(r.error, /неизменяем|не меняется/i, t);
+    }
+    assert.deepEqual(await fingerprint(db), before);
+  });
+
   test('операция и количества в закрытом периоде: ни RPC, ни владелец схемы', async () => {
     await h.fails(ANYA, `SELECT public.edit_operation(p_operation_id => $1::uuid, p_amount => 1::bigint) AS v`, [ctx.op], /закрыт/);
     await h.fails(ANYA, `SELECT public.delete_operation($1::uuid) AS v`, [ctx.op], /закрыт/);
@@ -768,9 +778,43 @@ describe('условия: согласие всех, вступление со �
     assert.equal(mem.status, 'left');
     await h.fails(BORYA, ADD_OP, [pid, 'income', 100, m.B, null]);
     await h.fails(ANYA, ADD_OP, [pid, 'income', 100, m.B, null], /участник/i);
-    // Вышедший видит закрытые периоды и отмечает свои переводы по ним.
-    const r = await h.as(BORYA, `SELECT count(*)::int AS n FROM public.project_periods WHERE project_id = $1`, [pid]);
-    assert.equal(r.rows[0].n, 3);
+
+    // Решение 31.10: вышедший читает только периоды до выхода включительно (seq ≤ 2).
+    const p2 = snap.period_id;
+    const t2 = snap.transfers.find((x) => x.to_member === m.B);
+    await h.ok(VIKA, MARK, [p2, t2.from_member, m.B]);
+    await h.ok(VIKA, ADD_OP, [pid, 'income', 100_000, m.V, null]); // период 3
+    const snap3 = await closeNow(db, ANYA, pid);
+    const t3 = snap3.transfers.find((x) => x.from_member === m.V);
+    await h.ok(VIKA, MARK, [snap3.period_id, t3.from_member, t3.to_member]);
+    await h.ok(ANYA, ADD_OP, [pid, 'expense', 7_000, m.A, null]); // период 4, открыт
+    await h.ok(VIKA, SET_QTY, [pid, m.V, 300, null]);
+    const future = await h.ok(ANYA, PROPOSE, [pid, JSON.stringify({ remainder_method: 'equal', lines: [{ member_id: m.A }, { member_id: m.V }] })]);
+
+    const seen = async (sql) => {
+      const r = await h.as(BORYA, sql, [pid]);
+      assert.ok(r.ok, r.error);
+      return r.rows;
+    };
+    assert.deepEqual((await seen(`SELECT seq FROM public.project_periods WHERE project_id = $1 ORDER BY seq`)).map((r) => r.seq), [1, 2]);
+    const early = (await h.admin(`SELECT id FROM public.project_periods WHERE project_id = $1 AND seq <= 2`, [pid])).map((r) => r.id);
+    for (const t of ['project_operations', 'project_quantities', 'project_contribution_ledger', 'project_transfers']) {
+      const rows = await seen(`SELECT period_id FROM public.${t} WHERE project_id = $1`);
+      const all = await h.admin(`SELECT period_id FROM public.${t} WHERE project_id = $1 AND period_id = ANY ($2)`, [pid, early]);
+      assert.equal(rows.length, all.length, `${t}: вышедший видит не всё из периодов 1–2`);
+      assert.ok(rows.every((r) => early.includes(r.period_id)), `${t}: вышедший видит строки после выхода`);
+    }
+    assert.equal((await seen(`SELECT 1 FROM public.project_transfers WHERE project_id = $1`)).length, 1, 'отметка периода 2 видна, периода 3 — нет');
+    const terms = (await seen(`SELECT id FROM public.project_terms WHERE project_id = $1`)).map((r) => r.id);
+    assert.deepEqual(terms, [(await h.admin(`SELECT terms_id FROM public.project_periods WHERE id = $1`, [p2]))[0].terms_id]);
+    assert.ok(!terms.includes(future) && !terms.includes(tid), 'условия после выхода не видны');
+    assert.ok((await seen(`SELECT terms_id FROM public.project_term_lines WHERE project_id = $1`)).every((r) => terms.includes(r.terms_id)));
+    assert.ok((await seen(`SELECT terms_id FROM public.project_term_approvals WHERE project_id = $1`)).every((r) => terms.includes(r.terms_id)));
+    assert.deepEqual(await seen(`SELECT 1 FROM public.project_invites WHERE project_id = $1`), [], 'ссылки-приглашения не видны');
+    const audit = (await seen(`SELECT action FROM public.project_audit WHERE project_id = $1 ORDER BY id`)).map((r) => r.action);
+    assert.equal(audit.at(-1), 'period_closed', 'история — до выхода включительно');
+    assert.equal(audit.filter((a) => a === 'period_closed').length, 2);
+    assert.equal(audit.filter((a) => a === 'transfer_marked').length, 0, 'отметки — уже после выхода');
   });
 
   test('последнее согласие отклоняется, если долг вырос выше X', async () => {
@@ -850,7 +894,7 @@ describe('set_quantity', () => {
     const { pid, m } = ctx;
     const rev = (await openPeriod(db, pid)).revision;
     await h.ok(VIKA, SET_QTY, [pid, m.V, 1200, null]);
-    await h.fails(ANYA, CLOSE, [pid, rev], /Пока ты смотрел/);
+    await h.fails(ANYA, CLOSE, [pid, rev], /Данные изменились/);
   });
 
   test('в закрытом периоде количество не меняется; часы при остатке «по часам» и ставке «за штуку» — можно', async () => {
@@ -973,7 +1017,42 @@ describe('close_period: атомарность, сверка с ядром, пе
     const rev = (await openPeriod(db, pid)).revision;
     await h.fails(BORYA, CLOSE, [pid, rev], /владелец/);
     await h.ok(VIKA, ADD_OP, [pid, 'income', 100, m.V, null]);
-    await h.fails(ANYA, CLOSE, [pid, rev], /Пока ты смотрел, добавили запись/);
+    await h.fails(ANYA, CLOSE, [pid, rev], /Данные изменились — посмотрите итог ещё раз/);
+  });
+
+  test('вердикт п.4: замена условий периода 1 после предпросмотра — закрытие по старой ревизии отклонено, деньги не уходят гостю', async () => {
+    const pid = await h.ok(ANYA, `SELECT public.create_project('Ярмарка', 'RUB', ARRAY['Саша'], $1::jsonb) AS v`, [
+      JSON.stringify({ remainder_method: 'equal', lines: [{ position: 1 }, { position: 2, in_remainder: false }] }),
+    ]);
+    const [mA, mG] = (await h.admin(`SELECT id FROM public.project_members WHERE project_id = $1 ORDER BY position`, [pid])).map((r) => r.id);
+    await h.ok(ANYA, ADD_OP, [pid, 'income', 10_000, mG, null]);
+    const rev = (await openPeriod(db, pid)).revision; // предпросмотр: всё Ане
+    const swapped = await h.ok(ANYA, PROPOSE, [pid, JSON.stringify({
+      remainder_method: 'equal', lines: [{ member_id: mA, in_remainder: false }, { member_id: mG }],
+    })]);
+    assert.equal((await openPeriod(db, pid)).terms_id, swapped, 'условия периода 1 заменены');
+    const before = await fingerprint(db);
+    await h.fails(ANYA, CLOSE, [pid, rev], /Данные изменились — посмотрите итог ещё раз/);
+    assert.deepEqual(await fingerprint(db), before, 'ничего не записано');
+    assert.equal((await openPeriod(db, pid)).seq, 1);
+  });
+
+  test('ревизию меняют вход участника и принятие условий следующего периода', async () => {
+    const { pid, m, code } = await team(db, { terms: MIXED });
+    await closeNow(db, ANYA, pid);
+    // Период 2: согласия на действующие условия не нужны — мешать может только ревизия.
+    let rev = (await openPeriod(db, pid)).revision;
+    await h.ok(GONE, `SELECT public.join_project_by_invite($1) AS v`, [code]);
+    await h.fails(ANYA, CLOSE, [pid, rev], /Данные изменились/);
+    const [{ id: mG }] = await h.admin(`SELECT id FROM public.project_members WHERE project_id = $1 AND user_id = $2`, [pid, GONE]);
+    rev = (await openPeriod(db, pid)).revision;
+    const next = MIXED(m, { [m.B]: { contrib_new: 0 } });
+    next.lines.push({ member_id: mG, in_remainder: false });
+    const tid = await h.ok(ANYA, PROPOSE, [pid, JSON.stringify(next)]);
+    for (const u of [BORYA, VIKA]) await h.ok(u, ACCEPT, [tid]);
+    assert.equal((await openPeriod(db, pid)).revision, rev, 'пока не все согласны — расчёт не меняется');
+    await h.ok(GONE, ACCEPT, [tid]);
+    await h.fails(ANYA, CLOSE, [pid, rev], /Данные изменились/);
   });
 
   test('mark_transfer_paid: по закрытому периоду и только по снимку', async () => {

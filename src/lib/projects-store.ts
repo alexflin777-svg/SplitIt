@@ -397,18 +397,35 @@ export interface OperationInput {
   note?: string;
 }
 
-const PROJECT_TABLES = [
-  'project_members',
-  'project_terms',
-  'project_term_lines',
-  'project_term_approvals',
-  'project_periods',
-  'project_quantities',
-  'project_contribution_ledger',
-  'project_transfers',
-] as const;
+/** Таблица → порядок строк: страницы по offset должны быть устойчивы. */
+const PROJECT_TABLES: [string, string[]][] = [
+  ['project_members', ['position']],
+  ['project_terms', ['created_at', 'id']],
+  ['project_term_lines', ['terms_id', 'member_id']],
+  ['project_term_approvals', ['terms_id', 'user_id']],
+  ['project_periods', ['seq']],
+  ['project_quantities', ['period_id', 'member_id']],
+  ['project_contribution_ledger', ['id']],
+  ['project_transfers', ['id']],
+];
 
-const OPERATIONS_PAGE = 500;
+// Не больше max-rows PostgREST (в Supabase по умолчанию 1000): иначе короткая страница сочтётся последней.
+const PAGE_SIZE = 500;
+const MAX_ROWS = 20_000;
+
+/** Все строки таблицы проекта, страницами; лимит — явная ошибка: частичные деньги хуже ошибки. */
+async function fetchProjectTable(client: SupabaseClient, table: string, order: string[], projectId: string): Promise<RemoteResult<unknown[]>> {
+  const rows: unknown[] = [];
+  for (;;) {
+    let q = client.from(table).select('*').eq('project_id', projectId);
+    for (const col of order) q = q.order(col, { ascending: true });
+    const { data, error } = await q.range(rows.length, rows.length + PAGE_SIZE - 1);
+    if (error) return { data: null, error: translate(error) };
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
+    if (rows.length >= MAX_ROWS) return { data: null, error: 'Слишком много записей в проекте — не удалось загрузить все' };
+  }
+}
 
 export function createProjectsStore(client: SupabaseClient | null) {
   async function rpc<T>(fn: string, args: Record<string, unknown>, fallback?: string): Promise<RemoteResult<T>> {
@@ -425,19 +442,16 @@ export function createProjectsStore(client: SupabaseClient | null) {
       return error ? { data: null, error: translate(error) } : { data: (data ?? []) as ProjectRow[], error: null };
     },
 
-    /**
-     * Проект целиком, кроме операций. shortcut: эти таблицы не листаются по
-     * страницам (PostgREST отдаёт до 1000 строк); при ~80 периодах × 12 участников
-     * количества упрутся в лимит — тогда перевести на fetchAllPages, как операции.
-     */
+    /** Проект целиком, кроме операций; каждая таблица — всеми страницами. */
     async fetchProject(projectId: string): Promise<RemoteResult<ProjectData>> {
       if (!client) return { data: null, error: t('errors.noBackend') };
       const [p, ...rest] = await Promise.all([
         client.from('projects').select('*').eq('id', projectId).maybeSingle(),
-        ...PROJECT_TABLES.map((table) => client.from(table).select('*').eq('project_id', projectId)),
+        ...PROJECT_TABLES.map(([table, order]) => fetchProjectTable(client, table, order, projectId)),
       ]);
-      const failed = [p, ...rest].find((r) => r.error);
-      if (failed?.error) return { data: null, error: translate(failed.error) };
+      if (p.error) return { data: null, error: translate(p.error) };
+      const failed = rest.find((r) => r.error);
+      if (failed) return { data: null, error: failed.error };
       // RLS отдаёт пустоту и «нет проекта», и «не участник» — неразличимо.
       if (!p.data) return { data: null, error: t('errors.insufficientPermissions') };
       const [members, terms, lines, approvals, periods, quantities, ledger, transfers] = rest.map((r) => r.data ?? []);
@@ -474,7 +488,7 @@ export function createProjectsStore(client: SupabaseClient | null) {
           const items = (data ?? []) as OperationRow[];
           return { data: { items, hasMore: items.length === limit }, error: null };
         },
-        { pageSize: OPERATIONS_PAGE },
+        { pageSize: PAGE_SIZE },
       );
       if (res.overflow) return { data: null, error: 'Слишком много операций в периоде — не удалось загрузить все' };
       return { data: res.data, error: res.error };

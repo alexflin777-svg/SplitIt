@@ -6,7 +6,10 @@
 --      Все ссылки внутри проекта — составные ключи (project_id, id): участник,
 --      период, условия или операция чужого проекта отклоняются самой базой.
 --   2. RLS на каждой таблице. Клиенту — только SELECT, и только участнику
---      проекта (private.is_project_member: сначала assert_account_active).
+--      проекта (private.project_visible_seq: сначала assert_account_active).
+--      Вышедший читает только периоды до выхода включительно (решение
+--      31.10.2026): их операции, количества, условия, журнал, отметки и
+--      историю; будущее проекта и ссылки-приглашения — нет.
 --      Прав на INSERT/UPDATE/DELETE у anon/authenticated нет вовсе: любая
 --      запись — только через функции ниже. Защиту от удалённых аккаунтов
 --      (RESTRICTIVE deny_deleted_account + триггер deny_deleted_account_write)
@@ -54,8 +57,11 @@ CREATE TABLE public.project_members (
   display_name text NOT NULL CHECK (char_length(display_name) BETWEEN 1 AND 80),
   position int NOT NULL CHECK (position > 0),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'left')),
+  -- Номер последнего периода вышедшего: дальше он проект не читает.
+  left_after_seq int,
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((kind = 'user') = (user_id IS NOT NULL)),
+  CHECK ((status = 'left') = (left_after_seq IS NOT NULL)),
   UNIQUE (project_id, user_id),
   UNIQUE (project_id, position),
   UNIQUE (project_id, id)
@@ -133,7 +139,8 @@ CREATE TABLE public.project_periods (
   closed_at timestamptz,
   closed_by uuid,
   terms_id uuid NOT NULL,
-  -- Счётчик изменений операций и количеств: «пока ты смотрел» (§5).
+  -- Счётчик изменений всего, от чего зависит итог (§5): операции, количества,
+  -- состав, действующие условия, журнал долга. Растёт триггерами.
   revision bigint NOT NULL DEFAULT 0,
   snapshot jsonb,
   UNIQUE (project_id, seq),
@@ -227,38 +234,104 @@ CREATE INDEX project_audit_project_idx ON public.project_audit (project_id, id);
 
 -- ---------------------------------------------------------------- 2. Доступ
 
-CREATE FUNCTION private.is_project_member(p_project_id uuid)
-RETURNS boolean
+-- Последний период, который видит вызывающий: участнику — все (2147483647),
+-- вышедшему — до выхода включительно, чужому — NULL. Вышедший отмечает свои
+-- переводы по этим периодам (§4), но будущее проекта ему не видно.
+CREATE FUNCTION private.project_visible_seq(p_project_id uuid)
+RETURNS int
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
 SET search_path = pg_catalog, public
 AS $$
-  -- Вышедший (status = left) читает историю и отмечает свои переводы по
-  -- закрытым периодам (§4), поэтому статус здесь не проверяется.
-  SELECT CASE WHEN private.assert_account_active() THEN EXISTS (
-    SELECT 1 FROM public.project_members
+  SELECT CASE WHEN private.assert_account_active() THEN (
+    SELECT CASE status WHEN 'active' THEN 2147483647 ELSE left_after_seq END
+    FROM public.project_members
     WHERE project_id = p_project_id AND user_id = auth.uid()
   ) END;
 $$;
-REVOKE ALL ON FUNCTION private.is_project_member(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.is_project_member(uuid) TO authenticated;
+
+-- Строка периода p_period_id видна вызывающему.
+CREATE FUNCTION private.project_period_visible(p_project_id uuid, p_period_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = pg_catalog, public, private
+AS $$
+  -- Явно первой: при пустом p_period_id EXISTS не дошёл бы до project_visible_seq.
+  SELECT CASE WHEN private.assert_account_active() THEN EXISTS (
+    SELECT 1 FROM public.project_periods
+    WHERE id = p_period_id AND project_id = p_project_id AND seq <= private.project_visible_seq(p_project_id)
+  ) END;
+$$;
+
+-- Версия условий видна участнику вся, вышедшему — если по ней шёл видимый ему период.
+CREATE FUNCTION private.project_terms_visible(p_project_id uuid, p_terms_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = pg_catalog, public, private
+AS $$
+  SELECT s.v = 2147483647 OR EXISTS (
+    SELECT 1 FROM public.project_periods
+    WHERE project_id = p_project_id AND terms_id = p_terms_id AND seq <= s.v
+  )
+  FROM (SELECT private.project_visible_seq(p_project_id) AS v) s;
+$$;
+
+-- История: вышедшему — до итога, с которым он вышел (closed_at = now() той же транзакции).
+CREATE FUNCTION private.project_audit_visible(p_project_id uuid, p_at timestamptz)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = pg_catalog, public, private
+AS $$
+  SELECT s.v = 2147483647 OR p_at <= (
+    SELECT closed_at FROM public.project_periods WHERE project_id = p_project_id AND seq = s.v
+  )
+  FROM (SELECT private.project_visible_seq(p_project_id) AS v) s;
+$$;
+
+DO $$
+DECLARE
+  f text;
+BEGIN
+  FOREACH f IN ARRAY ARRAY[
+    'private.project_visible_seq(uuid)', 'private.project_period_visible(uuid, uuid)',
+    'private.project_terms_visible(uuid, uuid)', 'private.project_audit_visible(uuid, timestamptz)'
+  ] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', f);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', f);
+  END LOOP;
+END
+$$;
 
 DO $$
 DECLARE
   t text;
+  expr text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'projects', 'project_members', 'project_invites', 'project_terms', 'project_term_lines',
-    'project_term_approvals', 'project_periods', 'project_operations', 'project_quantities',
-    'project_contribution_ledger', 'project_transfers', 'project_audit'
-  ] LOOP
+  FOR t, expr IN SELECT * FROM (VALUES
+    ('projects', 'private.project_visible_seq(id) IS NOT NULL'),
+    ('project_members', 'private.project_visible_seq(project_id) IS NOT NULL'),
+    ('project_invites', 'private.project_visible_seq(project_id) = 2147483647'),
+    ('project_terms', 'private.project_terms_visible(project_id, id)'),
+    ('project_term_lines', 'private.project_terms_visible(project_id, terms_id)'),
+    ('project_term_approvals', 'private.project_terms_visible(project_id, terms_id)'),
+    ('project_periods', 'seq <= private.project_visible_seq(project_id)'),
+    ('project_operations', 'private.project_period_visible(project_id, period_id)'),
+    ('project_quantities', 'private.project_period_visible(project_id, period_id)'),
+    ('project_contribution_ledger', 'private.project_period_visible(project_id, period_id)'),
+    ('project_transfers', 'private.project_period_visible(project_id, period_id)'),
+    ('project_audit', 'private.project_audit_visible(project_id, created_at)')
+  ) AS x(t, expr) LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC, anon, authenticated', t);
     EXECUTE format('GRANT SELECT ON TABLE public.%I TO authenticated', t);
-    EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (private.is_project_member(%I))',
-      t || '_select_member', t, CASE WHEN t = 'projects' THEN 'id' ELSE 'project_id' END);
+    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (%s)', t || '_select_member', t, expr);
     -- Как в 20261022000000, но явно: та миграция новые таблицы не покрывает.
     EXECUTE format(
       'CREATE POLICY deny_deleted_account ON public.%I AS RESTRICTIVE FOR ALL TO authenticated
@@ -298,6 +371,46 @@ CREATE TRIGGER project_audit_append_only BEFORE UPDATE OR DELETE ON public.proje
   FOR EACH ROW EXECUTE FUNCTION private.project_append_only();
 CREATE TRIGGER project_transfers_append_only BEFORE UPDATE OR DELETE ON public.project_transfers
   FOR EACH ROW EXECUTE FUNCTION private.project_append_only();
+
+-- TRUNCATE обходит построчные триггеры: запрещён на всех таблицах проекта,
+-- включая владельца БД (журнал — project_ledger_no_truncate выше).
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'projects', 'project_members', 'project_invites', 'project_terms', 'project_term_lines',
+    'project_term_approvals', 'project_periods', 'project_operations', 'project_quantities',
+    'project_transfers', 'project_audit'
+  ] LOOP
+    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON public.%I
+                      FOR EACH STATEMENT EXECUTE FUNCTION private.project_append_only()', t || '_no_truncate', t);
+  END LOOP;
+END
+$$;
+
+-- Всё, от чего зависит итог открытого периода, увеличивает его revision:
+-- close_period по предпросмотру, сделанному до изменения, отклоняется.
+-- Операции и количества — в project_period_rows_guard; здесь состав (вход,
+-- выход), действующие условия (активация и замена, в том числе условий
+-- периода 1) и журнал долга.
+CREATE FUNCTION private.project_bump_revision()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  UPDATE public.project_periods SET revision = revision + 1 WHERE project_id = NEW.project_id AND status = 'open';
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.project_bump_revision() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER project_members_revision AFTER INSERT OR UPDATE OF status ON public.project_members
+  FOR EACH ROW EXECUTE FUNCTION private.project_bump_revision();
+CREATE TRIGGER project_terms_revision AFTER UPDATE OF status ON public.project_terms
+  FOR EACH ROW WHEN (NEW.status = 'active' OR OLD.status = 'active') EXECUTE FUNCTION private.project_bump_revision();
+CREATE TRIGGER project_ledger_revision AFTER INSERT ON public.project_contribution_ledger
+  FOR EACH ROW EXECUTE FUNCTION private.project_bump_revision();
 
 -- Версия условий: блоки не меняются никогда, статус — только по допустимым переходам.
 CREATE FUNCTION private.project_terms_guard()
@@ -660,6 +773,16 @@ $$;
 -- Активирует версию, если её приняли все участники с аккаунтом (удалённые не
 -- считаются). Версия периода 1 заменяет действующие условия периода 1; изменение
 -- вступает со следующего периода. Вклады версии периода 1 пишет close_period.
+--
+-- Продуктовые решения 31.10.2026 (отклонения от §7 спецификации, приняты):
+--   - до первого итога условия периода 1 можно заменить новой версией (её
+--     принимают все участники с аккаунтом); замена увеличивает revision
+--     (триггер project_terms_revision), итог по старому предпросмотру не
+--     фиксируется;
+--   - credit вкладов первоначальной версии пишется при первом итоге, а не при
+--     активации. Цифры те же: в расчёте периода 1 эти вклады уже входят в долг
+--     D_i (project_calc, p_initial_credit). Зато заменённая до итога версия не
+--     оставляет вкладов в неизменяемом журнале.
 CREATE FUNCTION private.project_try_activate(p_terms_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -1014,13 +1137,19 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '28000';
   END IF;
-  SELECT i.project_id INTO v_pid FROM public.project_invites i
-  WHERE i.code = p_code AND i.disabled_at IS NULL AND (i.expires_at IS NULL OR i.expires_at > now());
-  IF v_pid IS NULL THEN
-    RAISE EXCEPTION 'Приглашение недействительно или отключено' USING ERRCODE = '22023';
-  END IF;
-  -- Блокировка проекта: position выдаётся по порядку, два входа не делят номер.
-  PERFORM 1 FROM public.projects WHERE id = v_pid FOR UPDATE;
+  -- Проверка до блокировки и после: disable_project_invite держит FOR SHARE
+  -- проекта, и ссылку могли отключить, пока вход ждал.
+  FOR k IN 1..2 LOOP
+    SELECT i.project_id INTO v_pid FROM public.project_invites i
+    WHERE i.code = p_code AND i.disabled_at IS NULL AND (i.expires_at IS NULL OR i.expires_at > now());
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Приглашение недействительно или отключено' USING ERRCODE = '22023';
+    END IF;
+    IF k = 1 THEN
+      -- Блокировка проекта: position выдаётся по порядку, два входа не делят номер.
+      PERFORM 1 FROM public.projects WHERE id = v_pid FOR UPDATE;
+    END IF;
+  END LOOP;
 
   SELECT id INTO v_member FROM public.project_members WHERE project_id = v_pid AND user_id = v_uid;
   IF v_member IS NOT NULL THEN
@@ -1413,7 +1542,7 @@ BEGIN
     RAISE EXCEPTION 'Ждём согласия: %', coalesce(v_waiting, '—') USING ERRCODE = 'P0409';
   END IF;
   IF p_revision IS DISTINCT FROM v_period.revision THEN
-    RAISE EXCEPTION 'Пока ты смотрел, добавили запись — проверь итог ещё раз' USING ERRCODE = 'P0409';
+    RAISE EXCEPTION 'Данные изменились — посмотрите итог ещё раз' USING ERRCODE = 'P0409';
   END IF;
 
   v_snap := private.project_calc(v_period.id, v_period.seq = 1);
@@ -1496,7 +1625,7 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'У выходящего остался долг по вкладу' USING ERRCODE = 'P0001';
     END IF;
-    UPDATE public.project_members SET status = 'left'
+    UPDATE public.project_members SET status = 'left', left_after_seq = v_period.seq
     WHERE id IN (SELECT member_id FROM public.project_term_lines WHERE terms_id = v_next.id AND leaves);
     UPDATE public.project_terms SET status = 'superseded' WHERE id = v_terms.id AND status = 'active';
   END IF;

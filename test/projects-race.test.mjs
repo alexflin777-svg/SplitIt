@@ -12,6 +12,8 @@
  *      смотрел» (ревизия изменилась), операция остаётся в открытом периоде.
  *   3. Двойное «Зафиксировать» с одной ревизией закрывает ровно один период.
  *   4. Удаление аккаунта во время записи в проект: запись отклонена.
+ *   5. Отключение ссылки держит транзакцию — вход по ней ждёт и после commit
+ *      отклонён (ссылка проверяется заново под блокировкой проекта).
  * Порядок детерминирован, как в deleted-account-race.test.mjs: вторая сторона
  * запускается, пока первая держит транзакцию, коммит — когда вторая ждёт.
  */
@@ -72,7 +74,7 @@ async function buildProject(srv) {
   await becomeUser(c, borya);
   await c.query(`SELECT public.accept_terms($1)`, [tid]);
   await c.end();
-  return { anya, borya, pid, mA, mB };
+  return { anya, borya, pid, mA, mB, code };
 }
 
 async function openPeriod(admin, pid) {
@@ -130,7 +132,7 @@ describe('Проект: гонки итога и записи', () => {
     const res = await pending.result;
     assert.equal(state, 'blocked', 'итог должен был ждать запись');
     assert.equal(res.ok, false);
-    assert.match(res.error, /Пока ты смотрел/);
+    assert.match(res.error, /Данные изменились/);
     assert.equal((await openPeriod(srv.admin, p.pid)).id, before.id, 'период не закрыт');
     const n = await one(srv.admin, `SELECT count(*)::int AS n FROM public.project_operations WHERE period_id = $1`, [before.id]);
     assert.equal(n.n, 1, 'операция в открытом периоде');
@@ -152,7 +154,7 @@ describe('Проект: гонки итога и записи', () => {
     const res = await pending.result;
     assert.equal(state, 'blocked');
     assert.equal(res.ok, false, 'второй итог прошёл');
-    assert.match(res.error, /Пока ты смотрел/);
+    assert.match(res.error, /Данные изменились/);
     const periods = (await srv.admin.query(`SELECT seq, status FROM public.project_periods WHERE project_id = $1 ORDER BY seq`, [p.pid])).rows;
     assert.deepEqual(periods, [{ seq: 1, status: 'closed' }, { seq: 2, status: 'open' }]);
   });
@@ -177,5 +179,27 @@ describe('Проект: гонки итога и записи', () => {
     assert.equal(n.n, 0);
     const m = await one(srv.admin, `SELECT display_name FROM public.project_members WHERE id = $1`, [p.mB]);
     assert.equal(m.display_name, 'Удалённый пользователь');
+  });
+
+  test('отключение ссылки держит транзакцию → вход ждёт и после commit отклонён', async () => {
+    const p = await buildProject(srv);
+    const stranger = randomUUID();
+    await srv.admin.query(`INSERT INTO public.profiles (id, full_name, email) VALUES ($1, 'Чужой', $2)`, [stranger, `x-${stranger}@example.com`]);
+    const a = await srv.connect();
+    const b = await srv.connect();
+    await becomeUser(a, p.anya);
+    const bPid = await becomeUser(b, stranger);
+
+    await a.query('BEGIN');
+    await a.query('SELECT public.disable_project_invite($1)', [p.code]);
+    const pending = start(b, 'SELECT public.join_project_by_invite($1) AS v', [p.code]);
+    const state = await blockedOrDone(srv.admin, bPid, pending);
+    await a.query('COMMIT');
+    const res = await pending.result;
+    assert.equal(state, 'blocked', 'вход должен был ждать отключение');
+    assert.equal(res.ok, false, 'вошёл по отключённой ссылке');
+    assert.match(res.error, /недействительно или отключено/);
+    const n = await one(srv.admin, `SELECT count(*)::int AS n FROM public.project_members WHERE project_id = $1 AND user_id = $2`, [p.pid, stranger]);
+    assert.equal(n.n, 0);
   });
 });

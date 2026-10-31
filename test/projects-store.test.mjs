@@ -182,7 +182,7 @@ describe('вызовы и ошибки', () => {
   });
 
   test('ошибка базы: человеческое сообщение как есть, сеть — «нет связи», сбой итога — «ничего не изменилось»', async () => {
-    const stale = { code: 'P0409', message: 'Пока ты смотрел, добавили запись — проверь итог ещё раз' };
+    const stale = { code: 'P0409', message: 'Данные изменились — посмотрите итог ещё раз' };
     let next = stale;
     const store = createProjectsStore(fakeClient({ rpc: async () => ({ data: null, error: next }) }));
     assert.equal((await store.closePeriod(P, 7)).error, stale.message);
@@ -225,6 +225,24 @@ describe('вызовы и ошибки', () => {
       errors: { project_quantities: { code: '42501', message: 'Проект не найден или недоступен' } },
     })).fetchProject(P);
     assert.deepEqual(broken, { data: null, error: 'Проект не найден или недоступен' });
+  });
+
+  test('fetchProject догружает финансовые таблицы всеми страницами; сверх лимита — ошибка, а не обрезка', async () => {
+    const d = mixedData();
+    const ledger = Array.from({ length: 1203 }, (_, i) => ({ id: i + 1, project_id: P, member_id: B, kind: 'credit', amount: 1 }));
+    const quantities = Array.from({ length: 501 }, (_, i) => ({ project_id: P, period_id: `per-${i}`, member_id: V, hours: 100, pieces: 0 }));
+    const tables = { projects: [d.project], project_members: d.members, project_contribution_ledger: ledger, project_quantities: quantities };
+    const client = fakeClient({ tables });
+    const res = await createProjectsStore(client).fetchProject(P);
+    assert.equal(res.error, null);
+    assert.equal(res.data.ledger.length, 1203);
+    assert.equal(res.data.quantities.length, 501);
+    assert.equal(client.calls.filter((c) => c.table === 'project_contribution_ledger').length, 3, 'три страницы по 500');
+    assert.equal(ledgerBalance(res.data.ledger)[B], 1203, 'долг посчитан по всем строкам журнала');
+
+    const huge = Array.from({ length: 20_001 }, (_, i) => ({ id: i + 1, project_id: P, member_id: B, kind: 'credit', amount: 1 }));
+    const over = await createProjectsStore(fakeClient({ tables: { ...tables, project_contribution_ledger: huge } })).fetchProject(P);
+    assert.deepEqual(over, { data: null, error: 'Слишком много записей в проекте — не удалось загрузить все' });
   });
 
   test('fetchPeriodOperations догружает все страницы и фильтрует по периоду', async () => {

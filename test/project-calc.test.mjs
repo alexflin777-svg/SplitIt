@@ -668,6 +668,13 @@ describe('§4 округление и пограничные случаи', () =
     }
   });
 
+  test('убыток при весе 0: доля ровно 0, а не −0 (как в базе; найдено сверкой SQL ↔ TS)', () => {
+    const t = { contribEnabled: true, remainderMethod: 'contributions', lines: [line(A), line(Bo, { contribNew: rub(100) }), line(V)] };
+    const r = calc(t, [income(A, 100), expense(V, 400)]);
+    assert.ok(Object.is(r.perPerson.a.remainderShare, 0), 'у Ани −0');
+    assert.equal(r.perPerson.b.remainderShare, rub(-300));
+  });
+
   test('отрицательная или дробная сумма операции отклоняется', () => {
     assert.throws(() => calculatePeriod({ members: MEMBERS, terms: T_A, operations: [{ type: 'income', memberId: A, amount: -1 }] }));
     assert.throws(() => calculatePeriod({ members: MEMBERS, terms: T_A, operations: [{ type: 'income', memberId: A, amount: 1.5 }] }));

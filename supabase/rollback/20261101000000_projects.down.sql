@@ -32,7 +32,7 @@ BEGIN
              'disable_project_invite', 'propose_terms', 'accept_terms', 'decline_terms', 'add_operation',
              'edit_operation', 'delete_operation', 'set_quantity', 'close_period', 'mark_transfer_paid'))
        OR (n.nspname = 'private' AND (p.proname LIKE 'project\_%' OR p.proname IN (
-             'is_project_member', 'create_project', 'preview_project_invite', 'join_project_by_invite',
+             'create_project', 'preview_project_invite', 'join_project_by_invite',
              'create_project_invite', 'disable_project_invite', 'propose_terms', 'decide_terms', 'add_operation',
              'edit_operation', 'delete_operation', 'set_quantity', 'close_period', 'mark_transfer_paid')))
   LOOP

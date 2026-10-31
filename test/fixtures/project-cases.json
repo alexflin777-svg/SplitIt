@@ -1,0 +1,202 @@
+{
+  "_format": [
+    "Общие сценарии «Проекта» для test/projects-parity.test.mjs: каждый прогоняется через calculatePeriod/closePeriodDebt и через close_period в БД.",
+    "Участники: m = 0 — владелец Аня, 1… — гости по порядку guests. Суммы — копейки, количества — сотые.",
+    "periods[k].terms — условия, действующие в периоде k (SQL-имена полей; опущенное = значение по умолчанию базы). Есть у периода 0 и, как изменение, у периодов ≥ 2: до первого итога предложение заменяет условия периода 1.",
+    "ops: [тип, m, сумма] или [\"income_refund\", m, сумма, индекс дохода в ops этого периода]. qty: [m, часы | null, штуки | null].",
+    "expect — закреплённые цифры спецификации, сверх совпадения двух реализаций."
+  ],
+  "cases": [
+    {
+      "name": "§3а.4 смешанный: фикс, вклад, почасовая, остаток по %",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "percent",
+            "lines": [
+              { "m": 0, "rate_type": "fixed", "rate_amount": 2000000, "share_bp": 4000 },
+              { "m": 1, "contrib_new": 3000000, "share_bp": 4000 },
+              { "m": 2, "rate_type": "hourly", "rate_amount": 150000, "share_bp": 2000 }
+            ]
+          },
+          "ops": [["income", 0, 12000000], ["income", 1, 6000000], ["expense", 0, 1500000], ["expense", 1, 600000], ["expense", 2, 900000]],
+          "qty": [[2, 1000, null]],
+          "expect": { "owed": [6900000, 7000000, 4100000], "transfers": [[0, 2, 4100000], [0, 1, 1000000]] }
+        }
+      ]
+    },
+    {
+      "name": "§3а.5 три периода: долг 30 000 → 10 000 → 10 000 → 0",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "percent",
+            "lines": [
+              { "m": 0, "rate_type": "fixed", "rate_amount": 2000000, "share_bp": 4000 },
+              { "m": 1, "contrib_new": 3000000, "share_bp": 4000 },
+              { "m": 2, "rate_type": "hourly", "rate_amount": 150000, "share_bp": 2000 }
+            ]
+          },
+          "ops": [["income", 0, 5000000], ["expense", 0, 1500000], ["expense", 1, 600000], ["expense", 2, 900000]],
+          "qty": [[2, 1000, null]],
+          "expect": { "owed": [1500000, 2600000, 900000], "debt_after": [0, 1000000, 0] }
+        },
+        {
+          "ops": [["income", 2, 1200000], ["expense", 1, 2000000]],
+          "qty": [[2, 400, null]],
+          "expect": { "owed": [-320000, 1680000, -160000], "debt_after": [0, 1000000, 0] }
+        },
+        {
+          "ops": [["income", 1, 10000000]],
+          "qty": [[2, 700, null]],
+          "expect": { "owed": [4380000, 3380000, 2240000], "debt_after": [0, 0, 0] }
+        }
+      ]
+    },
+    {
+      "name": "по часам: неравные часы и копейки, плюс почасовая ставка",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "remainder_method": "hours",
+            "lines": [{ "m": 0 }, { "m": 1, "rate_type": "hourly", "rate_amount": 33333 }, { "m": 2 }]
+          },
+          "ops": [["income", 0, 1000001], ["expense", 2, 3]],
+          "qty": [[0, 1000, null], [1, 333, null], [2, 167, null]]
+        }
+      ]
+    },
+    {
+      "name": "по вкладам после возврата: вес не уменьшается, у участника с весом 0 — ничего",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "contrib",
+            "lines": [{ "m": 0 }, { "m": 1, "contrib_new": 3000000 }, { "m": 2, "contrib_new": 1000000 }]
+          },
+          "ops": [["income", 0, 2000000]],
+          "expect": { "debt_after": [0, 1500000, 500000] }
+        },
+        {
+          "ops": [["income", 0, 9000001]],
+          "expect": { "debt_after": [0, 0, 0] }
+        }
+      ]
+    },
+    {
+      "name": "по вкладам после списания: repay → write_off → новый credit, вес растёт",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "contrib",
+            "lines": [{ "m": 0 }, { "m": 1, "contrib_new": 3000000 }, { "m": 2, "contrib_new": 1000000 }]
+          },
+          "ops": [["income", 0, 1000000]]
+        },
+        {
+          "ops": [["income", 1, 500001], ["expense", 2, 1]]
+        },
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "contrib",
+            "lines": [{ "m": 0 }, { "m": 1, "debt_write_off": 1000000 }, { "m": 2, "contrib_new": 500000 }]
+          },
+          "ops": [["income", 2, 5000000]]
+        }
+      ]
+    },
+    {
+      "name": "ставка за штуку 2,5 шт.: половина копейки — вверх",
+      "guests": ["Боря"],
+      "periods": [
+        {
+          "terms": {
+            "remainder_method": "equal",
+            "lines": [{ "m": 0 }, { "m": 1, "rate_type": "piece", "rate_amount": 123457 }]
+          },
+          "ops": [["income", 0, 2000000]],
+          "qty": [[1, null, 250]],
+          "expect": { "rate": [0, 308643] }
+        }
+      ]
+    },
+    {
+      "name": "урезание ставок: прибыли меньше начисленного, делится в одной пропорции",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "remainder_method": "equal",
+            "lines": [
+              { "m": 0, "rate_type": "fixed", "rate_amount": 1000000 },
+              { "m": 1, "rate_type": "hourly", "rate_amount": 150000 },
+              { "m": 2, "rate_type": "piece", "rate_amount": 99999 }
+            ]
+          },
+          "ops": [["income", 2, 1000003]],
+          "qty": [[1, 1050, null], [2, null, 333]]
+        }
+      ]
+    },
+    {
+      "name": "убыток: делится по тем же долям, возврат дохода уменьшает доход",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "remainder_method": "percent",
+            "lines": [{ "m": 0, "share_bp": 3333 }, { "m": 1, "share_bp": 3333 }, { "m": 2, "share_bp": 3334 }]
+          },
+          "ops": [["income", 0, 150000], ["income_refund", 2, 50000, 0], ["expense", 1, 400001]]
+        }
+      ]
+    },
+    {
+      "name": "ничья копеек: остаток и переводы — по position",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": { "remainder_method": "equal", "lines": [{ "m": 0 }, { "m": 1 }, { "m": 2 }] },
+          "ops": [["income", 0, 100]],
+          "expect": { "remainder_share": [34, 33, 33], "transfers": [[0, 1, 33], [0, 2, 33]] }
+        }
+      ]
+    },
+    {
+      "name": "нулевые ветки: нет операций; по часам без часов; ставка без часов; вкладов нет",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "contrib_enabled": true, "remainder_method": "hours",
+            "lines": [{ "m": 0 }, { "m": 1, "rate_type": "hourly", "rate_amount": 100000 }, { "m": 2, "in_remainder": false }]
+          },
+          "ops": []
+        },
+        {
+          "ops": [["income", 1, 700001], ["expense", 2, 100000]],
+          "expect": { "remainder_share": [300001, 300000, 0] }
+        }
+      ]
+    },
+    {
+      "name": "расход за свой счёт и участник без строки условий",
+      "guests": ["Боря", "Вика"],
+      "periods": [
+        {
+          "terms": {
+            "remainder_method": "equal",
+            "lines": [{ "m": 0 }, { "m": 1, "expenses_back": false }]
+          },
+          "ops": [["income", 2, 1000000], ["expense", 1, 200000], ["expense", 2, 300000]],
+          "expect": { "expenses_back": [0, 0, 300000], "remainder_share": [350000, 350000, 0] }
+        }
+      ]
+    }
+  ]
+}
