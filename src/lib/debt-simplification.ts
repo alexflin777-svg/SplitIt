@@ -22,16 +22,17 @@ export function simplifyDebts(
   balances: Record<string, { name: string; netAmount: number }>,
   currency: string = 'RUB'
 ): Transaction[] {
-  // Separate into debtors (< 0) and creditors (> 0)
+  // Separate into debtors (< 0) and creditors (> 0); amounts in whole kopecks,
+  // so any non-zero balance (even 1 kopeck) is settled.
   const debtors: { id: string; name: string; amount: number }[] = [];
   const creditors: { id: string; name: string; amount: number }[] = [];
 
   for (const [id, data] of Object.entries(balances)) {
-    const amount = Math.round(data.netAmount * 100) / 100;
-    if (amount < -0.01) {
-      debtors.push({ id, name: data.name, amount: -amount });
-    } else if (amount > 0.01) {
-      creditors.push({ id, name: data.name, amount });
+    const cents = Math.round(data.netAmount * 100);
+    if (cents < 0) {
+      debtors.push({ id, name: data.name, amount: -cents });
+    } else if (cents > 0) {
+      creditors.push({ id, name: data.name, amount: cents });
     }
   }
 
@@ -49,24 +50,21 @@ export function simplifyDebts(
     const creditor = creditors[j];
 
     const settled = Math.min(debtor.amount, creditor.amount);
-    const roundedSettled = Math.round(settled * 100) / 100;
 
-    if (roundedSettled > 0) {
-      transactions.push({
-        fromId: debtor.id,
-        fromName: debtor.name,
-        toId: creditor.id,
-        toName: creditor.name,
-        amount: roundedSettled,
-        currency,
-      });
-    }
+    transactions.push({
+      fromId: debtor.id,
+      fromName: debtor.name,
+      toId: creditor.id,
+      toName: creditor.name,
+      amount: settled / 100,
+      currency,
+    });
 
     debtor.amount -= settled;
     creditor.amount -= settled;
 
-    if (debtor.amount < 0.01) i++;
-    if (creditor.amount < 0.01) j++;
+    if (debtor.amount === 0) i++;
+    if (creditor.amount === 0) j++;
   }
 
   return transactions;

@@ -187,3 +187,22 @@ describe('Устойчивость', () => {
     assert.ok(t.length <= 59);
   });
 });
+
+describe('Целые копейки (§10 спецификации «Проекта»)', () => {
+  test('−0,01 / +0,01 → один перевод 0,01', () => {
+    const t = simplifyDebts(balances({ Аня: -0.01, Боря: 0.01 }));
+    assert.deepEqual(
+      t.map((x) => [x.fromName, x.toName, x.amount]),
+      [['Аня', 'Боря', 0.01]],
+    );
+  });
+
+  test('0 / 0 → переводов нет', () => {
+    assert.deepEqual(simplifyDebts(balances({ Аня: 0, Боря: 0 })), []);
+  });
+
+  test('копейки не теряются на дробных суммах', () => {
+    const t = simplifyDebts(balances({ Аня: -0.03, Боря: 0.01, Вика: 0.02 }));
+    assert.equal(sum(t.map((x) => Math.round(x.amount * 100))), 3);
+  });
+});
