@@ -346,6 +346,19 @@ export async function redeemInvite(code: string): Promise<RemoteResult<string>> 
   return remote.redeemInvite(code);
 }
 
+const LOCAL_INVITES = 'Приглашения работают только с подключённым бэкендом: событие хранится на этом устройстве.';
+
+/** Действующая ссылка события, если есть (иначе null) — экран не плодит коды. */
+export async function getActiveInvite(groupId: string): Promise<RemoteResult<{ code: string; expiresAt: string | null } | null>> {
+  if (!isMultiUser()) return { data: null, error: LOCAL_INVITES };
+  return remote.fetchActiveInvite(groupId);
+}
+
+export async function disableInvite(groupId: string, code: string): Promise<RemoteResult<null>> {
+  if (!isMultiUser()) return { data: null, error: LOCAL_INVITES };
+  return remote.disableInvite(groupId, code);
+}
+
 // ---------------------------------------------------------------------------
 // Профиль
 // ---------------------------------------------------------------------------

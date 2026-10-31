@@ -507,6 +507,31 @@ export async function createInvite(
   return error ? fail(translate(error)) : { data: code, error: null };
 }
 
+/**
+ * Действующая ссылка события (одна на событие, а не новая на каждое открытие
+ * экрана). Срок по-прежнему ставит клиент при создании: правило «пока событие
+ * открыто и 30 дней после» требует миграции (SCENARIOS-AUDIT §4 п. 3).
+ */
+export async function fetchActiveInvite(groupId: string): Promise<RemoteResult<{ code: string; expiresAt: string | null } | null>> {
+  if (!supabase) return fail(noBackend());
+  const { data, error } = await supabase
+    .from('group_invites')
+    .select('invite_code, expires_at')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false });
+  if (error) return fail(translate(error));
+  const now = Date.now();
+  const live = (data ?? []).find((r) => !r.expires_at || Date.parse(r.expires_at) > now);
+  return { data: live ? { code: live.invite_code, expiresAt: live.expires_at } : null, error: null };
+}
+
+/** Отключить ссылку = удалить код (политика group_invites_delete_owner — только владелец). */
+export async function disableInvite(groupId: string, code: string): Promise<RemoteResult<null>> {
+  if (!supabase) return fail(noBackend());
+  const { error } = await supabase.from('group_invites').delete().eq('group_id', groupId).eq('invite_code', code);
+  return error ? fail(translate(error)) : { data: null, error: null };
+}
+
 /** Вызывает SECURITY DEFINER функцию: единственный путь в чужую группу. */
 export async function redeemInvite(code: string): Promise<RemoteResult<string>> {
   if (!supabase) return fail(noBackend());

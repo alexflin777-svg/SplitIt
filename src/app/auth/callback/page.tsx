@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getActiveSession, supabase } from '@/lib/supabase';
 import { useI18n } from '@/lib/i18n/provider';
+import { takeReturnPath } from '@/lib/auth-return';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function AuthCallbackPage() {
           // Verify profile exists/active
           const profile = await getActiveSession();
           if (profile) {
-            router.replace('/friends');
+            router.replace(takeReturnPath('/friends'));
             return;
           }
         }
@@ -36,7 +37,7 @@ export default function AuthCallbackPage() {
            if (retrySession) {
              const profile = await getActiveSession();
              if (profile) {
-                router.replace('/friends');
+                router.replace(takeReturnPath('/friends'));
                 return;
              }
            }

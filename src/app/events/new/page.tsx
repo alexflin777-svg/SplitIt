@@ -11,6 +11,7 @@ import { createGroup, isMultiUser } from '@/lib/store';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
 import MemberAvatar from '@/components/MemberAvatar';
+import KindPicker from '@/components/v1/KindPicker';
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -93,7 +94,9 @@ export default function NewEventPage() {
       setCreateError(error ?? t('eventNew.errorCreateFailed'));
       return;
     }
-    router.push(routes.eventDetail(data.id));
+    // Сразу шаг «Позови друзей» (SCENARIOS-AUDIT §4 п. 5), из него — в событие.
+    // В локальном режиме приглашений нет — шаг пропускается, чтобы не показывать тупик.
+    router.push(routes.eventDetail(data.id, multiUser ? { invite: 1 } : {}));
   };
 
   return (
@@ -106,6 +109,8 @@ export default function NewEventPage() {
         <h2 className="font-extrabold text-slate-900 dark:text-white text-base">{t('eventNew.title')}</h2>
         <div className="w-9" />
       </div>
+
+      <KindPicker value="event" />
 
       <div className="space-y-5">
         {/* Event Name Card */}

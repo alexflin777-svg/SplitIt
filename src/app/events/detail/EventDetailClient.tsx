@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { computeEventSummary } from '@/lib/event-summary';
+import EventInviteStep from '@/components/v1/EventInviteStep';
+import { MainButton } from '@/components/v1/ui';
 import confetti from 'canvas-confetti';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
@@ -11,6 +14,7 @@ import {
   deleteExpense as deleteExpenseFromStore,
   deleteGroup,
   createInvite,
+  getActiveInvite,
   addGuestMember,
   removeGuest,
   isMultiUser,
@@ -88,6 +92,7 @@ function EventNotFound({ groupId }: { groupId: string }) {
 
 export default function EventDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   // Сколько расходов показывать в ленте. Это только отрисовка: в group.expenses
   // всегда все расходы, по ним считаются итог и категории (G2).
@@ -169,6 +174,14 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   const isCurrentUserMember =
     !!userProfile && (group.members || []).some((m: any) => m.id === userProfile.id);
 
+  // Шаг «Позови друзей» сразу после создания (SCENARIOS-AUDIT §4 п. 5).
+  if (searchParams.get('invite') === '1') {
+    return <EventInviteStep group={group} isOwner={isOwner} onDone={() => router.replace(routes.eventDetail(group.id))} />;
+  }
+  // «Тебе должны / Ты должен» — та же формула, что экран «Баланс».
+  const myBalance = userProfile ? computeEventSummary(group).balances[userProfile.id] : undefined;
+  const myNet = myBalance && Math.abs(myBalance.netAmount) >= 0.005 ? myBalance.netAmount : 0;
+
   // Category Colors and Breakdown Diagram Math
   const categoryConfig: Record<string, { label: string; color: string; bg: string; emoji: string }> = {
     food: { label: t('eventDetail.category.food'), color: 'bg-emerald-400', bg: 'text-emerald-300', emoji: '🍱' },
@@ -207,7 +220,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       return null;
     }
 
-    const { data: code, error } = await createInvite(group.id);
+    // Одна ссылка на событие: действующая показывается снова, новая — только если её нет.
+    const existing = await getActiveInvite(group.id);
+    const { data: code, error } = existing.data ? { data: existing.data.code, error: null } : await createInvite(group.id);
     if (error || !code) {
       setInviteError(error ?? t('eventDetail.errorCreateInviteFailed'));
       return null;
@@ -517,6 +532,26 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
         </div>
       )}
 
+      {myBalance && (
+        <div
+          data-testid="event-mine"
+          className={`font-v1 text-v1-ink rounded-tile px-5 pt-[18px] pb-5 ${myNet < 0 ? 'bg-v1-minus' : 'bg-v1-plus'}`}
+        >
+          <p className="text-base font-semibold text-v1-ink2">
+            {myNet > 0 ? t('event.v1.owedToYou') : myNet < 0 ? t('event.v1.youOwe') : t('event.v1.even')}
+          </p>
+          <p className="mt-1 text-[46px] leading-none font-extrabold tracking-[-0.03em]">
+            {formatMoney(Math.abs(myNet), group.currency || 'RUB')}
+          </p>
+          <p className="mt-2 text-[15px] text-v1-ink2">
+            {t('event.v1.paidShare', {
+              paid: formatMoney(myBalance.paid, group.currency || 'RUB'),
+              share: formatMoney(myBalance.owes, group.currency || 'RUB'),
+            })}
+          </p>
+        </div>
+      )}
+
       {/* Main Group Summary Card with Category Breakdown Chart Diagram */}
       <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white shadow-xl relative overflow-hidden space-y-4 border-slate-800">
         <div className="flex items-center justify-between">
@@ -624,19 +659,24 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           </Link>
         </div>
 
-        {!isCompleted && isOwner && (group.expenses || []).length > 0 && (
-          <div className="pt-2">
-            <button
-              onClick={() => setShowCompleteModal(true)}
-              data-testid="close-event"
-              className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm border border-emerald-400/40 flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{t('eventDetail.finishEvent')}</span>
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Одна главная кнопка внизу (V1): владельцу — «Подвести итог», остальным — «Добавить расход». */}
+      {!isCompleted && (
+        <div className="fixed left-0 right-0 z-40 bottom-[calc(5.4rem+env(safe-area-inset-bottom,0px))] px-4 pt-3 pb-1 font-v1 bg-[#f8f9ff] dark:bg-[#0b0f19]">
+          <div className="max-w-md mx-auto">
+            {isOwner && (group.expenses || []).length > 0 ? (
+              <MainButton testId="close-event" onClick={() => setShowCompleteModal(true)}>
+                {t('event.v1.settle')}
+              </MainButton>
+            ) : (
+              <MainButton testId="event-add-expense" href={routes.expenseNew(group.id)}>
+                {(group.expenses || []).length ? t('eventDetail.actionExpense') : t('event.v1.addFirst')}
+              </MainButton>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Group Members Bar */}
       <div className="stitch-card p-4 space-y-2 bg-white dark:bg-slate-800">

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { formatMoney, convertCurrency } from '@/lib/currency';
 import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
 import { isMultiUser, joinWaitlist } from '@/lib/store';
 import { useGroups } from '@/lib/data-hooks';
@@ -12,18 +11,8 @@ import { OnboardingTour } from '@/components/OnboardingTour';
 import { LifeSituations } from '@/components/LifeSituations';
 import QuickProfileEditor from '@/components/QuickProfileEditor';
 import { isPhotoAvatar } from '@/lib/avatar';
+import HomeFeed from '@/components/v1/HomeFeed';
 import {
-  Plus,
-  Plane,
-  Home,
-  Utensils,
-  Sparkles,
-  ArrowUpRight,
-  ArrowDownLeft,
-  ChevronRight,
-  TrendingUp,
-  Search,
-  Users,
   ShieldCheck,
   Zap,
   Smartphone,
@@ -35,14 +24,11 @@ import {
   Activity,
   Mail,
 } from 'lucide-react';
-import { routes } from '@/lib/routes';
 
 export default function HomePage() {
   const router = useRouter();
   const { t } = useI18n();
   const { groups, error: loadError, refresh: refreshGroups } = useGroups();
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
@@ -135,31 +121,16 @@ export default function HomePage() {
     void refreshGroups();
   };
 
-  const categoryIcons: Record<string, any> = {
-    trip: <Plane className="w-5 h-5 text-blue-500" />,
-    home: <Home className="w-5 h-5 text-indigo-500" />,
-    restaurant: <Utensils className="w-5 h-5 text-amber-500" />,
-    party: <Sparkles className="w-5 h-5 text-purple-500" />,
-    other: <Sparkles className="w-5 h-5 text-emerald-500" />,
-  };
-
-  const filteredGroups = groups.filter((g) => {
-    const matchesCategory = filterCategory === 'all' || g.category === filterCategory;
-    const matchesSearch = g.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  const totalSpent = groups.reduce((acc, g) => {
-    const groupSum = (g.expenses || []).reduce((eAcc: number, e: any) => eAcc + (e.amountInGroupCurrency || e.amount || 0), 0);
-    const { convertedAmount } = convertCurrency(groupSum, g.currency || 'RUB', userProfile?.preferred_currency || 'RUB');
-    return acc + convertedAmount;
-  }, 0);
-
   if (!isLoaded) {
+    // Заглушки той же формы, а не спиннер на весь экран (SCREENS-V1 §1).
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
-        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-slate-500 font-semibold">{t('home.loading')}</p>
+      <div className="font-v1 bg-v1-bg -mx-4 -mt-4 px-4 pt-6 min-h-[50vh]" aria-label={t('home.loading')}>
+        <div className="h-9 w-40 rounded-xl bg-v1-fill animate-pulse mb-4" />
+        <div className="grid grid-cols-2 gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-28 rounded-card bg-v1-fill animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -318,17 +289,24 @@ export default function HomePage() {
           returnFocusRef={avatarButtonRef}
         />
       )}
-      <div className="space-y-5 max-w-md mx-auto px-1 pb-28">
-      {/* User Greeting Bar */}
-      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-        <div className="flex items-center gap-3">
+      {/* Лента V1: «Тебе должны / Ты должен» вместо зашитого «Баланс 0 ₽» (SCENARIOS-AUDIT §4 п. 4). */}
+      <HomeFeed
+        groups={groups}
+        userId={userProfile.id}
+        currency={userProfile.preferred_currency || 'RUB'}
+        loadError={loadError}
+        onRetry={() => void refreshGroups()}
+        avatar={
+          <div className="flex items-center gap-3 min-w-0">
+          {/* Кто вошёл — виден на главной, как и раньше (e2e profile-avatar F3). */}
+          <h2 className="text-base font-semibold text-v1-ink2 truncate">{userProfile.full_name}</h2>
           <button
             type="button"
             ref={avatarButtonRef}
             onClick={() => setProfileEditorOpen(true)}
             aria-label={t('quickProfile.open')}
             data-testid="home-avatar-button"
-            className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold flex items-center justify-center text-lg overflow-hidden border border-blue-200/50 hover:ring-2 hover:ring-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            className="w-14 h-14 rounded-full bg-v1-trip text-v1-ink font-extrabold grid place-items-center text-xl overflow-hidden focus:outline-none focus-visible:ring-[3px] focus-visible:ring-v1-accent"
           >
             {isPhotoAvatar(userProfile.avatar_url) ? (
               <img src={userProfile.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -336,181 +314,9 @@ export default function HomePage() {
               <span>{userProfile.avatar_url || '👤'}</span>
             )}
           </button>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block">
-              {t('home.loggedInAs')}
-            </span>
-            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">{userProfile.full_name}</h3>
           </div>
-        </div>
-        <Link
-          href="/auth"
-          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all"
-        >
-          {t('home.switchProfile')}
-        </Link>
-      </div>
-
-      {/* Top User Financial Overview Card */}
-      <div className="stitch-card p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-        
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('home.totalSpentLabel')}
-            </span>
-            <h2 className="text-3xl font-extrabold tracking-tight mt-0.5 text-white">
-              {formatMoney(totalSpent, userProfile?.preferred_currency || 'RUB')}
-            </h2>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <ArrowDownLeft className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="block text-[11px] text-slate-400 font-medium">{t('home.activeGroups')}</span>
-              <span className="text-sm font-bold text-emerald-400">{groups.length}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="block text-[11px] text-slate-400 font-medium">{t('home.balance')}</span>
-              <span className="text-sm font-bold text-amber-400">0 ₽</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search & Category Filter Bar */}
-      <div className="space-y-3">
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-          <input
-            type="text"
-            placeholder={t('home.searchPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-slate-400 shadow-sm"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {[
-            { id: 'all', label: t('home.filter.all') },
-            { id: 'trip', label: t('home.filter.trip') },
-            { id: 'home', label: t('home.filter.home') },
-            { id: 'restaurant', label: t('home.filter.restaurant') },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setFilterCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                filterCategory === cat.id
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Events List Header */}
-      <div className="flex items-center justify-between pt-1">
-        <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-          <span>{t('home.myGroups')}</span>
-          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
-            {filteredGroups.length}
-          </span>
-        </h3>
-        <Link
-          href={routes.eventNew()}
-          className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
-        >
-          <span>{t('home.create')}</span>
-          <Plus className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-
-      {/* Group List Feed or Clean Empty State */}
-      {filteredGroups.length > 0 ? (
-        <div className="space-y-3">
-          {filteredGroups.map((group) => {
-            const expenseCount = (group.expenses || []).length;
-            const groupSum = (group.expenses || []).reduce((acc: number, e: any) => acc + (e.amountInGroupCurrency || e.amount || 0), 0);
-
-            return (
-              <Link
-                key={group.id}
-                href={routes.eventDetail(group.id)}
-                className="stitch-card p-4 flex items-center justify-between hover:border-blue-300 transition-all block bg-white dark:bg-slate-800"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/40 flex items-center justify-center">
-                    {categoryIcons[group.category] || categoryIcons.trip}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">{group.name}</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                      <Users className="w-3 h-3 text-slate-400" />
-                      <span>{t('home.membersCount', { count: group.members?.length || 1 })}</span>
-                      <span>•</span>
-                      <span>{t('home.expensesCount', { count: expenseCount })}</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-right">
-                  <div>
-                    <span className="block font-extrabold text-slate-900 dark:text-white text-sm">
-                      {formatMoney(groupSum, group.currency || 'RUB')}
-                    </span>
-                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">{t('home.openEvent')}</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="text-center py-12 stitch-card bg-white dark:bg-slate-800 space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center shadow-xs">
-            <Sparkles className="w-7 h-7" />
-          </div>
-          <div className="space-y-1">
-            <h4 className="font-extrabold text-slate-900 dark:text-white text-base">
-              {t('home.noEventsTitle')}
-            </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-              {t('home.noEventsBody')}
-            </p>
-          </div>
-          
-          <div className="pt-2 flex flex-col gap-2 max-w-xs mx-auto">
-            <Link
-              href={routes.eventNew()}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t('home.createEvent')}</span>
-            </Link>
-          </div>
-        </div>
-      )}
-    </div>
+        }
+      />
     </>
   );
 }

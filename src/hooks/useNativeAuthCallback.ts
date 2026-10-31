@@ -4,6 +4,7 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getActiveSession, supabase } from '@/lib/supabase';
+import { takeReturnPath } from '@/lib/auth-return';
 
 /**
  * Ловит deep link `app.splitit.mobile://auth/callback?code=...`, которым
@@ -43,7 +44,7 @@ export function useNativeAuthCallback() {
           return;
         }
         const profile = await getActiveSession();
-        if (profile) router.replace('/friends');
+        if (profile) router.replace(takeReturnPath('/friends'));
         return;
       }
 
@@ -64,7 +65,8 @@ export function useNativeAuthCallback() {
       }
 
       const profile = await getActiveSession();
-      if (profile) router.replace('/friends');
+      // Приглашение, запомненное до ухода в системный браузер, — туда; иначе как раньше.
+      if (profile) router.replace(takeReturnPath('/friends'));
     });
 
     return () => {

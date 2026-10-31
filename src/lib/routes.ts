@@ -59,7 +59,29 @@ export const routes = {
 
   expenseEdit: (groupId: string, expenseId: string) =>
     withQuery('/events/expense/edit', { id: groupId, expenseId }),
+
+  // «Проект» (1.1.0): те же правила — id только в query string.
+  projectNew: () => '/projects/new',
+  projectDetail: (projectId: string) => withQuery('/projects/detail', { id: projectId }),
+  /** Конструктор: изменение условий (до первого итога — первоначальных). */
+  projectTerms: (projectId: string) => withQuery('/projects/terms', { id: projectId }),
+  /** Согласие на условия, ждущие ответа. */
+  projectConsent: (projectId: string) => withQuery('/projects/consent', { id: projectId }),
+  /** Запись: type — income | expense | refund (of — доход) | qty (member — чьи часы/штуки). */
+  projectAdd: (projectId: string, extra: Record<string, QueryValue> = {}) =>
+    withQuery('/projects/add', { id: projectId, ...extra }),
+  projectSettle: (projectId: string, extra: Record<string, QueryValue> = {}) =>
+    withQuery('/projects/settle', { id: projectId, ...extra }),
+  projectInvite: (projectId: string, extra: Record<string, QueryValue> = {}) =>
+    withQuery('/projects/invite', { id: projectId, ...extra }),
+  projectJoin: (code: string) => withQuery('/projects/join', { code }),
 };
+
+/** Абсолютная ссылка-приглашение в проект. */
+export function absoluteProjectInviteLink(code: string): string | null {
+  const origin = publicAppOrigin();
+  return origin ? `${origin}${routes.projectJoin(code)}` : null;
+}
 
 /** Абсолютная ссылка-приглашение для отправки во внешние мессенджеры. */
 function publicAppOrigin(): string {

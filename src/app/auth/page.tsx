@@ -9,6 +9,7 @@ import { PRESET_AVATARS, processAvatarFile } from '@/lib/avatar';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
+import { rememberReturnPath, takeReturnPath } from '@/lib/auth-return';
 
 type AuthMode = 'register' | 'login' | 'reset' | 'update-password';
 
@@ -39,6 +40,14 @@ function AuthForm() {
 
   const presetAvatars = PRESET_AVATARS;
   const configProblem = getConfigProblem();
+
+  // Адрес возврата (приглашение) запоминается до входа: Google и Telegram уводят
+  // со страницы, и ?next= теряется. Без next — старый запомненный путь сбрасывается.
+  const nextParam = searchParams.get('next');
+  useEffect(() => {
+    if (nextParam) rememberReturnPath(nextParam);
+    else if (!searchParams.get('oauth_error')) takeReturnPath('');
+  }, [nextParam, searchParams]);
 
   useEffect(() => {
     // Check existing session
@@ -73,7 +82,7 @@ function AuthForm() {
       avatar_url: '📱',
     };
     saveLocalSession(profile);
-    const timer = setTimeout(() => router.push('/'), 1000);
+    const timer = setTimeout(() => router.push(takeReturnPath('/')), 1000);
     return () => clearTimeout(timer);
   }, [telegramUser, configProblem, router]);
 
@@ -133,7 +142,7 @@ function AuthForm() {
         setTimeout(() => router.push(routes.profile()), 4000);
         return;
       }
-      setTimeout(() => router.push(getSafeReturnPath(searchParams.get('next'))), 800);
+      setTimeout(() => router.push(takeReturnPath(routes.home())), 800);
     } else if (mode === 'login') {
       const { data, error } = await signInUser(email, password);
       setLoading(false);
@@ -142,7 +151,7 @@ function AuthForm() {
         return;
       }
       setStatusMessage(t('auth.welcomeBack', { name: data.full_name }));
-      setTimeout(() => router.push(getSafeReturnPath(searchParams.get('next'))), 800);
+      setTimeout(() => router.push(takeReturnPath(routes.home())), 800);
     } else if (mode === 'reset') {
       const res = await resetPassword(email);
       setLoading(false);
@@ -190,7 +199,7 @@ function AuthForm() {
       return;
     }
     setStatusMessage(t('auth.loggedInAsDemo'));
-    setTimeout(() => router.push(routes.home()), 600);
+    setTimeout(() => router.push(takeReturnPath(routes.home())), 600);
   };
 
   return (
@@ -298,7 +307,7 @@ function AuthForm() {
             </button>
             <TelegramLoginButton
               onSuccess={() => {
-                router.push(routes.home());
+                router.push(takeReturnPath(routes.home()));
                 router.refresh();
               }}
               onError={(msg) => setErrorMessage(msg)}
@@ -452,11 +461,6 @@ function subscribeNever(): () => void {
 function readTelegramUser(): string | null {
   const user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
   return user ? JSON.stringify(user) : null;
-}
-
-function getSafeReturnPath(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return routes.home();
-  return value;
 }
 
 /**

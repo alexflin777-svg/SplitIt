@@ -2,6 +2,52 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/* Onest (OFL 1.1, public/fonts/onest/OFL.txt) — шрифт языка V1, локально, без CDN. */
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest/onest-cyrillic.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest/onest-latin.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/onest/onest-latin-ext.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113;
+}
+
+/* Токены V1 (stage2/tokens.css + s2.css). Тёмной темы у V1 нет: экраны V1 светлые всегда. */
+:root {
+  --v1-bg: #F2F3F5;
+  --v1-card: #FFFFFF;
+  --v1-fill: #E9EBEF;
+  --v1-ink: #16171B;
+  --v1-ink-2: #4B4F58;
+  --v1-muted: #646973;
+  --v1-accent: #2457F5;
+  --v1-accent-press: #1A45D1;
+  --v1-accent-soft: #E3EAFF;
+  --v1-accent-ink: #1A45D1;
+  --v1-plus: #D3F0DB;
+  --v1-minus: #FFDDC7;
+  --v1-lav: #E4DEFA;
+  --v1-lav-soft: #F1EDFD;
+  --v1-trip: #CFE2FF;
+  --v1-sand: #EBDDC5;
+  --v1-warn: #FFD6D3;
+  --v1-danger: #A1261B;
+  --v1-ok: #1F7A45;
+}
+
 @layer base {
   :root {
     --background: 240 100% 98%;
