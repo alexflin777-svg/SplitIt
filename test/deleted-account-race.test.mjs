@@ -237,8 +237,11 @@ describe('Гонка: запись удаляемого аккаунта во в
       ORDER BY 1`)).rows;
     assert.deepEqual(
       rows.map((r) => r.proname),
-      ['add_expense_with_splits', 'add_virtual_member', 'delete_my_account', 'join_waitlist', 'record_settlement',
-        'redeem_group_invite', 'remove_guest', 'submit_feedback', 'update_expense_with_splits'],
+      ['add_expense_with_splits', 'add_operation', 'add_virtual_member', 'close_period', 'create_project',
+        'create_project_invite', 'decide_terms', 'delete_my_account', 'delete_operation', 'disable_project_invite',
+        'edit_operation', 'join_project_by_invite', 'join_waitlist', 'mark_transfer_paid', 'propose_terms',
+        'record_settlement', 'redeem_group_invite', 'remove_guest', 'set_quantity', 'submit_feedback',
+        'update_expense_with_splits'],
       'список пишущих DEFINER RPC изменился — проверьте новую функцию',
     );
     for (const { proname, prosrc } of rows) {
