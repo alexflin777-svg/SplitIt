@@ -817,6 +817,36 @@ describe('условия: согласие всех, вступление со �
     assert.equal(audit.filter((a) => a === 'transfer_marked').length, 0, 'отметки — уже после выхода');
   });
 
+  test('вердикт r2: доход периода 3 в одной транзакции с итогом выхода — вышедший его не видит, свою историю видит', async () => {
+    const equal = (m) => ({ remainder_method: 'equal', lines: [{ member_id: m.A }, { member_id: m.B }, { member_id: m.V }] });
+    const { pid, m } = await team(db, { terms: equal });
+    const op1 = await h.ok(VIKA, ADD_OP, [pid, 'income', 30_000, m.V, null]);
+    await closeNow(db, ANYA, pid);
+    const tid = await h.ok(BORYA, PROPOSE, [pid, JSON.stringify({
+      remainder_method: 'equal',
+      lines: [{ member_id: m.A }, { member_id: m.B, leaves: true, in_remainder: false }, { member_id: m.V }],
+    })]);
+    await h.ok(ANYA, ACCEPT, [tid]);
+    await h.ok(VIKA, ACCEPT, [tid]);
+    const op2 = await h.ok(VIKA, ADD_OP, [pid, 'income', 60_000, m.V, null]);
+
+    // now() одинаков во всей транзакции: граница по времени тут не работает.
+    await db.exec('BEGIN');
+    await closeNow(db, ANYA, pid);
+    const op3 = await h.ok(VIKA, ADD_OP, [pid, 'income', 100_000, m.V, null]);
+    await db.exec('COMMIT');
+    assert.equal((await h.admin(`SELECT status FROM public.project_members WHERE id = $1`, [m.B]))[0].status, 'left');
+
+    const r = await h.as(BORYA, `SELECT action, payload FROM public.project_audit WHERE project_id = $1 ORDER BY id`, [pid]);
+    assert.ok(r.ok, r.error);
+    const opIds = r.rows.filter((x) => x.action === 'operation_added').map((x) => x.payload.operation_id);
+    assert.ok(!opIds.includes(op3), 'вышедший видит доход периода 3');
+    assert.ok(!r.rows.some((x) => x.payload.amount === 100_000), 'сумма периода 3 видна вышедшему');
+    assert.deepEqual(opIds, [op1, op2], 'операции своих периодов видны');
+    assert.deepEqual(r.rows.filter((x) => x.action === 'period_closed').map((x) => x.payload.seq), [1, 2]);
+    assert.equal(r.rows.at(-1).action, 'period_closed', 'история — до итога выхода включительно');
+  });
+
   test('последнее согласие отклоняется, если долг вырос выше X', async () => {
     const { pid, m } = await team(db, { terms: MIXED });
     await closeNow(db, ANYA, pid); // пустой период 1: долг Бори 30 000

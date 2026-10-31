@@ -202,4 +202,34 @@ describe('Проект: гонки итога и записи', () => {
     const n = await one(srv.admin, `SELECT count(*)::int AS n FROM public.project_members WHERE project_id = $1 AND user_id = $2`, [p.pid, stranger]);
     assert.equal(n.n, 0);
   });
+
+  test('операция начала транзакцию до итога выхода и ждала его → вышедший её в истории не видит', async () => {
+    const p = await buildProject(srv);
+    const a = await srv.connect();
+    const b = await srv.connect();
+    await becomeUser(a, p.anya);
+    await a.query(CLOSE, [p.pid, (await openPeriod(srv.admin, p.pid)).revision]);
+    const leave = JSON.stringify({ remainder_method: 'equal', lines: [{ member_id: p.mA }, { member_id: p.mB, leaves: true, in_remainder: false }] });
+    const tid = (await one(a, `SELECT public.propose_terms($1, $2::jsonb) AS v`, [p.pid, leave])).v;
+    await becomeUser(b, p.borya);
+    await b.query(`SELECT public.accept_terms($1)`, [tid]);
+    const bPid = await becomeUser(b, p.anya);
+
+    await b.query('BEGIN');
+    await b.query('SELECT now()'); // now() транзакции b — раньше закрытия
+    await a.query('BEGIN');
+    await a.query(CLOSE, [p.pid, (await openPeriod(srv.admin, p.pid)).revision]);
+    const pending = start(b, ADD_OP, [p.pid, 100_000, p.mA]);
+    const state = await blockedOrDone(srv.admin, bPid, pending);
+    await a.query('COMMIT');
+    const res = await pending.result;
+    await b.query('COMMIT');
+    assert.equal(state, 'blocked', 'запись должна была ждать итог');
+    assert.ok(res.ok, res.error);
+
+    await becomeUser(b, p.borya);
+    const rows = (await b.query(`SELECT action, payload FROM public.project_audit WHERE project_id = $1 ORDER BY id`, [p.pid])).rows;
+    assert.ok(!rows.some((x) => x.payload.operation_id === res.rows[0].v), 'вышедший видит операцию периода 3');
+    assert.deepEqual(rows.filter((x) => x.action === 'period_closed').map((x) => x.payload.seq), [1, 2], 'свою историю видит');
+  });
 });
