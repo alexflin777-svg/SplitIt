@@ -53,6 +53,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': 'No se actualizó: {error}',
   'project.noId': 'El enlace no incluye ningún proyecto. Ábrelo desde la lista de la pantalla de inicio.',
+  'project.noAccess': "Sin acceso al proyecto: se eliminó o ya no formas parte de él.",
+  'project.noOpenPeriod': "No hay ningún período abierto que puedas ver. Los anteriores están abajo.",
+  'auth.callbackRejected': "Inicio de sesión no confirmado: vuelve a empezarlo en la app.",
   'project.you': 'Tú',
   'project.guestName': '{name} (invitado)',
   'project.settle': 'Liquidar el periodo',

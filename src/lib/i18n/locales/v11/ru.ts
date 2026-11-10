@@ -60,6 +60,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': 'Не обновилось: {error}',
   'project.noId': 'В ссылке нет проекта. Открой его из списка на главной.',
+  'project.noAccess': "Нет доступа к проекту: его удалили или тебя в нём больше нет.",
+  'project.noOpenPeriod': "Открытого периода, который тебе виден, нет. Прошлые периоды — ниже.",
+  'auth.callbackRejected': "Вход не подтверждён: начни его заново в приложении.",
   'project.you': 'Ты',
   'project.guestName': '{name} (гость)',
   'project.settle': 'Подвести итог',

@@ -50,6 +50,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': `Güncellenmedi: {error}`,
   'project.noId': `Bağlantıda proje yok. Ana ekrandaki listeden aç.`,
+  'project.noAccess': "Projeye erişim yok: silindi ya da artık üyesi değilsin.",
+  'project.noOpenPeriod': "Görebileceğin açık dönem yok. Geçmiş dönemler aşağıda.",
+  'auth.callbackRejected': "Giriş doğrulanmadı: uygulamada yeniden başlat.",
   'project.you': `Sen`,
   'project.guestName': `{name} (misafir)`,
   'project.settle': `Dönemi kapat`,

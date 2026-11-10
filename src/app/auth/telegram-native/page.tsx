@@ -34,7 +34,14 @@ export default function TelegramNativeBridgePage() {
   useEffect(() => {
     if (!BOT_NAME || !containerRef.current) return;
 
+    // id попытки входа, начатой в приложении: без него приложение deep link не примет.
+    const attempt = new URLSearchParams(window.location.search).get('attempt') ?? '';
     window.onTelegramNativeAuth = async (user) => {
+      if (!/^[0-9a-f-]{36}$/.test(attempt)) {
+        setPhase('error');
+        setMessage('Страница открыта не из приложения SplitIT. Вернитесь в приложение и нажмите «Войти через Telegram».');
+        return;
+      }
       setPhase('exchanging');
       if (!supabase) {
         setPhase('error');
@@ -54,7 +61,7 @@ export default function TelegramNativeBridgePage() {
       // Возврат в приложение. Если deep link не сработал (открыто не из APK) —
       // показываем это честно, а не бесконечный спиннер.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- это custom-scheme deep link в APK (app.splitit.mobile://), а не внутренняя страница Next; router сюда не применим
-      window.location.href = `${DEEP_LINK}?tg_token_hash=${encodeURIComponent(tokenHash)}`;
+      window.location.href = `${DEEP_LINK}?tg_token_hash=${encodeURIComponent(tokenHash)}&attempt=${encodeURIComponent(attempt)}`;
       setTimeout(() => {
         setPhase('error');
         setMessage('Похоже, страница открыта не из приложения SplitIT. Вернитесь в приложение и попробуйте снова.');

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { signInWithTelegram } from '@/lib/supabase';
+import { beginAuthAttempt } from '@/lib/auth-attempt';
 
 const BOT_NAME = (process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? '').trim();
 const NATIVE_BRIDGE_URL = 'https://www.splitit-apps.com/auth/telegram-native';
@@ -81,7 +82,8 @@ export function TelegramLoginButton({ onSuccess, onError }: Props) {
       <button
         type="button"
         onClick={() => {
-          void Browser.open({ url: NATIVE_BRIDGE_URL });
+          // Мост вернёт attempt в deep link: приложение примет только свою попытку (auth-attempt.ts).
+          void Browser.open({ url: `${NATIVE_BRIDGE_URL}?attempt=${beginAuthAttempt('telegram')}` });
         }}
         className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#54a9eb] text-sm font-semibold text-white transition-all hover:bg-[#4a99d6]"
       >

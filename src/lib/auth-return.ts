@@ -42,7 +42,8 @@ export function ownAuthCallback(url: string): URLSearchParams | null {
     return null; // не адрес — не наш колбэк
   }
   const own = u.protocol === 'app.splitit.mobile:' || u.protocol === 'app.splitit.mobile.dev:';
-  return own && u.host === 'auth' && u.pathname === '/callback' ? u.searchParams : null;
+  // «evil@auth» — userinfo в адресе: свой колбэк его не содержит.
+  return own && !u.username && !u.password && u.host === 'auth' && u.pathname === '/callback' ? u.searchParams : null;
 }
 
 /** Запомнить путь; небезопасный не запоминается. */

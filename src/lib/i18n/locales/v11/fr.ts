@@ -53,6 +53,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': `Pas de mise à jour : {error}`,
   'project.noId': `Le lien ne contient aucun projet. Ouvre-le depuis la liste de l’écran d’accueil.`,
+  'project.noAccess': "Pas d’accès au projet : il a été supprimé ou tu n’en fais plus partie.",
+  'project.noOpenPeriod': "Aucune période ouverte visible pour toi. Les périodes passées sont ci-dessous.",
+  'auth.callbackRejected': "Connexion non confirmée : recommence-la dans l’application.",
   'project.you': `Toi`,
   'project.guestName': `{name} (invité)`,
   'project.settle': `Régler la période`,

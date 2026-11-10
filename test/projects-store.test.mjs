@@ -225,7 +225,8 @@ describe('вызовы и ошибки', () => {
       tables,
       errors: { project_quantities: { code: '42501', message: 'Проект не найден или недоступен' } },
     })).fetchProject(P);
-    assert.deepEqual(broken, { data: null, error: 'Проект не найден или недоступен' });
+    // 42501 — отказ RLS: экран со снимком сотрёт его (круг 2 1.1.1).
+    assert.deepEqual(broken, { data: null, error: 'Проект не найден или недоступен', reason: 'denied' });
   });
 
   test('fetchProject догружает финансовые таблицы всеми страницами; сверх лимита — ошибка, а не обрезка', async () => {

@@ -23,10 +23,25 @@ import { supabase } from './supabase';
 import { t } from './i18n/t';
 import type { SplitMode } from './split-rescale';
 import { fetchAllPages } from './paging';
+import type { ErrorReason } from './snapshot';
 
 export interface RemoteResult<T> {
   data: T | null;
   error: string | null;
+  /** Почему нет данных: denied — нет прав/не найдено (снимок стереть), network — сеть/таймаут/5xx. */
+  reason?: ErrorReason;
+}
+
+/** Причина ошибки PostgREST: отказ RLS — denied; обрыв, таймаут, 5xx — network; прочее — без причины. */
+export function errorReason(error: { message: string; code?: string }, status?: number): ErrorReason | undefined {
+  const m = error.message.toLowerCase();
+  if (error.code === '42501' || error.code === 'PGRST301' || m.includes('row-level security') || status === 401 || status === 403 || status === 404) {
+    return 'denied';
+  }
+  if ((status ?? 0) >= 500 || m.includes('fetch') || m.includes('network') || m.includes('timed out') || m.includes('timeout') || m.includes('abort')) {
+    return 'network';
+  }
+  return undefined;
 }
 
 export interface GroupMember {
@@ -293,12 +308,12 @@ async function fetchExpenseById(expenseId: string): Promise<RemoteResult<{ group
 export async function fetchGroup(groupId: string): Promise<RemoteResult<Group>> {
   if (!supabase) return fail(noBackend());
 
-  const { data, error } = await supabase.from('groups').select(GROUP_CORE_SELECT).eq('id', groupId).maybeSingle();
+  const { data, error, status } = await supabase.from('groups').select(GROUP_CORE_SELECT).eq('id', groupId).maybeSingle();
 
-  if (error) return fail(translate(error));
+  if (error) return { ...fail(translate(error)), reason: errorReason(error, status) };
   // Отсутствие строки здесь означает «нет доступа или не существует» — RLS не
   // различает эти случаи намеренно, чтобы по ответу нельзя было перебирать id.
-  if (!data) return fail(t('errors.eventUnavailableNoAccess'));
+  if (!data) return { ...fail(t('errors.eventUnavailableNoAccess')), reason: 'denied' };
 
   const group = mapGroup(data);
   const expensesResult = await fetchAllExpenses(groupId);

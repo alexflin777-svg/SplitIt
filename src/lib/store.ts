@@ -61,7 +61,7 @@ export async function getGroup(groupId: string): Promise<RemoteResult<Group>> {
   // Ничего не сочиняем: событие либо есть, либо его нет.
   return found
     ? ok(found)
-    : { data: null, error: t('errors.eventUnavailableLocal') };
+    : { data: null, error: t('errors.eventUnavailableLocal'), reason: 'denied' };
 }
 
 // ---------------------------------------------------------------------------

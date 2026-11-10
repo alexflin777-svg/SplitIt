@@ -47,6 +47,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': '更新できませんでした：{error}',
   'project.noId': 'リンクにプロジェクトが含まれていません。ホーム画面の一覧から開いてください。',
+  'project.noAccess': "このプロジェクトにアクセスできません。削除されたか、メンバーではなくなりました。",
+  'project.noOpenPeriod': "表示できる進行中の期間はありません。過去の期間は下にあります。",
+  'auth.callbackRejected': "ログインを確認できませんでした。アプリでもう一度始めてください。",
   'project.you': 'あなた',
   'project.guestName': '{name}（ゲスト）',
   'project.settle': '期間を精算',

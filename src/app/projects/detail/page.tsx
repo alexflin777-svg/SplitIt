@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Check, Plus, UserPlus, X } from 'lucide-react';
 import { calculatePeriod } from '@/lib/project-calc';
 import { buildPeriodInput, toCalcTerms } from '@/lib/projects-store';
-import type { OperationRow } from '@/lib/projects-store';
+import type { OperationRow, PeriodRow } from '@/lib/projects-store';
 import { consentState, formatQty, formatRub, monthName, quantityFields } from '@/lib/project-ui';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
@@ -30,7 +30,7 @@ function ProjectDetail() {
   const accepted = params.get('accepted') === '1';
   const { t, locale } = useI18n();
   // Снимок — только здесь, на просмотре; итог и отметки переводов читают свежее.
-  const { project, error, loading, reload } = useProject(id, null, { snapshot: true });
+  const { project, error, denied, loading, reload } = useProject(id, null, { snapshot: true });
 
   if (!id) {
     return (
@@ -44,13 +44,32 @@ function ProjectDetail() {
     return (
       <V1Screen testId="project-screen">
         <TopNav back={routes.home()} />
-        {error ? <LoadError message={error} onRetry={() => void reload()} /> : <Skeleton rows={4} tall />}
+        {denied ? (
+          <Plaque kind="err" testId="project-no-access">{t('project.noAccess')}</Plaque>
+        ) : error ? (
+          <LoadError message={error} onRetry={() => void reload()} />
+        ) : (
+          <Skeleton rows={4} tall />
+        )}
       </V1Screen>
     );
   }
 
   const { data, ops, me, isOwner, uid } = project;
-  const open = data.periods.find((p) => p.status === 'open')!;
+  const open = data.periods.find((p) => p.status === 'open');
+  const closed = data.periods.filter((p) => p.status === 'closed').reverse();
+  // Вышедшему участнику RLS не показывает новый период — остаётся доступная история.
+  if (!open) {
+    return (
+      <V1Screen testId="project-screen">
+        <TopNav back={routes.home()} />
+        <Header title={data.project.name} />
+        {error && <LoadError message={error} onRetry={() => void reload()} />}
+        <Plaque kind="info" testId="project-no-open-period">{t('project.noOpenPeriod')}</Plaque>
+        <PastPeriods id={id} closed={closed} />
+      </V1Screen>
+    );
+  }
   const termsRow = data.terms.find((x) => x.id === open.terms_id)!;
   const terms = toCalcTerms(termsRow, data.lines);
   const input = buildPeriodInput(data, open.id, ops);
@@ -87,7 +106,6 @@ function ProjectDetail() {
         .filter((m) => m.kind === 'user' && m.status === 'active' && m.user_id !== lastAsk.proposed_by)
         .map((m) => ({ m, d: data.approvals.find((a) => a.terms_id === lastAsk.id && a.user_id === m.user_id)?.decision }))
     : [];
-  const closed = data.periods.filter((p) => p.status === 'closed').reverse();
   const opLine = (o: OperationRow) => {
     const who = memberName(data, o.member_id);
     if (o.op_type === 'income') return t('project.op.incomeTo', { name: who });
@@ -332,19 +350,25 @@ function ProjectDetail() {
         </Link>
       </div>
 
-      {closed.length > 0 && (
-        <>
-          <BlockHead title={t('project.past')} />
-          <div className="flex flex-col gap-1.5">
-            {closed.map((p) => (
-              <Link key={p.id} href={routes.projectSettle(id, { period: p.id })}>
-                <Row title={t('project.pastRow', { month: monthName(p.opened_at, locale) })} meta={t('project.pastMeta')} />
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
+      <PastPeriods id={id} closed={closed} />
     </V1Screen>
+  );
+}
+
+function PastPeriods({ id, closed }: { id: string; closed: PeriodRow[] }) {
+  const { t, locale } = useI18n();
+  if (closed.length === 0) return null;
+  return (
+    <>
+      <BlockHead title={t('project.past')} />
+      <div className="flex flex-col gap-1.5">
+        {closed.map((p) => (
+          <Link key={p.id} href={routes.projectSettle(id, { period: p.id })}>
+            <Row title={t('project.pastRow', { month: monthName(p.opened_at, locale) })} meta={t('project.pastMeta')} />
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }
 

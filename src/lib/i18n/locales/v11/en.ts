@@ -50,6 +50,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': 'Not updated: {error}',
   'project.noId': 'The link has no project. Open it from the list on the home screen.',
+  'project.noAccess': "No access to this project: it was deleted or you are no longer in it.",
+  'project.noOpenPeriod': "There is no open period you can see. Past periods are below.",
+  'auth.callbackRejected': "Sign-in not confirmed: start it again in the app.",
   'project.you': 'You',
   'project.guestName': '{name} (guest)',
   'project.settle': 'Settle the period',

@@ -6,7 +6,8 @@ import { createCredential, verifyCredential, validatePassword, StoredCredential 
 import { t } from './i18n/t';
 import { AUTH_STORAGE_KEY, migrateAuthStorage } from './auth-storage';
 import { fetchWithTimeout } from './fetch-timeout';
-import { clearSnaps } from './snapshot';
+import { authGeneration, authUserChanged, clearSnaps } from './snapshot';
+import { beginAuthAttempt } from './auth-attempt';
 
 /**
  * Кастомная схема для deep-link обратно в приложение после OAuth на нативных
@@ -144,7 +145,7 @@ function writeLocal(key: string, value: unknown): string | null {
 
 function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
-  const raw = localStorage.getItem(key);
+  const raw = window.localStorage.getItem(key);
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -263,8 +264,10 @@ export function registerUserProfile(profile: UserProfile, credential?: StoredCre
 
 export function saveLocalSession(user: UserProfile): string | null {
   if (typeof window === 'undefined') return null;
-  // Другой аккаунт на устройстве не видит снимков прежнего ни на миг.
-  if (getLocalSession()?.id !== user.id) clearSnaps();
+  // Другой аккаунт на устройстве не видит снимков и ответов прежнего ни на миг.
+  const prev = getLocalSession()?.id;
+  if (prev && prev !== user.id) authUserChanged();
+  else if (prev !== user.id) clearSnaps();
   const error = writeLocal(LOCAL_SESSION_KEY, user);
   if (error) return error;
   registerUserProfile(user);
@@ -281,8 +284,10 @@ export function clearLocalSession() {
   if (typeof window !== 'undefined') {
     const hadSession = localStorage.getItem(LOCAL_SESSION_KEY) !== null;
     localStorage.removeItem(LOCAL_SESSION_KEY);
-    clearSnaps();
-    if (hadSession) window.dispatchEvent(new Event('splitit_profile_changed'));
+    if (hadSession) {
+      authUserChanged();
+      window.dispatchEvent(new Event('splitit_profile_changed'));
+    } else clearSnaps();
   }
 }
 
@@ -441,6 +446,8 @@ export async function signInWithGoogle(): Promise<{ error: string | null }> {
   if (error) return { error: translateAuthError(error.message) };
 
   if (isNative && data?.url) {
+    // Deep link с кодом примется, только если вход начат здесь и не старше 10 минут.
+    beginAuthAttempt('google');
     await Browser.open({ url: data.url });
   }
 
@@ -573,21 +580,32 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
   return { error: null };
 }
 
-let sessionInFlight: Promise<UserProfile | null> | null = null;
+let sessionInFlight: { gen: number; p: Promise<UserProfile | null> } | null = null;
 
 /** Одновременные вызовы (главная, фокус, экраны) делят один запрос к Auth и profiles. */
 export function getActiveSession(): Promise<UserProfile | null> {
   if (!supabase) return Promise.resolve(getLocalSession());
-  return (sessionInFlight ??= loadActiveSession(supabase).finally(() => {
-    sessionInFlight = null;
-  }));
+  return activeSessionVia(supabase);
 }
 
-async function loadActiveSession(supabase: SupabaseClient): Promise<UserProfile | null> {
+/** Общий запрос — только внутри одного поколения входа: после смены аккаунта — новый. */
+export function activeSessionVia(client: SupabaseClient): Promise<UserProfile | null> {
+  const gen = authGeneration();
+  if (sessionInFlight?.gen !== gen) {
+    const p: Promise<UserProfile | null> = loadActiveSession(client, gen).finally(() => {
+      if (sessionInFlight?.p === p) sessionInFlight = null;
+    });
+    sessionInFlight = { gen, p };
+  }
+  return sessionInFlight.p;
+}
 
+async function loadActiveSession(supabase: SupabaseClient, gen: number): Promise<UserProfile | null> {
   // В сетевом режиме источником истины служит Supabase Auth, а не произвольная
   // JSON-строка в localStorage. Это также очищает протухшую локальную сессию.
   const { data, error } = await supabase.auth.getUser();
+  // Пока шёл запрос, аккаунт сменился: ответ прежнего не применяем — спрашиваем заново.
+  if (gen !== authGeneration()) return activeSessionVia(supabase);
   if (error || !data.user) {
     clearLocalSession();
     return null;
@@ -600,6 +618,7 @@ async function loadActiveSession(supabase: SupabaseClient): Promise<UserProfile 
     .select('full_name, avatar_url, phone, default_currency, has_completed_onboarding')
     .eq('id', data.user.id)
     .maybeSingle();
+  if (gen !== authGeneration()) return activeSessionVia(supabase);
   const profile: UserProfile = {
     id: data.user.id,
     email: data.user.email ?? sameUser?.email ?? '',

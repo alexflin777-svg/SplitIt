@@ -16,7 +16,7 @@ import { buildPeriodInput } from '@/lib/projects-store';
 import { calculatePeriod } from '@/lib/project-calc';
 import { consentState, monthName } from '@/lib/project-ui';
 import { currentUserId, projects, snapshotUserId } from '@/lib/projects-client';
-import { readSnap, writeSnap } from '@/lib/snapshot';
+import { authGeneration, readSnap, writeSnap } from '@/lib/snapshot';
 import { rememberOpenPeriod } from './useProject';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
@@ -53,20 +53,25 @@ const FIRST_SCREEN = 4;
 const NO_BACKEND = /бэкенд|backend/i;
 
 const TILES_SNAP = 'home-project-tiles';
+const isTileList = (v: unknown) =>
+  Array.isArray(v) && v.every((x) => !!x && typeof (x as ProjectTile).id === 'string' && typeof (x as ProjectTile).name === 'string');
 
 /**
  * Плитки проектов: моя цифра открытого периода и согласие. Ошибка — честно, без нулей.
  * Сначала — снимок прошлого ответа (если есть), затем свежая сводка за два обращения к базе.
  */
 export function useProjectTiles() {
-  const [tiles, setTiles] = useState<ProjectTile[] | null>(() => readSnap<ProjectTile[]>(snapshotUserId(), TILES_SNAP));
+  const [tiles, setTiles] = useState<ProjectTile[] | null>(() => readSnap<ProjectTile[]>(snapshotUserId(), TILES_SNAP, isTileList));
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
+      const gen = authGeneration();
       const [uid, home] = await Promise.all([currentUserId(), projects.fetchHome()]);
+      // Ответ прежнего аккаунта: не показывать и не сохранять.
+      if (gen !== authGeneration()) return;
       if (!home.data) {
         if (alive) {
           // Сбой сети при снимке на экране: снимок остаётся, сверху — ошибка и «Повторить».
@@ -94,7 +99,7 @@ export function useProjectTiles() {
           waiting: !!c.pending && c.waiting.length > 0,
         };
       });
-      writeSnap(uid, TILES_SNAP, out);
+      writeSnap(uid, TILES_SNAP, out, gen);
       if (alive) {
         setTiles(out);
         setError(null);

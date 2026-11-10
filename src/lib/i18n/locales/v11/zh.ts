@@ -47,6 +47,9 @@ export const messages: Record<string, string> = {
 
   'project.loadFailed': '未能更新：{error}',
   'project.noId': '链接里没有项目。请从首页列表打开。',
+  'project.noAccess': "无法访问该项目：它已被删除，或你已不在其中。",
+  'project.noOpenPeriod': "没有你可查看的进行中周期。过去的周期在下方。",
+  'auth.callbackRejected': "登录未确认：请在应用中重新开始。",
   'project.you': '你',
   'project.guestName': '{name}（访客）',
   'project.settle': '结算本期',

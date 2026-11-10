@@ -14,10 +14,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { getLocalSession, supabase } from './supabase';
 import { t } from './i18n/t';
 import { fetchAllPages } from './paging';
-import type { RemoteResult } from './remote-store';
+import { errorReason, type RemoteResult } from './remote-store';
+import { authGeneration } from './snapshot';
 import type { Operation, PeriodInput, ProjectMember, Quantity, RateType, RemainderMethod, TermLine, Terms } from './project-calc';
 
 // ---------------------------------------------------------------- строки базы
@@ -455,8 +456,8 @@ async function fetchProjectTable(
     if (projectId) q = q.eq('project_id', projectId);
     if (filter) q = q.in(filter.column, filter.values);
     for (const col of projectId ? order : ['project_id', ...order]) q = q.order(col, { ascending: true });
-    const { data, error } = await q.range(rows.length, rows.length + PAGE_SIZE - 1);
-    if (error) return { data: null, error: translate(error) };
+    const { data, error, status } = await q.range(rows.length, rows.length + PAGE_SIZE - 1);
+    if (error) return { data: null, error: translate(error), reason: errorReason(error, status) };
     rows.push(...(data ?? []));
     if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
     if (rows.length >= MAX_ROWS) return { data: null, error: 'Слишком много записей в проекте — не удалось загрузить все' };
@@ -495,19 +496,31 @@ export function createProjectsStore(client: SupabaseClient | null) {
       client.from('projects').select(COLUMNS.projects).eq('id', projectId).maybeSingle(),
       ...PROJECT_TABLES.map(([table, order]) => fetchProjectTable(client, table, order, projectId)),
     ]);
-    if (p.error) return { data: null, error: translate(p.error) };
+    if (p.error) return { data: null, error: translate(p.error), reason: errorReason(p.error, p.status) };
     const failed = rest.find((r) => r.error);
-    if (failed) return { data: null, error: failed.error };
+    if (failed) return { data: null, error: failed.error, ...(failed.reason && { reason: failed.reason }) };
     // RLS отдаёт пустоту и «нет проекта», и «не участник» — неразличимо.
-    if (!p.data) return { data: null, error: t('errors.insufficientPermissions') };
+    if (!p.data) return { data: null, error: t('errors.insufficientPermissions'), reason: 'denied' };
     const [members, terms, lines, approvals, periods, quantities, ledger, transfers] = rest.map((r) => r.data ?? []);
     return { data: assemble(p.data as unknown as ProjectRow, { members, terms, lines, approvals, periods, quantities, ledger, transfers }), error: null };
   }
 
   async function fetchProjects(): Promise<RemoteResult<ProjectRow[]>> {
     if (!client) return { data: null, error: t('errors.noBackend') };
-    const { data, error } = await client.from('projects').select(COLUMNS.projects).order('created_at', { ascending: false });
-    return error ? { data: null, error: translate(error) } : { data: (data ?? []) as unknown as ProjectRow[], error: null };
+    // Страницами, как таблицы проекта: без них max-rows PostgREST молча срезал бы проекты из сводки главной.
+    const rows: ProjectRow[] = [];
+    for (;;) {
+      const { data, error, status } = await client
+        .from('projects')
+        .select(COLUMNS.projects)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(rows.length, rows.length + PAGE_SIZE - 1);
+      if (error) return { data: null, error: translate(error), reason: errorReason(error, status) };
+      rows.push(...((data ?? []) as unknown as ProjectRow[]));
+      if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
+      if (rows.length >= MAX_ROWS) return { data: null, error: 'Слишком много проектов — не удалось загрузить все' };
+    }
   }
 
   return {
@@ -516,10 +529,12 @@ export function createProjectsStore(client: SupabaseClient | null) {
     /** Проект целиком, кроме операций; каждая таблица — всеми страницами. */
     async fetchProject(projectId: string): Promise<RemoteResult<ProjectData>> {
       if (!client) return { data: null, error: t('errors.noBackend') };
-      let p = projectInFlight.get(projectId);
+      // Общий запрос — только у одного аккаунта в одном поколении входа: B не получает ответ A.
+      const key = `${getLocalSession()?.id ?? ''}:${authGeneration()}:${projectId}`;
+      let p = projectInFlight.get(key);
       if (!p) {
-        p = readProject(client, projectId).finally(() => projectInFlight.delete(projectId));
-        projectInFlight.set(projectId, p);
+        p = readProject(client, projectId).finally(() => projectInFlight.delete(key));
+        projectInFlight.set(key, p);
       }
       return p;
     },

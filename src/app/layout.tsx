@@ -7,6 +7,7 @@ import { I18nProvider } from '@/lib/i18n/provider';
 import HeaderNewEventLink from '@/components/HeaderNewEventLink';
 import { PushInit } from '@/components/PushInit';
 import { NativeAuthInit } from '@/components/NativeAuthInit';
+import { AuthScope } from '@/components/AuthScope';
 
 /**
  * Шрифт вшивается в сборку, а не тянется с fonts.googleapis.com.
@@ -94,7 +95,7 @@ export default function RootLayout({
 
         {/* Main Content Container with Fixed Width Guard */}
         <main className="flex-1 max-w-md w-full mx-auto p-4 pb-[calc(10rem+env(safe-area-inset-bottom,0px))] space-y-4">
-          {children}
+          <AuthScope>{children}</AuthScope>
         </main>
 
         {/* Bottom Navigation Bar */}

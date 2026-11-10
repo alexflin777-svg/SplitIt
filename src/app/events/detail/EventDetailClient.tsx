@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { computeEventSummary } from '@/lib/event-summary';
 import EventInviteStep from '@/components/v1/EventInviteStep';
 import { Art, Avatar, BlockHead, Header, MainButton, PillLink, Plaque, TopNav, V1Screen, avatarBg, cx } from '@/components/v1/ui';
+import { LoadError } from '@/components/v1/project-bits';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
   renameGroup,
@@ -90,9 +91,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   // Сколько расходов показывать в ленте. Это только отрисовка: в group.expenses
   // всегда все расходы, по ним считаются итог и категории (G2).
   const [expenseLimit, setExpenseLimit] = useState(DEFAULT_EXPENSE_PAGE_SIZE);
-  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId, { snapshot: true });
+  const { group: cachedGroup, error: cachedError, reason: cachedReason, isLoading, refresh: refreshGroup } = useGroup(groupId, { snapshot: true });
   const [group, setGroup] = useState<any>(null);
-  const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ok' | 'not-found' | 'offline'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -133,10 +134,11 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
       return;
     }
 
-    if (cachedError || !cachedGroup) {
+    setLoadError(cachedError);
+    if (!cachedGroup) {
       setGroup(null);
-      setLoadError(cachedError);
-      setStatus('not-found');
+      // «Нет события» — только когда база так и ответила; сбой связи — «Повторить».
+      setStatus(cachedError && cachedReason !== 'denied' ? 'offline' : 'not-found');
       return;
     }
 
@@ -144,11 +146,20 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
     setEditedName(cachedGroup.name);
     setStatus('ok');
     getActiveSession().then(setUserProfile);
-  }, [cachedError, cachedGroup, isLoading]);
+  }, [cachedError, cachedGroup, cachedReason, isLoading]);
 
 
   if (status === 'loading') {
     return <div className="p-4 text-xs font-bold text-slate-500 text-center">{t('eventDetail.loading')}</div>;
+  }
+
+  if (status === 'offline') {
+    return (
+      <V1Screen testId="event-offline">
+        <TopNav back={routes.home()} />
+        <LoadError message={loadError ?? ''} onRetry={() => void refreshGroup()} />
+      </V1Screen>
+    );
   }
 
   if (status === 'not-found' || !group) {
@@ -527,6 +538,9 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           )
         }
       />
+
+      {/* Снимок на экране, а сервер не ответил: событие остаётся, сверху — ошибка и «Повторить». */}
+      {loadError && <LoadError message={loadError} onRetry={() => void refreshGroup()} />}
 
       {isEditingName ? (
         <div className="pt-1 pb-4 flex items-center gap-2">

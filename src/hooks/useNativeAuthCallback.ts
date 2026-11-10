@@ -5,6 +5,8 @@ import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getActiveSession, supabase } from '@/lib/supabase';
 import { ownAuthCallback, takeReturnPath } from '@/lib/auth-return';
+import { acceptAuthCallback } from '@/lib/auth-attempt';
+import { t } from '@/lib/i18n/t';
 
 /**
  * Ловит deep link `app.splitit.mobile://auth/callback?code=...`, которым
@@ -33,6 +35,12 @@ export function useNativeAuthCallback() {
       // одноразовый token_hash — обмениваем его на сессию прямо здесь.
       const tgTokenHash = params.get('tg_token_hash');
       if (tgTokenHash) {
+        // Чужая ссылка с токеном атакующего подменила бы аккаунт: только своя свежая попытка.
+        if (!acceptAuthCallback('telegram', params.get('attempt'))) {
+          console.warn('[SplitIT] Telegram: callback без начатой на устройстве попытки входа отклонён');
+          router.replace(`/auth?oauth_error=${encodeURIComponent(t('auth.callbackRejected'))}`);
+          return;
+        }
         const { error } = await supabase!.auth.verifyOtp({
           type: 'magiclink',
           token_hash: tgTokenHash,
@@ -55,6 +63,12 @@ export function useNativeAuthCallback() {
 
       const code = params.get('code');
       if (!code) return;
+      // Код меняется на сессию по PKCE-verifier этого устройства; плюс — только из начатого входа.
+      if (!acceptAuthCallback('google', null)) {
+        console.warn('[SplitIT] Google: callback без начатой на устройстве попытки входа отклонён');
+        router.replace(`/auth?oauth_error=${encodeURIComponent(t('auth.callbackRejected'))}`);
+        return;
+      }
 
       const { error } = await supabase!.auth.exchangeCodeForSession(code);
       if (error) {
