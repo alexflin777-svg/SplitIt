@@ -20,22 +20,26 @@
  * (SWR перечитывает при возврате на экран).
  */
 
+import type { ErrorReason } from './snapshot';
+
 export interface PageResult<T> {
   data: { items: T[]; hasMore: boolean } | null;
   error: string | null;
+  /** Причина ошибки страницы — доходит до экрана (снимок стереть или оставить). */
+  reason?: ErrorReason;
 }
 
 export async function fetchAllPages<T extends { id: string }>(
   fetchPage: (offset: number, limit: number) => Promise<PageResult<T>>,
   { pageSize = 100, maxItems = 20_000 }: { pageSize?: number; maxItems?: number } = {},
-): Promise<{ data: T[] | null; error: string | null; overflow?: true }> {
+): Promise<{ data: T[] | null; error: string | null; reason?: ErrorReason; overflow?: true }> {
   const seen = new Set<string>();
   const all: T[] = [];
   let offset = 0;
 
   for (;;) {
     const page = await fetchPage(offset, pageSize);
-    if (page.error || !page.data) return { data: null, error: page.error };
+    if (page.error || !page.data) return { data: null, error: page.error, ...(page.reason && { reason: page.reason }) };
 
     for (const item of page.data.items) {
       if (seen.has(item.id)) continue;

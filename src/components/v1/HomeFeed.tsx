@@ -16,7 +16,7 @@ import { buildPeriodInput } from '@/lib/projects-store';
 import { calculatePeriod } from '@/lib/project-calc';
 import { consentState, monthName } from '@/lib/project-ui';
 import { currentUserId, projects, snapshotUserId } from '@/lib/projects-client';
-import { authGeneration, readSnap, writeSnap } from '@/lib/snapshot';
+import { authGeneration, readSnap, settleSnap, writeSnap } from '@/lib/snapshot';
 import { rememberOpenPeriod } from './useProject';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
@@ -73,9 +73,11 @@ export function useProjectTiles() {
       // Ответ прежнего аккаунта: не показывать и не сохранять.
       if (gen !== authGeneration()) return;
       if (!home.data) {
+        // Нет прав (403/42501, сессия отозвана) — снимок стёрт, плитки обнуляются;
+        // сбой сети — снимок остаётся, сверху — ошибка и «Повторить».
+        const denied = settleSnap(snapshotUserId(), TILES_SNAP, gen, home) === 'denied';
         if (alive) {
-          // Сбой сети при снимке на экране: снимок остаётся, сверху — ошибка и «Повторить».
-          setTiles((prev) => prev ?? []);
+          setTiles((prev) => (denied ? [] : prev ?? []));
           setError(home.error && !NO_BACKEND.test(home.error) ? home.error : null);
         }
         return;

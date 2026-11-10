@@ -28,6 +28,11 @@ export function beginAuthAttempt(kind: AuthAttemptKind, kv: KV | null = storage(
   return id;
 }
 
+/** Отменённый вход (callback с error): попытка больше не годится. */
+export function cancelAuthAttempt(kv: KV | null = storage()): void {
+  kv?.removeItem(KEY);
+}
+
 /** Принять callback: своя незавершённая попытка не старше 10 минут (и для Telegram — тот же id). Гасит попытку. */
 export function acceptAuthCallback(kind: AuthAttemptKind, attempt: string | null, kv: KV | null = storage(), now = Date.now()): boolean {
   if (!kv) return false;

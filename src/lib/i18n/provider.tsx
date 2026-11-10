@@ -7,17 +7,37 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import {
   DEFAULT_LOCALE,
   detectDeviceLocale,
   Locale,
+  LOCALE_LABELS,
+  localeOffer,
   SUPPORTED_LOCALES,
 } from './config';
 import { translateWith } from './t';
 import { localeSwitcher } from './loaded';
 
 const STORAGE_KEY = 'splitit_locale';
+const MANUAL_KEY = 'splitit_locale_manual';
+
+/** Предложение языка устройства для записи 1.0.x (localeOffer): читается как внешнее хранилище. */
+const offerListeners = new Set<() => void>();
+const subscribeOffer = (l: () => void) => {
+  offerListeners.add(l);
+  return () => offerListeners.delete(l);
+};
+function readOffer(): Locale | null {
+  let manual: string | null;
+  try {
+    manual = window.localStorage.getItem(MANUAL_KEY);
+  } catch {
+    return null; // хранилище недоступно — выбор всё равно не сохранить, не предлагаем
+  }
+  return localeOffer(readStoredLocale(), manual, detectDeviceLocale());
+}
 
 type I18nContextValue = {
   locale: Locale;
@@ -64,10 +84,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     switchTo(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
+      // Отметка: это выбор человека в 1.1.1 — предложение языка устройства больше не показывается.
+      window.localStorage.setItem(MANUAL_KEY, '1');
     } catch {
       // Ignore write failures — locale still applies for this session.
     }
+    for (const l of offerListeners) l();
   }, [switchTo]);
+
+  const offer = useSyncExternalStore(subscribeOffer, readOffer, () => null);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => translateWith(locale, key, vars),
@@ -80,7 +105,27 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
+    <I18nContext.Provider value={value}>
+      {children}
+      {offer && (
+        <div
+          role="dialog"
+          aria-label={t('locale.offer', { lang: LOCALE_LABELS[offer] })}
+          data-testid="locale-offer"
+          className="fixed left-0 right-0 top-0 z-[60] px-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
+        >
+          <div className="mx-auto flex max-w-md items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+            <span className="flex-1">{t('locale.offer', { lang: LOCALE_LABELS[offer] })}</span>
+            <button type="button" onClick={() => setLocale(offer)} className="h-10 rounded-full bg-white px-3.5 font-bold text-slate-900">
+              {LOCALE_LABELS[offer]}
+            </button>
+            <button type="button" onClick={() => setLocale(locale)} className="h-10 rounded-full px-3 font-bold text-white/80">
+              {t('locale.offerKeep')}
+            </button>
+          </div>
+        </div>
+      )}
+    </I18nContext.Provider>
   );
 }
 

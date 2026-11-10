@@ -20,13 +20,22 @@ const memory = new Map<string, unknown>();
 const keyOf = (uid: string, name: string) => `${PREFIX}${uid}:${name}`;
 
 let generation = 0;
+/** Ключ перемонтирования экранов (AuthScope): растёт не при каждом новом поколении. */
+let scope = 0;
 const listeners = new Set<() => void>();
 
 export const authGeneration = () => generation;
+export const authScope = () => scope;
 
-/** Аккаунт на устройстве сменился: новое поколение, снимки прежнего — стереть, экраны — сбросить. */
-export function authUserChanged(): void {
+/**
+ * Аккаунт на устройстве сменился (любая смена uid, включая вход из пустой сессии):
+ * новое поколение — прежние запросы недействительны, снимки стереть.
+ * remount: false — первый вход: экран (/auth, онбординг) не перемонтируется,
+ * на нём нет данных чужого аккаунта.
+ */
+export function authUserChanged(remount = true): void {
   generation++;
+  if (remount) scope++;
   clearSnaps();
   for (const l of listeners) l();
 }

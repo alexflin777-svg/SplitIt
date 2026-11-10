@@ -552,9 +552,10 @@ export function createProjectsStore(client: SupabaseClient | null) {
         fetchProjects(),
         ...tables.map(([table, order]) => fetchProjectTable(client, table, order, null)),
       ]);
-      if (!list.data) return { data: null, error: list.error };
+      // Причина (denied/network) — до главной: при отказе она стирает снимок плиток.
+      if (!list.data) return { data: null, error: list.error, ...(list.reason && { reason: list.reason }) };
       const failed = rest.find((r) => r.error);
-      if (failed) return { data: null, error: failed.error };
+      if (failed) return { data: null, error: failed.error, ...(failed.reason && { reason: failed.reason }) };
       const by = (rows: unknown[] | null, pid: string) => (rows ?? []).filter((r) => (r as { project_id: string }).project_id === pid);
       const projectsData = list.data.map((p) => {
         const [members, terms, lines, approvals, periods, quantities, ledger] = rest.map((r) => by(r.data, p.id));
@@ -564,7 +565,7 @@ export function createProjectsStore(client: SupabaseClient | null) {
       const ops = openIds.length
         ? await fetchProjectTable(client, 'project_operations', ['created_at', 'id'], null, { column: 'period_id', values: openIds })
         : { data: [], error: null };
-      if (!ops.data) return { data: null, error: ops.error };
+      if (!ops.data) return { data: null, error: ops.error, ...(ops.reason && { reason: ops.reason }) };
       const allOps = ops.data as OperationRow[];
       return {
         data: projectsData.map((d) => {
@@ -580,7 +581,7 @@ export function createProjectsStore(client: SupabaseClient | null) {
       if (!client) return { data: null, error: t('errors.noBackend') };
       const res = await fetchAllPages<OperationRow>(
         async (offset, limit) => {
-          const { data, error } = await client
+          const { data, error, status } = await client
             .from('project_operations')
             .select(COLUMNS.project_operations)
             .eq('project_id', projectId)
@@ -588,14 +589,14 @@ export function createProjectsStore(client: SupabaseClient | null) {
             .order('created_at', { ascending: true })
             .order('id', { ascending: true })
             .range(offset, offset + limit - 1);
-          if (error) return { data: null, error: translate(error) };
+          if (error) return { data: null, error: translate(error), reason: errorReason(error, status) };
           const items = (data ?? []) as unknown as OperationRow[];
           return { data: { items, hasMore: items.length === limit }, error: null };
         },
         { pageSize: PAGE_SIZE },
       );
       if (res.overflow) return { data: null, error: 'Слишком много операций в периоде — не удалось загрузить все' };
-      return { data: res.data, error: res.error };
+      return { data: res.data, error: res.error, ...(res.reason && { reason: res.reason }) };
     },
 
     /**

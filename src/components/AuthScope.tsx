@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useSyncExternalStore } from 'react';
-import { authGeneration, authUserChanged, onAuthUserChanged } from '@/lib/snapshot';
+import { authScope, authUserChanged, onAuthUserChanged } from '@/lib/snapshot';
 import { getLocalSession } from '@/lib/supabase';
 
 /**
@@ -10,7 +10,7 @@ import { getLocalSession } from '@/lib/supabase';
  * проект) пропадает сразу; кэш событий очищает data-hooks.ts (SWR не тянется в стартовый JS).
  */
 export function AuthScope({ children }: { children: React.ReactNode }) {
-  const gen = useSyncExternalStore(onAuthUserChanged, authGeneration, () => 0);
+  const gen = useSyncExternalStore(onAuthUserChanged, authScope, () => 0);
 
   // Вход другого аккаунта в соседней вкладке: в этой saveLocalSession не вызывался.
   useEffect(() => {
@@ -21,7 +21,7 @@ export function AuthScope({ children }: { children: React.ReactNode }) {
     const fromOtherTab = () => {
       const was = uid;
       track();
-      if (was && uid !== was) authUserChanged();
+      if (uid !== was) authUserChanged(!!was);
     };
     window.addEventListener('storage', fromOtherTab);
     window.addEventListener('splitit_profile_changed', track);

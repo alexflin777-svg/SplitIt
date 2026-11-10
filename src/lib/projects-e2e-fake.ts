@@ -10,7 +10,8 @@
  * Управление из теста (window.localStorage):
  *   splitit_fake_projects_actor — {"id","name"}: от чьего имени вызовы (по умолчанию — локальная сессия);
  *   splitit_fake_projects_fail  — {"fn","mode"}: один сбой RPC; mode 'error' — отказ базы,
- *                                 'lost' — база выполнила, ответ потерян (обрыв связи).
+ *                                 'lost' — база выполнила, ответ потерян (обрыв связи);
+ *                                 fn "table:<имя>" — один сбой чтения таблицы: 'denied' (403/42501) или 'lost'.
  *   splitit_fake_latency_ms     — задержка «сети» на каждый запрос (замер v1.1/perf/measure.mjs);
  *                                 счётчик запросов и одновременности — window.__splititNet.
  */
@@ -396,6 +397,16 @@ function call(db: Db, fn: string, a: Row, uid: string | null, name: string): unk
   }
 }
 
+/** Один сбой чтения таблицы ({"fn":"table:projects","mode":"denied"|"lost"}): 403/42501 или обрыв связи. */
+function takeTableFail(table: string) {
+  const raw = window.localStorage.getItem(FAIL_KEY);
+  const fail = raw ? (JSON.parse(raw) as { fn: string; mode: string }) : null;
+  if (fail?.fn !== `table:${table}`) return null;
+  window.localStorage.removeItem(FAIL_KEY);
+  if (fail.mode === 'denied') return { data: null, error: { message: 'permission denied for table ' + table, code: '42501' }, status: 403 };
+  return { data: null, error: { message: 'TypeError: Failed to fetch' }, status: 0 };
+}
+
 /** Клиент с формой SupabaseClient в объёме, который использует projects-store. */
 export function createFakeProjectsClient() {
   return {
@@ -439,7 +450,7 @@ export function createFakeProjectsClient() {
         order: () => b,
         range: (from: number, to: number) => ((q.range = [from, to]), b),
         maybeSingle: () => ((q.single = true), b),
-        then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => fakeLatency(table).then(exec).then(res, rej),
+        then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => fakeLatency(table).then(() => takeTableFail(table) ?? exec()).then(res, rej),
       };
       return b;
     },

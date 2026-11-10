@@ -39,6 +39,16 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 };
 
 /**
+ * Язык, сохранённый до 1.1.1, мог быть не выбором человека: первое определение
+ * записывалось как выбор, и мгновенный en-US навигатора замораживал запасной en
+ * (круг 3). Отличить такой en от осознанного нельзя — молча не меняем, а один раз
+ * предлагаем язык устройства. manual — отметка явного выбора в 1.1.1.
+ */
+export function localeOffer(stored: Locale | null, manual: string | null, device: Locale): Locale | null {
+  return stored === DEFAULT_LOCALE && !manual && device !== DEFAULT_LOCALE ? device : null;
+}
+
+/**
  * Detects the device/browser locale and maps it to one of our supported
  * locales. Used only as the *default* on first launch — the user's explicit
  * choice (stored later) always wins once they change it in Profile settings.

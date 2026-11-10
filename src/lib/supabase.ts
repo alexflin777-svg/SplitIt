@@ -266,8 +266,8 @@ export function saveLocalSession(user: UserProfile): string | null {
   if (typeof window === 'undefined') return null;
   // Другой аккаунт на устройстве не видит снимков и ответов прежнего ни на миг.
   const prev = getLocalSession()?.id;
-  if (prev && prev !== user.id) authUserChanged();
-  else if (prev !== user.id) clearSnaps();
+  // Вход из пустой сессии — тоже новое поколение: поздний ответ запроса, начатого до входа, не применяется.
+  if (prev !== user.id) authUserChanged(!!prev);
   const error = writeLocal(LOCAL_SESSION_KEY, user);
   if (error) return error;
   registerUserProfile(user);
@@ -570,7 +570,7 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
     writeLocal(USERS_REGISTRY_KEY, registry);
   }
 
-  const keep = new Set(['splitit_locale', USERS_REGISTRY_KEY]);
+  const keep = new Set(['splitit_locale', 'splitit_locale_manual', USERS_REGISTRY_KEY]);
   const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter(
     (key): key is string => Boolean(key && key.startsWith('splitit_') && !keep.has(key)),
   );

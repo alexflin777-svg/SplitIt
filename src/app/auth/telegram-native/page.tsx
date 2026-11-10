@@ -14,9 +14,9 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { telegramBridgeAuth } from '@/lib/telegram-bridge';
 
 const BOT_NAME = (process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? '').trim();
-const DEEP_LINK = 'app.splitit.mobile://auth/callback';
 
 type Phase = 'widget' | 'exchanging' | 'redirecting' | 'error';
 
@@ -34,34 +34,26 @@ export default function TelegramNativeBridgePage() {
   useEffect(() => {
     if (!BOT_NAME || !containerRef.current) return;
 
-    // id попытки входа, начатой в приложении: без него приложение deep link не примет.
-    const attempt = new URLSearchParams(window.location.search).get('attempt') ?? '';
     window.onTelegramNativeAuth = async (user) => {
-      if (!/^[0-9a-f-]{36}$/.test(attempt)) {
-        setPhase('error');
-        setMessage('Страница открыта не из приложения SplitIT. Вернитесь в приложение и нажмите «Войти через Telegram».');
-        return;
-      }
       setPhase('exchanging');
-      if (!supabase) {
+      const client = supabase;
+      if (!client) {
         setPhase('error');
         setMessage('Бэкенд не настроен.');
         return;
       }
-      const { data, error } = await supabase.functions.invoke('telegram-auth', {
-        body: user,
-      });
-      const tokenHash = (data as { token_hash?: string } | null)?.token_hash;
-      if (error || !tokenHash) {
+      // attempt из адреса (приложение 1.1.1) возвращается в deep link; без него — как для старых версий.
+      const r = await telegramBridgeAuth(user, window.location.search, (body) => client.functions.invoke('telegram-auth', { body }));
+      if (r.error !== undefined) {
         setPhase('error');
-        setMessage('Не удалось подтвердить вход через Telegram. Закройте страницу и попробуйте ещё раз.');
+        setMessage(r.error);
         return;
       }
       setPhase('redirecting');
       // Возврат в приложение. Если deep link не сработал (открыто не из APK) —
       // показываем это честно, а не бесконечный спиннер.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- это custom-scheme deep link в APK (app.splitit.mobile://), а не внутренняя страница Next; router сюда не применим
-      window.location.href = `${DEEP_LINK}?tg_token_hash=${encodeURIComponent(tokenHash)}&attempt=${encodeURIComponent(attempt)}`;
+      // Custom-scheme deep link в приложение (app.splitit.mobile://): router сюда не применим.
+      window.location.href = r.url;
       setTimeout(() => {
         setPhase('error');
         setMessage('Похоже, страница открыта не из приложения SplitIT. Вернитесь в приложение и попробуйте снова.');

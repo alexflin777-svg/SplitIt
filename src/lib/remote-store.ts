@@ -222,12 +222,12 @@ function mapGroup(row: any): Group {
 export async function fetchGroups(): Promise<RemoteResult<Group[]>> {
   if (!supabase) return fail(noBackend());
 
-  const { data, error } = await supabase
+  const { data, error, status } = await supabase
     .from('groups')
     .select(GROUP_CORE_SELECT)
     .order('created_at', { ascending: false });
 
-  if (error) return fail(translate(error));
+  if (error) return { ...fail(translate(error)), reason: errorReason(error, status) };
 
   const groups = (data ?? []).map(mapGroup);
   // Сумма и число расходов на главной — по всем расходам события, а не по
@@ -236,11 +236,13 @@ export async function fetchGroups(): Promise<RemoteResult<Group[]>> {
   const withExpenses = await Promise.all(
     groups.map(async (group) => {
       const expenses = await fetchAllExpenses(group.id);
-      return expenses.data ? { group: { ...group, expenses: expenses.data }, error: null } : { group, error: expenses.error };
+      return expenses.data
+        ? { group: { ...group, expenses: expenses.data }, error: null }
+        : { group, error: expenses.error, reason: expenses.reason };
     }),
   );
   const failed = withExpenses.find((r) => r.error);
-  if (failed) return fail(failed.error ?? t('errors.eventUnavailableNoAccess'));
+  if (failed) return { ...fail(failed.error ?? t('errors.eventUnavailableNoAccess')), ...(failed.reason && { reason: failed.reason }) };
 
   return { data: withExpenses.map((r) => r.group), error: null };
 }
@@ -255,10 +257,11 @@ export async function fetchAllExpenses(groupId: string): Promise<RemoteResult<Gr
     const page = await fetchExpensesPage(groupId, { limit, offset });
     return page.data
       ? { data: { items: page.data.expenses, hasMore: page.data.hasMore }, error: null }
-      : { data: null, error: page.error };
+      : { data: null, error: page.error, reason: page.reason };
   });
   if (result.overflow) return fail(t('errors.tooManyExpenses'));
-  return result.data ? { data: result.data, error: null } : fail(result.error ?? t('errors.eventUnavailableNoAccess'));
+  if (result.data) return { data: result.data, error: null };
+  return { ...fail(result.error ?? t('errors.eventUnavailableNoAccess')), ...(result.reason && { reason: result.reason }) };
 }
 
 export async function fetchExpensesPage(
@@ -270,7 +273,7 @@ export async function fetchExpensesPage(
   const boundedLimit = Math.max(1, Math.min(limit, 100));
   const from = Math.max(0, offset);
   const to = from + boundedLimit;
-  const { data, error } = await supabase
+  const { data, error, status } = await supabase
     .from('expenses')
     .select(EXPENSE_SELECT)
     .eq('group_id', groupId)
@@ -280,7 +283,7 @@ export async function fetchExpensesPage(
     .order('id', { ascending: false })
     .range(from, to);
 
-  if (error) return fail(translate(error));
+  if (error) return { ...fail(translate(error)), reason: errorReason(error, status) };
   const rows = data ?? [];
   return {
     data: {
@@ -317,7 +320,9 @@ export async function fetchGroup(groupId: string): Promise<RemoteResult<Group>> 
 
   const group = mapGroup(data);
   const expensesResult = await fetchAllExpenses(groupId);
-  if (expensesResult.error || !expensesResult.data) return fail(expensesResult.error ?? t('errors.eventUnavailableNoAccess'));
+  if (expensesResult.error || !expensesResult.data) {
+    return { ...fail(expensesResult.error ?? t('errors.eventUnavailableNoAccess')), ...(expensesResult.reason && { reason: expensesResult.reason }) };
+  }
 
   return { data: { ...group, expenses: expensesResult.data }, error: null };
 }
