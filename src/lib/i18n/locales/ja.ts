@@ -89,7 +89,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': 'クイックデモログインを試す',
   'home.featuresTitle': 'SplitIt の主な機能：',
   'home.feature.sync.title': 'リアルタイム同期',
-  'home.feature.sync.bodyMultiUser': 'アカウントで複数のデバイスからログイン — 変更は Supabase Realtime 経由で同期されます。',
+  'home.feature.sync.bodyMultiUser': 'アカウントで複数のデバイスからログイン — 変更はすぐに反映されます。',
   'home.feature.sync.bodyLocal': 'ローカルモードでは近くのタブ間で同期します。複数デバイスには Supabase を接続してください。',
   'home.feature.ocr.title': 'レシートスキャン（OCR）',
   'home.feature.ocr.body': 'レストランや店舗のレシートを撮影すると、金額と明細を自動で認識します。',

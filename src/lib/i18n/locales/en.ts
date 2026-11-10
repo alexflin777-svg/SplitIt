@@ -100,7 +100,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': 'Try a quick demo login',
   'home.featuresTitle': 'Key SplitIt features:',
   'home.feature.sync.title': 'Real-time sync',
-  'home.feature.sync.bodyMultiUser': 'Sign in from two or more devices with your account — changes arrive via Supabase Realtime.',
+  'home.feature.sync.bodyMultiUser': 'Sign in from two or more devices with your account — changes arrive instantly.',
   'home.feature.sync.bodyLocal': 'Local mode syncs across nearby tabs. Connect Supabase for multi-device sync.',
   'home.feature.ocr.title': 'Receipt scanning (OCR)',
   'home.feature.ocr.body': 'Snap a photo of a restaurant or store receipt — the app automatically detects the amount and line items.',

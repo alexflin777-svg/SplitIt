@@ -201,7 +201,7 @@ export default function HomePage() {
 
             <Link
               href="/auth?mode=login"
-              className="w-full py-3 rounded-xl border border-white/20 bg-blue-800/80 text-white text-sm font-bold text-center mt-3 shadow-xs transition-all hover:bg-blue-800"
+              className="block w-full py-3 rounded-xl border border-white/20 bg-blue-800/80 text-white text-sm font-bold text-center mt-3 shadow-xs transition-all hover:bg-blue-800"
             >
               {t('home.signIn')}
             </Link>

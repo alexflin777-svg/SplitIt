@@ -89,7 +89,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': 'Hızlı demo girişini dene',
   'home.featuresTitle': "SplitIt'in temel özellikleri:",
   'home.feature.sync.title': 'Gerçek zamanlı senkronizasyon',
-  'home.feature.sync.bodyMultiUser': 'Hesabınızla iki veya daha fazla cihazdan giriş yapın — değişiklikler Supabase Realtime üzerinden gelir.',
+  'home.feature.sync.bodyMultiUser': 'Hesabınızla iki veya daha fazla cihazdan giriş yapın — değişiklikler anında gelir.',
   'home.feature.sync.bodyLocal': 'Yerel mod, yakındaki sekmeleri senkronize eder. Birden fazla cihaz için Supabase bağlayın.',
   'home.feature.ocr.title': 'Fiş tarama (OCR)',
   'home.feature.ocr.body': 'Restoran veya mağaza fişinin fotoğrafını çekin — uygulama tutarı ve kalemleri otomatik olarak tanır.',

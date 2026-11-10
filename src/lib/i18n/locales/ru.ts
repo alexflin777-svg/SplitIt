@@ -89,7 +89,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': 'Попробовать быстрый демо-вход',
   'home.featuresTitle': 'Основные возможности SplitIt:',
   'home.feature.sync.title': 'Синхронизация в реальном времени',
-  'home.feature.sync.bodyMultiUser': 'Заходите с двух или более устройств под своим аккаунтом — изменения приходят через Supabase Realtime.',
+  'home.feature.sync.bodyMultiUser': 'Заходите с двух или более устройств под своим аккаунтом — изменения приходят сразу.',
   'home.feature.sync.bodyLocal': 'Локальный режим синхронизирует соседние вкладки. Для нескольких устройств подключите Supabase.',
   'home.feature.ocr.title': 'Сканирование чеков по фото (OCR)',
   'home.feature.ocr.body': 'Сфотографируйте чек из ресторана или магазина — нейросеть автоматически распознает сумму и позиции.',

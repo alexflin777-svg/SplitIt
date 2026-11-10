@@ -89,7 +89,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': '试用快速演示登录',
   'home.featuresTitle': 'SplitIt 核心功能：',
   'home.feature.sync.title': '实时同步',
-  'home.feature.sync.bodyMultiUser': '使用账户从两台或更多设备登录 — 变更通过 Supabase Realtime 实时同步。',
+  'home.feature.sync.bodyMultiUser': '使用账户从两台或更多设备登录 — 变更会立即同步。',
   'home.feature.sync.bodyLocal': '本地模式可在邻近标签页间同步。连接 Supabase 以支持多设备同步。',
   'home.feature.ocr.title': '票据扫描识别（OCR）',
   'home.feature.ocr.body': '拍摄餐厅或商店小票 — 应用会自动识别金额和明细项目。',

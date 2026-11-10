@@ -89,7 +89,7 @@ export const messages: Record<string, string> = {
   'home.demoLogin': 'Probar acceso de demostración',
   'home.featuresTitle': 'Principales funciones de SplitIt:',
   'home.feature.sync.title': 'Sincronización en tiempo real',
-  'home.feature.sync.bodyMultiUser': 'Inicia sesión desde dos o más dispositivos con tu cuenta — los cambios llegan mediante Supabase Realtime.',
+  'home.feature.sync.bodyMultiUser': 'Inicia sesión desde dos o más dispositivos con tu cuenta — los cambios llegan al instante.',
   'home.feature.sync.bodyLocal': 'El modo local sincroniza pestañas cercanas. Conecta Supabase para varios dispositivos.',
   'home.feature.ocr.title': 'Escaneo de recibos (OCR)',
   'home.feature.ocr.body': 'Fotografía un recibo de restaurante o tienda — la app detecta automáticamente el importe y los artículos.',
