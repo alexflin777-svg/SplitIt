@@ -29,7 +29,8 @@ function ProjectDetail() {
   const id = params.get('id');
   const accepted = params.get('accepted') === '1';
   const { t, locale } = useI18n();
-  const { project, error, loading, reload } = useProject(id);
+  // Снимок — только здесь, на просмотре; итог и отметки переводов читают свежее.
+  const { project, error, loading, reload } = useProject(id, null, { snapshot: true });
 
   if (!id) {
     return (

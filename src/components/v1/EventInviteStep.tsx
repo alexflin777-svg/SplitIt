@@ -13,7 +13,7 @@ import { createInvite, disableInvite, getActiveInvite, isMultiUser } from '@/lib
 import type { Group } from '@/lib/store';
 import { absoluteInviteLink } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { Avatar, BlockHead, Header, MainButton, PillLink, Plaque, Row, Skeleton, TopNav, V1Screen } from './ui';
+import { Art, Avatar, BlockHead, Header, MainButton, PillLink, Plaque, Row, Skeleton, TopNav, V1Screen } from './ui';
 import QrTile from './QrTile';
 
 export default function EventInviteStep({ group, isOwner, onDone }: { group: Group; isOwner: boolean; onDone: () => void }) {
@@ -66,7 +66,7 @@ export default function EventInviteStep({ group, isOwner, onDone }: { group: Gro
       <div className="relative overflow-hidden isolate rounded-tile bg-v1-trip px-5 py-4 mb-2">
         <h2 className="text-[24px] leading-tight font-extrabold tracking-[-0.02em] relative z-[1]">«{group.name}»</h2>
         <p className="mt-1 text-[15px] text-v1-ink2 relative z-[1]">{t('eventInvite.tileBody')}</p>
-        <img src="/v1/trip.png" alt="" className="absolute w-[70px] right-3 -bottom-3 rotate-[8deg] pointer-events-none" />
+        <Art name="trip" className="absolute w-[70px] right-3 -bottom-3 rotate-[8deg] pointer-events-none" />
       </div>
       {error && (
         <Plaque kind="err" testId="event-invite-error">

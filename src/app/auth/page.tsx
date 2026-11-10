@@ -389,6 +389,8 @@ function AuthForm() {
               <input
                 type="password"
                 required
+                // Длину (от 8) проверяет validatePassword при регистрации и смене; вход — как раньше, без проверки длины.
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

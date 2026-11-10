@@ -9,7 +9,7 @@ import { getActiveSession, signInWithGoogle, UserProfile } from '@/lib/supabase'
 import { rememberReturnPath } from '@/lib/auth-return';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { Card, MainButton, Plaque, SecondButton, Skeleton, V1Screen } from '@/components/v1/ui';
+import { Art, Card, MainButton, Plaque, SecondButton, Skeleton, V1Screen } from '@/components/v1/ui';
 
 type State =
   | { kind: 'loading' }
@@ -157,7 +157,7 @@ export default function InviteClient() {
                 ? t('invite.needAuthBody')
                 : t('invite.confirmBody', { name: profile?.full_name || profile?.email || '' })}
             </p>
-            <img src="/v1/trip.png" alt="" className="absolute w-[110px] right-1 -bottom-6 rotate-[8deg] pointer-events-none" />
+            <Art name="trip" className="absolute w-[110px] right-1 -bottom-6 rotate-[8deg] pointer-events-none" />
           </div>
           <Card className="mt-2 flex items-start gap-3 text-[15px] leading-snug">
             <Clock className="w-5 h-5 flex-none" aria-hidden="true" />

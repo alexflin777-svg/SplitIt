@@ -382,7 +382,10 @@ export type CloseFailure = 'conflict' | 'refused' | 'unknown';
 
 function translate(error: DbError, fallback?: string): string {
   const m = error.message.toLowerCase();
-  if (m.includes('fetch') || m.includes('network')) return t('errors.noServerConnection');
+  // 'timed out' / 'abort' — предел fetch-timeout.ts: та же ошибка связи с «Повторить».
+  if (m.includes('fetch') || m.includes('network') || m.includes('timed out') || m.includes('timeout') || m.includes('abort')) {
+    return t('errors.noServerConnection');
+  }
   if (error.code === '23505') return t('errors.duplicateRecord');
   if (error.code && HUMAN_CODES.has(error.code)) return error.message;
   return fallback ?? error.message;
@@ -402,6 +405,22 @@ export interface OperationInput {
   note?: string;
 }
 
+/** Колонки — те, что читают интерфейсы выше (*Row), без служебных. */
+const COLUMNS: Record<string, string> = {
+  projects: 'id,name,currency,owner_id,created_at',
+  project_members: 'id,project_id,kind,user_id,display_name,position,status',
+  project_terms: 'id,project_id,status,proposed_by,effective_from_seq,preset,contrib_enabled,remainder_method,created_at',
+  project_term_lines:
+    'project_id,terms_id,member_id,expenses_back,rate_type,rate_amount,in_remainder,share_bp,contrib_new,contrib_kind,contrib_note,debt_write_off,leaves',
+  project_term_approvals: 'project_id,terms_id,user_id,decision',
+  project_periods: 'id,project_id,seq,status,terms_id,revision,opened_at,closed_at,snapshot',
+  project_quantities: 'project_id,period_id,member_id,hours,pieces',
+  project_contribution_ledger: 'id,project_id,member_id,period_id,kind,amount',
+  project_transfers: 'id,project_id,period_id,from_member,to_member,amount,marked_by,marked_at',
+  project_operations:
+    'id,project_id,period_id,op_type,amount,currency,exchange_rate,amount_in_project_currency,member_id,refund_of,occurred_on,title,note,created_by,created_at',
+};
+
 /** Таблица → порядок строк: страницы по offset должны быть устойчивы. */
 const PROJECT_TABLES: [string, string[]][] = [
   ['project_members', ['position']],
@@ -418,18 +437,46 @@ const PROJECT_TABLES: [string, string[]][] = [
 const PAGE_SIZE = 500;
 const MAX_ROWS = 20_000;
 
-/** Все строки таблицы проекта, страницами; лимит — явная ошибка: частичные деньги хуже ошибки. */
-async function fetchProjectTable(client: SupabaseClient, table: string, order: string[], projectId: string): Promise<RemoteResult<unknown[]>> {
+/**
+ * Все строки таблицы, страницами; лимит — явная ошибка: частичные деньги хуже ошибки.
+ * projectId null — строки всех проектов, которые отдаёт RLS (сводка главной);
+ * тогда порядок начинается с project_id, иначе страницы по position и т. п. не устойчивы.
+ */
+async function fetchProjectTable(
+  client: SupabaseClient,
+  table: string,
+  order: string[],
+  projectId: string | null,
+  filter?: { column: string; values: string[] },
+): Promise<RemoteResult<unknown[]>> {
   const rows: unknown[] = [];
   for (;;) {
-    let q = client.from(table).select('*').eq('project_id', projectId);
-    for (const col of order) q = q.order(col, { ascending: true });
+    let q = client.from(table).select(COLUMNS[table]);
+    if (projectId) q = q.eq('project_id', projectId);
+    if (filter) q = q.in(filter.column, filter.values);
+    for (const col of projectId ? order : ['project_id', ...order]) q = q.order(col, { ascending: true });
     const { data, error } = await q.range(rows.length, rows.length + PAGE_SIZE - 1);
     if (error) return { data: null, error: translate(error) };
     rows.push(...(data ?? []));
     if ((data ?? []).length < PAGE_SIZE) return { data: rows, error: null };
     if (rows.length >= MAX_ROWS) return { data: null, error: 'Слишком много записей в проекте — не удалось загрузить все' };
   }
+}
+
+type ProjectTablesRaw = Record<'members' | 'terms' | 'lines' | 'approvals' | 'periods' | 'quantities' | 'ledger' | 'transfers', unknown[]>;
+
+function assemble(project: ProjectRow, raw: ProjectTablesRaw): ProjectData {
+  return {
+    project,
+    members: (raw.members as MemberRow[]).sort((a, b) => a.position - b.position),
+    terms: raw.terms as TermsRow[],
+    lines: raw.lines as TermLineRow[],
+    approvals: raw.approvals as ApprovalRow[],
+    periods: (raw.periods as PeriodRow[]).sort((a, b) => a.seq - b.seq),
+    quantities: raw.quantities as QuantityRow[],
+    ledger: (raw.ledger as LedgerRow[]).sort((a, b) => a.id - b.id),
+    transfers: raw.transfers as TransferMarkRow[],
+  };
 }
 
 export function createProjectsStore(client: SupabaseClient | null) {
@@ -440,38 +487,75 @@ export function createProjectsStore(client: SupabaseClient | null) {
     return { data: data as T, error: null };
   }
 
+  /** Один и тот же проект, запрошенный двумя экранами одновременно, читается один раз. */
+  const projectInFlight = new Map<string, Promise<RemoteResult<ProjectData>>>();
+
+  async function readProject(client: SupabaseClient, projectId: string): Promise<RemoteResult<ProjectData>> {
+    const [p, ...rest] = await Promise.all([
+      client.from('projects').select(COLUMNS.projects).eq('id', projectId).maybeSingle(),
+      ...PROJECT_TABLES.map(([table, order]) => fetchProjectTable(client, table, order, projectId)),
+    ]);
+    if (p.error) return { data: null, error: translate(p.error) };
+    const failed = rest.find((r) => r.error);
+    if (failed) return { data: null, error: failed.error };
+    // RLS отдаёт пустоту и «нет проекта», и «не участник» — неразличимо.
+    if (!p.data) return { data: null, error: t('errors.insufficientPermissions') };
+    const [members, terms, lines, approvals, periods, quantities, ledger, transfers] = rest.map((r) => r.data ?? []);
+    return { data: assemble(p.data as unknown as ProjectRow, { members, terms, lines, approvals, periods, quantities, ledger, transfers }), error: null };
+  }
+
+  async function fetchProjects(): Promise<RemoteResult<ProjectRow[]>> {
+    if (!client) return { data: null, error: t('errors.noBackend') };
+    const { data, error } = await client.from('projects').select(COLUMNS.projects).order('created_at', { ascending: false });
+    return error ? { data: null, error: translate(error) } : { data: (data ?? []) as unknown as ProjectRow[], error: null };
+  }
+
   return {
-    async fetchProjects(): Promise<RemoteResult<ProjectRow[]>> {
-      if (!client) return { data: null, error: t('errors.noBackend') };
-      const { data, error } = await client.from('projects').select('*').order('created_at', { ascending: false });
-      return error ? { data: null, error: translate(error) } : { data: (data ?? []) as ProjectRow[], error: null };
-    },
+    fetchProjects,
 
     /** Проект целиком, кроме операций; каждая таблица — всеми страницами. */
     async fetchProject(projectId: string): Promise<RemoteResult<ProjectData>> {
       if (!client) return { data: null, error: t('errors.noBackend') };
-      const [p, ...rest] = await Promise.all([
-        client.from('projects').select('*').eq('id', projectId).maybeSingle(),
-        ...PROJECT_TABLES.map(([table, order]) => fetchProjectTable(client, table, order, projectId)),
+      let p = projectInFlight.get(projectId);
+      if (!p) {
+        p = readProject(client, projectId).finally(() => projectInFlight.delete(projectId));
+        projectInFlight.set(projectId, p);
+      }
+      return p;
+    },
+
+    /**
+     * Сводка главной за два обращения к базе вместо двух на каждый проект:
+     * (1) все проекты и их таблицы, которые отдаёт RLS, — одновременно;
+     * (2) операции открытых периодов — одним запросом. Журнал отметок
+     * переводов главной не нужен и не читается.
+     */
+    async fetchHome(): Promise<RemoteResult<Array<{ data: ProjectData; openOps: OperationRow[] | null }>>> {
+      if (!client) return { data: null, error: t('errors.noBackend') };
+      const tables = PROJECT_TABLES.filter(([table]) => table !== 'project_transfers');
+      const [list, ...rest] = await Promise.all([
+        fetchProjects(),
+        ...tables.map(([table, order]) => fetchProjectTable(client, table, order, null)),
       ]);
-      if (p.error) return { data: null, error: translate(p.error) };
+      if (!list.data) return { data: null, error: list.error };
       const failed = rest.find((r) => r.error);
       if (failed) return { data: null, error: failed.error };
-      // RLS отдаёт пустоту и «нет проекта», и «не участник» — неразличимо.
-      if (!p.data) return { data: null, error: t('errors.insufficientPermissions') };
-      const [members, terms, lines, approvals, periods, quantities, ledger, transfers] = rest.map((r) => r.data ?? []);
+      const by = (rows: unknown[] | null, pid: string) => (rows ?? []).filter((r) => (r as { project_id: string }).project_id === pid);
+      const projectsData = list.data.map((p) => {
+        const [members, terms, lines, approvals, periods, quantities, ledger] = rest.map((r) => by(r.data, p.id));
+        return assemble(p, { members, terms, lines, approvals, periods, quantities, ledger, transfers: [] });
+      });
+      const openIds = projectsData.map((d) => d.periods.find((x) => x.status === 'open')?.id).filter((x): x is string => !!x);
+      const ops = openIds.length
+        ? await fetchProjectTable(client, 'project_operations', ['created_at', 'id'], null, { column: 'period_id', values: openIds })
+        : { data: [], error: null };
+      if (!ops.data) return { data: null, error: ops.error };
+      const allOps = ops.data as OperationRow[];
       return {
-        data: {
-          project: p.data as ProjectRow,
-          members: (members as MemberRow[]).sort((a, b) => a.position - b.position),
-          terms: terms as TermsRow[],
-          lines: lines as TermLineRow[],
-          approvals: approvals as ApprovalRow[],
-          periods: (periods as PeriodRow[]).sort((a, b) => a.seq - b.seq),
-          quantities: quantities as QuantityRow[],
-          ledger: (ledger as LedgerRow[]).sort((a, b) => a.id - b.id),
-          transfers: transfers as TransferMarkRow[],
-        },
+        data: projectsData.map((d) => {
+          const open = d.periods.find((x) => x.status === 'open');
+          return { data: d, openOps: open ? allOps.filter((o) => o.period_id === open.id) : null };
+        }),
         error: null,
       };
     },
@@ -483,14 +567,14 @@ export function createProjectsStore(client: SupabaseClient | null) {
         async (offset, limit) => {
           const { data, error } = await client
             .from('project_operations')
-            .select('*')
+            .select(COLUMNS.project_operations)
             .eq('project_id', projectId)
             .eq('period_id', periodId)
             .order('created_at', { ascending: true })
             .order('id', { ascending: true })
             .range(offset, offset + limit - 1);
           if (error) return { data: null, error: translate(error) };
-          const items = (data ?? []) as OperationRow[];
+          const items = (data ?? []) as unknown as OperationRow[];
           return { data: { items, hasMore: items.length === limit }, error: null };
         },
         { pageSize: PAGE_SIZE },

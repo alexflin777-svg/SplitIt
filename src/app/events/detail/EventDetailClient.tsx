@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { computeEventSummary } from '@/lib/event-summary';
 import EventInviteStep from '@/components/v1/EventInviteStep';
-import { Avatar, BlockHead, Header, MainButton, PillLink, Plaque, TopNav, V1Screen, avatarBg, cx } from '@/components/v1/ui';
+import { Art, Avatar, BlockHead, Header, MainButton, PillLink, Plaque, TopNav, V1Screen, avatarBg, cx } from '@/components/v1/ui';
 import { getActiveSession, getSavedFriends, getSavedGroups, saveGroups, UserProfile } from '@/lib/supabase';
 import {
   renameGroup,
@@ -90,7 +90,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
   // Сколько расходов показывать в ленте. Это только отрисовка: в group.expenses
   // всегда все расходы, по ним считаются итог и категории (G2).
   const [expenseLimit, setExpenseLimit] = useState(DEFAULT_EXPENSE_PAGE_SIZE);
-  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId);
+  const { group: cachedGroup, error: cachedError, isLoading, refresh: refreshGroup } = useGroup(groupId, { snapshot: true });
   const [group, setGroup] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'not-found'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -476,7 +476,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
               {t('event.v1.settleLeft', { count: transfersCount })}
             </p>
             <p className="mt-2 max-w-[14em] text-base text-v1-ink2 relative z-[1]">{t('event.v1.settleLeftBody')}</p>
-            <img src="/v1/receipts.png" alt="" className="absolute w-[112px] -right-3 -bottom-6 pointer-events-none" />
+            <Art name="receipts" className="absolute w-[112px] -right-3 -bottom-6 pointer-events-none" />
           </div>
         )}
         <EventSummary group={group} currentUserId={userProfile?.id} compact />
@@ -598,7 +598,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
           )}
           <p className="mt-2 max-w-[15em] text-[15px] text-v1-ink2 relative z-[1]">{t('eventDetail.completedNote')}</p>
           {group.category === 'trip' && (
-            <img src="/v1/trip.png" alt="" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
+            <Art name="trip" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
           )}
         </div>
       ) : (
@@ -626,7 +626,7 @@ export default function EventDetailClient({ groupId }: { groupId: string }) {
                   })}
             </p>
             {group.category === 'trip' && (
-              <img src="/v1/trip.png" alt="" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
+              <Art name="trip" className="absolute w-[96px] -right-2 -bottom-4 pointer-events-none" />
             )}
           </div>
         )

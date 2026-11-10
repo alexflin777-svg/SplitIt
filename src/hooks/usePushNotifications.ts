@@ -25,7 +25,8 @@ export function usePushNotifications() {
         PushNotifications.addListener('registration', async (token) => {
           const session = await getActiveSession();
           if (session && supabase) {
-            console.log(`Push token for user ${session.id}: ${token.value}`);
+            // Сам токен и id в лог не пишутся: логи устройства читают сторонние приложения и отчёты о сбоях.
+            console.info(`[push] токен получен (${token.value.length} символов)`);
             // TODO: supabase.from('push_tokens').upsert(...)
           }
         });

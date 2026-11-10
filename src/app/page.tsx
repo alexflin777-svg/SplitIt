@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getActiveSession, UserProfile, saveLocalSession } from '@/lib/supabase';
+import { getActiveSession, getLocalSession, UserProfile, saveLocalSession } from '@/lib/supabase';
 import { isMultiUser, joinWaitlist } from '@/lib/store';
 import { useGroups } from '@/lib/data-hooks';
 import { useI18n } from '@/lib/i18n/provider';
-import { OnboardingTour } from '@/components/OnboardingTour';
-import { LifeSituations } from '@/components/LifeSituations';
-import QuickProfileEditor from '@/components/QuickProfileEditor';
+import dynamic from 'next/dynamic';
+// Показываются не на каждом открытии (новичку, гостю, по нажатию) — отдельными кусками, не в стартовом JS.
+const OnboardingTour = dynamic(() => import('@/components/OnboardingTour').then((m) => m.OnboardingTour), { ssr: false });
+const LifeSituations = dynamic(() => import('@/components/LifeSituations').then((m) => m.LifeSituations), { ssr: false });
+const QuickProfileEditor = dynamic(() => import('@/components/QuickProfileEditor'), { ssr: false });
 import { isPhotoAvatar } from '@/lib/avatar';
 import HomeFeed from '@/components/v1/HomeFeed';
 import {
@@ -74,12 +76,17 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    // Check active user session
+    // Лента — сразу по сохранённому профилю; проверка в Auth идёт следом и при
+    // отказе возвращает на экран входа. События SWR читает сам при монтировании
+    // и при возврате на вкладку — второй запрос отсюда был дублем.
+    const cached = getLocalSession();
+    if (cached) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage доступен только после гидратации; пересмотр вместе с P1-6 до 2026-11-15
+      setUserProfile(cached);
+      setIsLoaded(true);
+    }
     getActiveSession().then((user) => {
       setUserProfile(user);
-      if (user) {
-        void refreshGroups();
-      }
       setIsLoaded(true);
     });
 
@@ -95,7 +102,6 @@ export default function HomePage() {
     // конкретного события живёт на его экране: здесь она дала бы поток
     // событий по всем группам сразу.
     const onFocus = () => {
-      void refreshGroups();
       getActiveSession().then((user) => setUserProfile(user));
     };
     window.addEventListener('focus', onFocus);

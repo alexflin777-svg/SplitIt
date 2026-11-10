@@ -20,6 +20,8 @@ const inter = Inter({
   weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
   variable: '--font-inter',
+  // Основной шрифт экранов V1 — Onest (globals.css): предзагружается он, Inter — по требованию.
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -56,6 +58,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`light ${inter.variable}`}>
+      <head>
+        <link rel="preload" href="/fonts/onest/onest-cyrillic.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      </head>
       <body className="min-h-screen flex flex-col bg-[#f8f9ff] dark:bg-[#0b0f19] text-[#0b1c30] dark:text-[#f8fafc] font-sans antialiased">
         <I18nProvider>
           <PushInit />

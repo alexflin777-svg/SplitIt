@@ -1,4 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://telegram.org https://cdn.jsdelivr.net blob:; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' https://api.splitit-apps.com wss://api.splitit-apps.com https://*.supabase.co wss://*.supabase.co https://open.er-api.com https://www.cbr-xml-daily.ru https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; img-src 'self' data: blob: https://telegram.org https://t.me; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src https://oauth.telegram.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+        }
+      ]
+    },
+    {
+      "source": "/((?!events/expense/new).*)",
+      "headers": [{ "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }]
+    },
+    {
+      "source": "/events/expense/new(.*)",
+      "headers": [{ "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" }]
+    }
+  ]
 }

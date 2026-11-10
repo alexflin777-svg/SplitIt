@@ -5,6 +5,8 @@ import { APP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured, warnIfM
 import { createCredential, verifyCredential, validatePassword, StoredCredential } from './credentials';
 import { t } from './i18n/t';
 import { AUTH_STORAGE_KEY, migrateAuthStorage } from './auth-storage';
+import { fetchWithTimeout } from './fetch-timeout';
+import { clearSnaps } from './snapshot';
 
 /**
  * Кастомная схема для deep-link обратно в приложение после OAuth на нативных
@@ -24,6 +26,7 @@ if (isSupabaseConfigured()) migrateAuthStorage();
 export const supabase: SupabaseClient | null = isSupabaseConfigured()
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce', storageKey: AUTH_STORAGE_KEY },
+      global: { fetch: fetchWithTimeout((input, init) => fetch(input, init)) },
     })
   : null;
 
@@ -260,6 +263,8 @@ export function registerUserProfile(profile: UserProfile, credential?: StoredCre
 
 export function saveLocalSession(user: UserProfile): string | null {
   if (typeof window === 'undefined') return null;
+  // Другой аккаунт на устройстве не видит снимков прежнего ни на миг.
+  if (getLocalSession()?.id !== user.id) clearSnaps();
   const error = writeLocal(LOCAL_SESSION_KEY, user);
   if (error) return error;
   registerUserProfile(user);
@@ -276,6 +281,7 @@ export function clearLocalSession() {
   if (typeof window !== 'undefined') {
     const hadSession = localStorage.getItem(LOCAL_SESSION_KEY) !== null;
     localStorage.removeItem(LOCAL_SESSION_KEY);
+    clearSnaps();
     if (hadSession) window.dispatchEvent(new Event('splitit_profile_changed'));
   }
 }
@@ -567,8 +573,17 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
   return { error: null };
 }
 
-export async function getActiveSession(): Promise<UserProfile | null> {
-  if (!supabase) return getLocalSession();
+let sessionInFlight: Promise<UserProfile | null> | null = null;
+
+/** Одновременные вызовы (главная, фокус, экраны) делят один запрос к Auth и profiles. */
+export function getActiveSession(): Promise<UserProfile | null> {
+  if (!supabase) return Promise.resolve(getLocalSession());
+  return (sessionInFlight ??= loadActiveSession(supabase).finally(() => {
+    sessionInFlight = null;
+  }));
+}
+
+async function loadActiveSession(supabase: SupabaseClient): Promise<UserProfile | null> {
 
   // В сетевом режиме источником истины служит Supabase Auth, а не произвольная
   // JSON-строка в localStorage. Это также очищает протухшую локальную сессию.

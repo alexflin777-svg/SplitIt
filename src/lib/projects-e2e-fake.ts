@@ -11,6 +11,8 @@
  *   splitit_fake_projects_actor — {"id","name"}: от чьего имени вызовы (по умолчанию — локальная сессия);
  *   splitit_fake_projects_fail  — {"fn","mode"}: один сбой RPC; mode 'error' — отказ базы,
  *                                 'lost' — база выполнила, ответ потерян (обрыв связи).
+ *   splitit_fake_latency_ms     — задержка «сети» на каждый запрос (замер v1.1/perf/measure.mjs);
+ *                                 счётчик запросов и одновременности — window.__splititNet.
  */
 
 import { calculatePeriod, closePeriodDebt } from './project-calc';
@@ -21,6 +23,20 @@ import { getLocalSession } from './supabase';
 const DB_KEY = 'splitit_fake_projects';
 const ACTOR_KEY = 'splitit_fake_projects_actor';
 const FAIL_KEY = 'splitit_fake_projects_fail';
+const LATENCY_KEY = 'splitit_fake_latency_ms';
+
+/** Один «сетевой» запрос: считается всегда, задерживается только с флагом замера. */
+export async function fakeLatency(label: string): Promise<void> {
+  const w = window as unknown as { __splititNet?: { total: number; inflight: number; maxInflight: number; log: [string, number][] } };
+  const n = (w.__splititNet ??= { total: 0, inflight: 0, maxInflight: 0, log: [] });
+  n.total++;
+  n.inflight++;
+  n.maxInflight = Math.max(n.maxInflight, n.inflight);
+  n.log.push([label, Math.round(performance.now())]);
+  const ms = Number(window.localStorage.getItem(LATENCY_KEY) || 0);
+  if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+  n.inflight--;
+}
 
 type Row = Record<string, any>;
 type Db = Record<string, Row[]>;
@@ -384,6 +400,7 @@ function call(db: Db, fn: string, a: Row, uid: string | null, name: string): unk
 export function createFakeProjectsClient() {
   return {
     async rpc(fn: string, args: Row) {
+      await fakeLatency(`rpc:${fn}`);
       const failRaw = window.localStorage.getItem(FAIL_KEY);
       const fail = failRaw ? (JSON.parse(failRaw) as { fn: string; mode: 'error' | 'lost' }) : null;
       const failing = fail?.fn === fn;
@@ -410,7 +427,7 @@ export function createFakeProjectsClient() {
         // RLS: только проекты, где вызывающий — участник.
         const mine = new Set(db.project_members.filter((m) => m.user_id === uid).map((m) => m.project_id));
         let rows = (db[table] ?? []).filter((r) => mine.has(table === 'projects' ? r.id : r.project_id));
-        rows = rows.filter((r) => q.filters.every(([c, v]) => r[c] === v));
+        rows = rows.filter((r) => q.filters.every(([c, v]) => (Array.isArray(v) ? v.includes(r[c]) : r[c] === v)));
         if (table === 'projects') rows = [...rows].reverse();
         if (q.range) rows = rows.slice(q.range[0], q.range[1] + 1);
         return { data: q.single ? rows[0] ?? null : rows, error: null };
@@ -418,10 +435,11 @@ export function createFakeProjectsClient() {
       const b = {
         select: () => b,
         eq: (c: string, v: unknown) => (q.filters.push([c, v]), b),
+        in: (c: string, vs: unknown[]) => (q.filters.push([c, vs]), b),
         order: () => b,
         range: (from: number, to: number) => ((q.range = [from, to]), b),
         maybeSingle: () => ((q.single = true), b),
-        then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(exec()).then(res, rej),
+        then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => fakeLatency(table).then(exec).then(res, rej),
       };
       return b;
     },

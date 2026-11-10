@@ -7,7 +7,7 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, RotateCw } from 'lucide-react';
 import type { Group } from '@/lib/store';
 import { computeEventSummary } from '@/lib/event-summary';
@@ -15,10 +15,13 @@ import { convertCurrency, formatMoney } from '@/lib/currency';
 import { buildPeriodInput } from '@/lib/projects-store';
 import { calculatePeriod } from '@/lib/project-calc';
 import { consentState, monthName } from '@/lib/project-ui';
-import { currentUserId, projects } from '@/lib/projects-client';
+import { currentUserId, projects, snapshotUserId } from '@/lib/projects-client';
+import { readSnap, writeSnap } from '@/lib/snapshot';
+import { rememberOpenPeriod } from './useProject';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { BlockHead, MainButton, NumCard, Segment, Skeleton, cx } from './ui';
+import { Art, BlockHead, MainButton, NumCard, Segment, Skeleton, cx } from './ui';
+import type { ArtName } from './ui';
 
 type Filter = 'all' | 'events' | 'projects';
 
@@ -26,7 +29,8 @@ export interface ProjectTile {
   id: string;
   name: string;
   currency: string;
-  month: string;
+  /** Начало открытого периода; месяц пишется при отрисовке — смена языка не перечитывает базу. */
+  openedAt: string | null;
   members: number;
   /** Моя цифра открытого периода, копейки: плюс — мне переведут, минус — я отдаю. */
   mine: number | null;
@@ -35,73 +39,71 @@ export interface ProjectTile {
   waiting: boolean;
 }
 
-const TILE: Record<string, { bg: string; img: string | null }> = {
-  trip: { bg: 'bg-v1-trip', img: '/v1/trip.png' },
-  party: { bg: 'bg-[#FAD3E1]', img: '/v1/cake.png' },
+const TILE: Record<string, { bg: string; img: ArtName | null }> = {
+  trip: { bg: 'bg-v1-trip', img: 'trip' },
+  party: { bg: 'bg-[#FAD3E1]', img: 'cake' },
   restaurant: { bg: 'bg-[#FAD3E1]', img: null },
-  home: { bg: 'bg-v1-sand', img: '/v1/keys.png' },
-  other: { bg: 'bg-[#DAE8DF]', img: '/v1/dacha.png' },
+  home: { bg: 'bg-v1-sand', img: 'keys' },
+  other: { bg: 'bg-[#DAE8DF]', img: 'dacha' },
 };
+/** Первые четыре плитки — первый экран: их картинки не откладываются. */
+const FIRST_SCREEN = 4;
 
 /** Без бэкенда проектов просто нет — это не ошибка главной. */
 const NO_BACKEND = /бэкенд|backend/i;
 
-/** Плитки проектов: моя цифра открытого периода и согласие. Ошибка — честно, без нулей. */
-export function useProjectTiles(locale: string) {
-  const [tiles, setTiles] = useState<ProjectTile[] | null>(null);
+const TILES_SNAP = 'home-project-tiles';
+
+/**
+ * Плитки проектов: моя цифра открытого периода и согласие. Ошибка — честно, без нулей.
+ * Сначала — снимок прошлого ответа (если есть), затем свежая сводка за два обращения к базе.
+ */
+export function useProjectTiles() {
+  const [tiles, setTiles] = useState<ProjectTile[] | null>(() => readSnap<ProjectTile[]>(snapshotUserId(), TILES_SNAP));
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const uid = await currentUserId();
-      const list = await projects.fetchProjects();
-      if (!list.data) {
+      const [uid, home] = await Promise.all([currentUserId(), projects.fetchHome()]);
+      if (!home.data) {
         if (alive) {
-          setTiles([]);
-          setError(list.error && !NO_BACKEND.test(list.error) ? list.error : null);
+          // Сбой сети при снимке на экране: снимок остаётся, сверху — ошибка и «Повторить».
+          setTiles((prev) => prev ?? []);
+          setError(home.error && !NO_BACKEND.test(home.error) ? home.error : null);
         }
         return;
       }
-      const out: ProjectTile[] = [];
-      let failed: string | null = null;
-      for (const p of list.data) {
-        const d = await projects.fetchProject(p.id);
-        if (!d.data) {
-          failed = d.error;
-          continue;
-        }
-        const open = d.data.periods.find((x) => x.status === 'open');
-        const ops = open ? await projects.fetchPeriodOperations(p.id, open.id) : null;
-        const me = d.data.members.find((m) => m.user_id === uid);
-        let mine: number | null = null;
-        if (open && ops?.data && me) {
-          mine = calculatePeriod(buildPeriodInput(d.data, open.id, ops.data)).perPerson[me.id]?.transfer ?? 0;
-        } else if (ops?.error) failed = ops.error;
-        const c = consentState(d.data, uid);
-        const users = d.data.members.filter((m) => m.kind === 'user' && m.status === 'active').length;
-        out.push({
-          id: p.id,
-          name: p.name,
-          currency: p.currency,
-          month: open ? monthName(open.opened_at, locale) : '',
-          members: d.data.members.filter((m) => m.status === 'active').length,
+      const out: ProjectTile[] = home.data.map(({ data: d, openOps }) => {
+        const open = d.periods.find((x) => x.status === 'open');
+        if (open) rememberOpenPeriod(d.project.id, open.id);
+        const me = d.members.find((m) => m.user_id === uid);
+        const mine = open && openOps && me ? calculatePeriod(buildPeriodInput(d, open.id, openOps)).perPerson[me.id]?.transfer ?? 0 : null;
+        const c = consentState(d, uid);
+        const users = d.members.filter((m) => m.kind === 'user' && m.status === 'active').length;
+        return {
+          id: d.project.id,
+          name: d.project.name,
+          currency: d.project.currency,
+          openedAt: open?.opened_at ?? null,
+          members: d.members.filter((m) => m.status === 'active').length,
           mine,
           accepted: users - c.waiting.length,
           users,
           waiting: !!c.pending && c.waiting.length > 0,
-        });
-      }
+        };
+      });
+      writeSnap(uid, TILES_SNAP, out);
       if (alive) {
         setTiles(out);
-        setError(failed);
+        setError(null);
       }
     })();
     return () => {
       alive = false;
     };
-  }, [locale, nonce]);
+  }, [nonce]);
 
   return { tiles, error, retry: () => setNonce((n) => n + 1) };
 }
@@ -123,13 +125,18 @@ export default function HomeFeed({
 }) {
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<Filter>('all');
-  const { tiles, error: projectError, retry } = useProjectTiles(locale);
+  const { tiles, error: projectError, retry } = useProjectTiles();
 
-  const events = groups.map((g) => {
-    const s = computeEventSummary(g);
-    const mine = s.balances[userId]?.netAmount ?? 0;
-    return { g, mine: Math.abs(mine) < 0.005 ? 0 : mine, total: s.total };
-  });
+  // Пересчёт балансов — только при новых данных, не на каждое переключение сегмента.
+  const events = useMemo(
+    () =>
+      groups.map((g) => {
+        const s = computeEventSummary(g);
+        const mine = s.balances[userId]?.netAmount ?? 0;
+        return { g, mine: Math.abs(mine) < 0.005 ? 0 : mine, total: s.total };
+      }),
+    [groups, userId],
+  );
   const toPref = (amount: number, cur: string) => convertCurrency(amount, cur || 'RUB', currency).convertedAmount;
 
   let owedToMe = 0;
@@ -227,7 +234,9 @@ export default function HomeFeed({
           <div className="grid grid-cols-2 gap-2">
             {showProjects && tiles === null && <Skeleton rows={1} tall />}
             {showProjects &&
-              (tiles ?? []).map((p) => (
+              (tiles ?? []).map((p, i) => {
+                const month = p.openedAt ? monthName(p.openedAt, locale) : '';
+                return (
                 <Link
                   key={p.id}
                   href={routes.projectDetail(p.id)}
@@ -246,7 +255,7 @@ export default function HomeFeed({
                   ) : (
                     <>
                       <span className="mt-2 text-sm font-semibold text-v1-ink2">
-                        {(p.mine ?? 0) < 0 ? t('home.v1.projectYouGive', { month: p.month }) : t('home.v1.projectYouGet', { month: p.month })}
+                        {(p.mine ?? 0) < 0 ? t('home.v1.projectYouGive', { month }) : t('home.v1.projectYouGet', { month })}
                       </span>
                       <span className="mt-0.5 text-[22px] leading-none font-extrabold whitespace-nowrap">
                         {p.mine === null ? '—' : formatMoney(Math.abs(p.mine) / 100, p.currency)}
@@ -254,18 +263,20 @@ export default function HomeFeed({
                     </>
                   )}
                   <span className="mt-1 text-sm leading-snug text-v1-ink2 relative z-[1]">
-                    {t('home.v1.projectMeta', { month: p.month })}
+                    {t('home.v1.projectMeta', { month })}
                     <br />
                     {t('home.v1.people', { count: p.members })}
                   </span>
                   {p.waiting && (
                     <span className="absolute z-[1] left-3.5 bottom-3.5 px-3 py-1.5 rounded-full bg-v1-card text-sm font-bold">{t('home.v1.pillWaiting')}</span>
                   )}
-                  <img src="/v1/receipts.png" alt="" className="absolute w-[84px] -right-2.5 -bottom-3 pointer-events-none" />
+                  <Art name="receipts" eager={i < FIRST_SCREEN} className="absolute w-[84px] -right-2.5 -bottom-3 pointer-events-none" />
                 </Link>
-              ))}
+                );
+              })}
             {showEvents &&
-              events.map(({ g, mine, total }) => {
+              events.map(({ g, mine, total }, i) => {
+                const shown = (showProjects ? projectCount : 0) + i;
                 const tile = TILE[g.category] ?? TILE.other;
                 const closed = g.status === 'completed';
                 return (
@@ -295,7 +306,9 @@ export default function HomeFeed({
                     >
                       {closed ? t('home.v1.pillClosed') : mine !== 0 ? t('home.v1.pillDebts') : t('home.v1.pillActive')}
                     </span>
-                    {tile.img && <img src={tile.img} alt="" className="absolute w-[84px] -right-2.5 -bottom-3 pointer-events-none" />}
+                    {tile.img && (
+                      <Art name={tile.img} eager={shown < FIRST_SCREEN} className="absolute w-[84px] -right-2.5 -bottom-3 pointer-events-none" />
+                    )}
                   </Link>
                 );
               })}
@@ -321,25 +334,25 @@ export default function HomeFeed({
 function EmptyHome() {
   const { t } = useI18n();
   const tpls = [
-    { label: t('home.v1.tplTrip'), img: '/v1/trip.png', bg: 'bg-v1-trip', href: routes.eventNew() },
-    { label: t('home.v1.tplParty'), img: '/v1/cake.png', bg: 'bg-[#FAD3E1]', href: routes.eventNew() },
-    { label: t('home.v1.tplDacha'), img: '/v1/dacha.png', bg: 'bg-[#DAE8DF]', href: routes.eventNew() },
-    { label: t('home.v1.tplFlat'), img: '/v1/keys.png', bg: 'bg-v1-sand', href: routes.eventNew() },
-    { label: t('home.v1.tplProject'), img: '/v1/receipts.png', bg: 'bg-v1-lav', href: routes.projectNew() },
+    { label: t('home.v1.tplTrip'), img: 'trip' as const, bg: 'bg-v1-trip', href: routes.eventNew() },
+    { label: t('home.v1.tplParty'), img: 'cake' as const, bg: 'bg-[#FAD3E1]', href: routes.eventNew() },
+    { label: t('home.v1.tplDacha'), img: 'dacha' as const, bg: 'bg-[#DAE8DF]', href: routes.eventNew() },
+    { label: t('home.v1.tplFlat'), img: 'keys' as const, bg: 'bg-v1-sand', href: routes.eventNew() },
+    { label: t('home.v1.tplProject'), img: 'receipts' as const, bg: 'bg-v1-lav', href: routes.projectNew() },
   ];
   return (
     <>
       <div className="relative overflow-hidden isolate rounded-tile px-[22px] pt-6 pb-[100px] min-h-[270px] bg-v1-trip">
         <h2 className="text-[28px] leading-[1.08] font-extrabold tracking-[-0.02em]">{t('home.v1.emptyTitle')}</h2>
         <p className="mt-2.5 max-w-[18.5em] text-base text-v1-ink2 relative z-[1]">{t('home.v1.emptyBody')}</p>
-        <img src="/v1/receipts.png" alt="" className="absolute w-[190px] -right-5 -bottom-8 -rotate-[4deg] pointer-events-none" />
+        <Art name="receipts" eager className="absolute w-[190px] -right-5 -bottom-8 -rotate-[4deg] pointer-events-none" />
       </div>
       <BlockHead title={t('home.v1.startWith')} />
       <div className="grid grid-cols-5 gap-1">
         {tpls.map((x) => (
           <Link key={x.label} href={x.href} className="flex flex-col items-center gap-2 font-semibold text-[13px]">
             <span className={cx('w-16 h-16 rounded-[20px] grid place-items-center', x.bg)}>
-              <img src={x.img} alt="" className="w-12 h-12 object-contain" />
+              <Art name={x.img} eager className="w-12 h-12 object-contain" />
             </span>
             {x.label}
           </Link>

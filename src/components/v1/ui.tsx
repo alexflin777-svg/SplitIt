@@ -17,6 +17,25 @@ export function cx(...c: Array<string | false | null | undefined>): string {
   return c.filter(Boolean).join(' ');
 }
 
+/** Иллюстрации public/v1: WebP 384 px по ширине (2× самой крупной плитки); размеры — от пропорций файла. */
+const ART = { cake: 383, dacha: 272, keys: 336, receipts: 274, trip: 498 } as const;
+export type ArtName = keyof typeof ART;
+
+/** Декоративная картинка: без alt-текста, не задерживает первый кадр; eager — только на первом экране главной. */
+export function Art({ name, className, eager = false }: { name: ArtName; className?: string; eager?: boolean }) {
+  return (
+    <img
+      src={`/v1/${name}.webp`}
+      alt=""
+      width={384}
+      height={ART[name]}
+      loading={eager ? undefined : 'lazy'}
+      decoding="async"
+      className={className}
+    />
+  );
+}
+
 const AVATAR_BG = ['bg-v1-trip', 'bg-[#DAE8DF]', 'bg-[#FAD3E1]', 'bg-v1-sand', 'bg-v1-minus', 'bg-v1-lav'];
 
 /** Пастель на человека по порядку в проекте/событии. */

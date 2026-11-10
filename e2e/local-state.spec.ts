@@ -56,7 +56,7 @@ test.describe('Профиль', () => {
   test('показывает версию приложения', async ({ page }) => {
     await seed(page);
     await page.goto('/profile');
-    await expect(page.getByText('Версия 1.1.0', { exact: true })).toBeVisible();
+    await expect(page.getByText('Версия 1.1.1', { exact: true })).toBeVisible();
   });
 });
 

@@ -11,7 +11,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { avatarGlyph, isPhotoAvatar } from '../src/lib/avatar.ts';
-import { translateWith } from '../src/lib/i18n/t.ts';
+// LOADED/loadLocale — через t.ts: тот же экземпляр модуля, что у translateWith.
+import { LOADED, loadLocale, translateWith } from '../src/lib/i18n/t.ts';
 import { formatNativeVersion, getNativeAppVersion } from '../src/lib/app-updater.ts';
 
 describe('Версия в профиле', () => {
@@ -69,6 +70,13 @@ describe('avatarGlyph: только короткий значок, никогд�
 
 describe('translateWith: множественное число по правилам языка', () => {
   const ru = (count) => translateWith('ru', 'eventDetail.membersCountShort', { count });
+
+  test('на старте только ru и en; остальной язык догружается, до загрузки — английский', async () => {
+    assert.deepEqual(Object.keys(LOADED).sort(), ['en', 'ru']);
+    assert.equal(translateWith('es', 'eventDetail.membersCountShort', { count: 2 }), '2 members');
+    await Promise.all([loadLocale('es'), loadLocale('ja')]);
+    assert.equal(translateWith('es', 'eventDetail.membersCountShort', { count: 2 }), '2 miembros');
+  });
 
   test('русский: участник / участника / участников', () => {
     assert.equal(ru(1), '1 участник');

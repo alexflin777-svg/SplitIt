@@ -15,6 +15,18 @@ import {
   SUPPORTED_LOCALES,
 } from './config';
 import { translateWith } from './t';
+import { loadLocale } from './loaded';
+
+/** Язык включается, когда словарь загружен; сбой загрузки — текст на запасном языке, не пустота. */
+function whenLoaded(locale: Locale, apply: (l: Locale) => void) {
+  loadLocale(locale).then(
+    () => apply(locale),
+    (e) => {
+      console.warn('[SplitIT] словарь не загрузился', locale, e);
+      apply(locale);
+    },
+  );
+}
 
 const STORAGE_KEY = 'splitit_locale';
 
@@ -47,32 +59,30 @@ function readStoredLocale(): Locale | null {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
+  // До эффекта — DEFAULT_LOCALE: разметка сервера и клиента совпадает (экспорт статический).
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const stored = readStoredLocale();
     if (stored) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- P1-6 (выбор локали после гидратации; перевод на useSyncExternalStore меняет момент смены языка); пересмотр до 2026-11-15
-      setLocaleState(stored);
+      whenLoaded(stored, setLocaleState);
     } else {
       // First launch, no explicit choice saved yet: use the device/browser
       // language. This is the "installs with device language by default"
       // requirement — it only applies once, before the user ever picks a
       // language themselves.
       const deviceLocale = detectDeviceLocale();
-      setLocaleState(deviceLocale);
+      whenLoaded(deviceLocale, setLocaleState);
       try {
         window.localStorage.setItem(STORAGE_KEY, deviceLocale);
       } catch {
         // Ignore — falls back to detecting again next launch, harmless.
       }
     }
-    setHydrated(true);
   }, []);
 
   const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next);
+    whenLoaded(next, setLocaleState);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
@@ -89,11 +99,6 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     () => ({ locale, setLocale, t }),
     [locale, setLocale, t]
   );
-
-  // Avoid flashing untranslated/default-locale content before hydration
-  // resolves the real locale on first paint; children still render (SSR/
-  // export needs static output), just briefly in DEFAULT_LOCALE.
-  void hydrated;
 
   return (
     <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

@@ -33,6 +33,18 @@ export function safeReturnPath(value: string | null | undefined): string | null 
   return new URL(value, PROBE_ORIGIN).origin === PROBE_ORIGIN ? value : null;
 }
 
+/** Deep link входа: только свои схемы и ровно auth/callback; иначе null (раньше хватало подстроки «auth/callback»). */
+export function ownAuthCallback(url: string): URLSearchParams | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null; // не адрес — не наш колбэк
+  }
+  const own = u.protocol === 'app.splitit.mobile:' || u.protocol === 'app.splitit.mobile.dev:';
+  return own && u.host === 'auth' && u.pathname === '/callback' ? u.searchParams : null;
+}
+
 /** Запомнить путь; небезопасный не запоминается. */
 export function rememberReturnPath(path: string | null | undefined, kv: KV | null = storage()): void {
   const safe = safeReturnPath(path);

@@ -33,13 +33,14 @@ function fakeClient({ tables = {}, rpc = async () => ({ data: null, error: null 
       const exec = () => {
         calls.push({ table, filters: q.filters, range: q.range });
         if (errors[table]) return { data: null, error: errors[table] };
-        let rows = (tables[table] ?? []).filter((r) => q.filters.every(([c, v]) => r[c] === v));
+        let rows = (tables[table] ?? []).filter((r) => q.filters.every(([c, v]) => (Array.isArray(v) ? v.includes(r[c]) : r[c] === v)));
         if (q.range) rows = rows.slice(q.range[0], q.range[1] + 1);
         return { data: q.single ? rows[0] ?? null : rows, error: null };
       };
       const b = {
         select: () => b,
         eq: (c, v) => (q.filters.push([c, v]), b),
+        in: (c, vs) => (q.filters.push([c, vs]), b),
         order: () => b,
         range: (from, to) => ((q.range = [from, to]), b),
         maybeSingle: () => ((q.single = true), b),
@@ -243,6 +244,59 @@ describe('вызовы и ошибки', () => {
     const huge = Array.from({ length: 20_001 }, (_, i) => ({ id: i + 1, project_id: P, member_id: B, kind: 'credit', amount: 1 }));
     const over = await createProjectsStore(fakeClient({ tables: { ...tables, project_contribution_ledger: huge } })).fetchProject(P);
     assert.deepEqual(over, { data: null, error: 'Слишком много записей в проекте — не удалось загрузить все' });
+  });
+
+  test('fetchHome: данные каждого проекта — только его строки, операции — только открытого периода, тот же расчёт', async () => {
+    const d = mixedData();
+    const Q = 'proj-2';
+    const other = { ...d.project, id: Q, name: 'Второй' };
+    const withP = (rows, pid) => rows.map((r) => ({ ...r, project_id: pid }));
+    const tables = {
+      projects: [d.project, other],
+      project_members: [...d.members, ...withP(d.members, Q).map((m) => ({ ...m, id: `q-${m.id}` }))],
+      project_terms: [...d.terms, ...withP(d.terms, Q).map((x) => ({ ...x, id: `q-${x.id}` }))],
+      project_term_lines: withP(d.lines, P),
+      project_periods: [
+        ...d.periods,
+        { ...d.periods[0], id: 'q-per-1', project_id: Q, status: 'closed' },
+        { ...d.periods[0], id: 'q-per-2', project_id: Q, seq: 2, terms_id: 'q-t1' },
+      ],
+      project_operations: [
+        { ...op('o1', 'income', A, 5000), project_id: P },
+        { ...op('o2', 'income', A, 7000, 'q-per-1'), project_id: Q },
+        { ...op('o3', 'expense', A, 100, 'q-per-2'), project_id: Q },
+      ],
+    };
+    const client = fakeClient({ tables });
+    const res = await createProjectsStore(client).fetchHome();
+    assert.equal(res.error, null);
+    assert.deepEqual(res.data.map((x) => x.data.project.id), [P, Q]);
+    assert.ok(res.data[1].data.members.every((m) => m.project_id === Q));
+    assert.deepEqual(res.data[0].openOps.map((o) => o.id), ['o1']);
+    assert.deepEqual(res.data[1].openOps.map((o) => o.id), ['o3'], 'операции закрытого периода в сводку не попадают');
+    const opsCalls = client.calls.filter((c) => c.table === 'project_operations');
+    assert.equal(opsCalls.length, 1, 'операции всех проектов — одним запросом');
+    assert.deepEqual(opsCalls[0].filters, [['period_id', ['per-1', 'q-per-2']]]);
+    assert.ok(!client.calls.some((c) => c.table === 'project_transfers'), 'журнал отметок главной не нужен');
+    // Та же цифра, что даёт экран проекта (fetchProject + fetchPeriodOperations).
+    const store = createProjectsStore(fakeClient({ tables }));
+    const full = await store.fetchProject(P);
+    const fullOps = await store.fetchPeriodOperations(P, 'per-1');
+    assert.deepEqual(
+      calculatePeriod(buildPeriodInput(res.data[0].data, 'per-1', res.data[0].openOps)),
+      calculatePeriod(buildPeriodInput(full.data, 'per-1', fullOps.data)),
+    );
+  });
+
+  test('fetchProject: два одновременных вызова — один набор запросов', async () => {
+    const d = mixedData();
+    const client = fakeClient({ tables: { projects: [d.project], project_members: d.members } });
+    const store = createProjectsStore(client);
+    const [a, b] = await Promise.all([store.fetchProject(P), store.fetchProject(P)]);
+    assert.equal(a, b);
+    assert.equal(client.calls.filter((c) => c.table === 'projects').length, 1);
+    await store.fetchProject(P);
+    assert.equal(client.calls.filter((c) => c.table === 'projects').length, 2, 'после ответа — снова свежее чтение');
   });
 
   test('fetchPeriodOperations догружает все страницы и фильтрует по периоду', async () => {

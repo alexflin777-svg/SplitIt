@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { cx } from './ui';
+import { Art, cx } from './ui';
 
 export default function KindPicker({ value }: { value: 'event' | 'project' }) {
   const { t } = useI18n();
   const tiles = [
-    { kind: 'event' as const, href: routes.eventNew(), title: t('create.event'), sub: t('create.eventSub'), img: '/v1/trip.png', on: 'bg-v1-trip' },
-    { kind: 'project' as const, href: routes.projectNew(), title: t('create.project'), sub: t('create.projectSub'), img: '/v1/receipts.png', on: 'bg-v1-lav' },
+    { kind: 'event' as const, href: routes.eventNew(), title: t('create.event'), sub: t('create.eventSub'), img: 'trip' as const, on: 'bg-v1-trip' },
+    { kind: 'project' as const, href: routes.projectNew(), title: t('create.project'), sub: t('create.projectSub'), img: 'receipts' as const, on: 'bg-v1-lav' },
   ];
   return (
     <div className="font-v1 text-v1-ink">
@@ -34,7 +34,7 @@ export default function KindPicker({ value }: { value: 'event' | 'project' }) {
             >
               <b className="text-[21px] leading-[1.1] font-extrabold tracking-[-0.015em]">{x.title}</b>
               <span className="mt-1 text-[15px] text-v1-ink2 relative z-[1]">{x.sub}</span>
-              <img src={x.img} alt="" className={cx('absolute w-[76px] -right-1 -bottom-3.5 pointer-events-none', !on && 'opacity-55')} />
+              <Art name={x.img} eager className={cx('absolute w-[76px] -right-1 -bottom-3.5 pointer-events-none', !on && 'opacity-55')} />
               {on && (
                 <span className="absolute top-3 right-3 w-7 h-7 rounded-full bg-v1-accent text-white grid place-items-center">
                   <Check className="w-[18px] h-[18px]" aria-hidden="true" />

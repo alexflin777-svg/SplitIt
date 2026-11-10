@@ -22,7 +22,7 @@
 
 import { UPDATE_MANIFEST_URL } from './env';
 
-export const BASE_APP_VERSION = '1.1.0';
+export const BASE_APP_VERSION = '1.1.1';
 
 export function getCurrentInstalledVersion(): string {
   return BASE_APP_VERSION;

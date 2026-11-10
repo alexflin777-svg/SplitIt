@@ -10,7 +10,8 @@ import {
   type GroupRealtimeChange,
   type RemoteResult,
 } from './store';
-import { getFriendsSnapshot, getSavedFriends, getServerFriendsSnapshot, subscribeToFriends } from './supabase';
+import { getFriendsSnapshot, getLocalSession, getSavedFriends, getServerFriendsSnapshot, subscribeToFriends, supabase } from './supabase';
+import { readSnap, writeSnap } from './snapshot';
 
 /**
  * Локальный список друзей без setState в эффекте (P1-6): на сервере и при
@@ -152,8 +153,24 @@ function hasUnknownParty(group: Group, expense: Group['expenses'][number]): bool
   return !known.has(expense.paidById) || expense.splits.some((s) => !known.has(s.userId));
 }
 
+/** Снимки событий — только в сетевом режиме: локальные данные и так читаются мгновенно. */
+const snapUid = () => (supabase ? getLocalSession()?.id ?? null : null);
+
+/** Снимок для первого кадра и запись свежего ответа; ошибка в снимок не попадает. */
+function snapOptions<T>(name: string | null) {
+  if (!name) return {};
+  const uid = snapUid();
+  const snap = readSnap<T>(uid, name);
+  return {
+    ...(snap ? { fallbackData: { data: snap, error: null } as RemoteResult<T> } : {}),
+    onSuccess: (r: RemoteResult<T>) => {
+      if (r.data) writeSnap(uid, name, r.data);
+    },
+  };
+}
+
 export function useGroups() {
-  const swr = useSWR(GROUPS_CACHE_KEY, listGroups, { revalidateOnFocus: true });
+  const swr = useSWR(GROUPS_CACHE_KEY, listGroups, { revalidateOnFocus: true, ...snapOptions<Group[]>('groups') });
 
   return {
     groups: swr.data?.data ?? [],
@@ -163,9 +180,13 @@ export function useGroups() {
   };
 }
 
-export function useGroup(groupId: string) {
+/** snapshot: true — только экран просмотра события; расчёты и отметки переводов — без снимка. */
+export function useGroup(groupId: string, opts: { snapshot?: boolean } = {}) {
   const key = groupId ? groupCacheKey(groupId) : null;
-  const swr = useSWR(key, () => getGroup(groupId), { revalidateOnFocus: true });
+  const swr = useSWR(key, () => getGroup(groupId), {
+    revalidateOnFocus: true,
+    ...snapOptions<Group>(opts.snapshot && groupId ? `group:${groupId}` : null),
+  });
 
   useEffect(() => {
     if (!groupId) return;

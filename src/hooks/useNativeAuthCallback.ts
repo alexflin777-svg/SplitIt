@@ -4,7 +4,7 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { getActiveSession, supabase } from '@/lib/supabase';
-import { takeReturnPath } from '@/lib/auth-return';
+import { ownAuthCallback, takeReturnPath } from '@/lib/auth-return';
 
 /**
  * Ловит deep link `app.splitit.mobile://auth/callback?code=...`, которым
@@ -24,11 +24,10 @@ export function useNativeAuthCallback() {
     if (!isCapacitor || !supabase) return;
 
     const listenerPromise = App.addListener('appUrlOpen', async ({ url }) => {
-      if (!url.includes('auth/callback')) return;
+      const params = ownAuthCallback(url);
+      if (!params) return;
 
-      await Browser.close().catch(() => {});
-
-      const params = new URL(url).searchParams;
+      await Browser.close().catch((e) => console.warn('[SplitIT] системный браузер не закрылся', e));
 
       // Ветка Telegram: браузерная страница /auth/telegram-native вернула
       // одноразовый token_hash — обмениваем его на сессию прямо здесь.

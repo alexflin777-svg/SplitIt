@@ -1,5 +1,7 @@
 import { DEFAULT_LOCALE, Locale, SUPPORTED_LOCALES, detectDeviceLocale } from './config';
-import { ALL_MESSAGES } from './messages';
+import { LOADED, loadLocale } from './loaded';
+
+export { LOADED, loadLocale };
 
 const STORAGE_KEY = 'splitit_locale';
 
@@ -27,14 +29,16 @@ export function translateWith(
   key: string,
   vars?: Record<string, string | number>
 ): string {
-  const dict = ALL_MESSAGES[locale] ?? ALL_MESSAGES[DEFAULT_LOCALE];
+  const fallback = LOADED[DEFAULT_LOCALE]!;
+  // Словарь ещё грузится — текст на запасном языке, пока провайдер не переключит.
+  const dict = LOADED[locale] ?? fallback;
   // Множественное число: при числовом count берётся вариант `key#one|few|many`
   // по правилам языка, если он есть в словаре; иначе — базовый ключ. Без этого
   // экран писал «1 участников».
   const count = vars?.count;
   const plural =
     typeof count === 'number' ? dict[`${key}#${new Intl.PluralRules(locale).select(count)}`] : undefined;
-  let str = plural ?? dict[key] ?? ALL_MESSAGES[DEFAULT_LOCALE][key] ?? key;
+  let str = plural ?? dict[key] ?? fallback[key] ?? key;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
       str = str.replaceAll(`{${k}}`, String(v));
@@ -45,5 +49,7 @@ export function translateWith(
 
 /** Non-hook translator for modules outside the React tree. */
 export function t(key: string, vars?: Record<string, string | number>): string {
-  return translateWith(currentLocale(), key, vars);
+  const locale = currentLocale();
+  if (!LOADED[locale]) loadLocale(locale).catch((e) => console.warn('[SplitIT] словарь не загрузился', locale, e));
+  return translateWith(locale, key, vars);
 }

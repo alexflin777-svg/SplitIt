@@ -16,7 +16,7 @@ import { getActiveSession } from '@/lib/supabase';
 import { rememberReturnPath } from '@/lib/auth-return';
 import { routes } from '@/lib/routes';
 import { useI18n } from '@/lib/i18n/provider';
-import { Card, MainButton, Plaque, SecondButton, Skeleton, V1Screen } from '@/components/v1/ui';
+import { Art, Card, MainButton, Plaque, SecondButton, Skeleton, V1Screen } from '@/components/v1/ui';
 import { RouteShell } from '@/components/v1/project-bits';
 
 function Join() {
@@ -105,7 +105,7 @@ function Join() {
             </p>
             <h1 className="mt-3.5 max-w-[8.5em] text-[32px] leading-[1.05] font-extrabold tracking-[-0.02em] relative z-[1]">«{preview.projectName}»</h1>
             <p className="mt-2.5 max-w-[12em] text-[15px] text-v1-ink2 relative z-[1]">{t('join.meta', { count: preview.memberCount })}</p>
-            <img src="/v1/receipts.png" alt="" className="absolute w-[120px] right-1 -bottom-6 rotate-[8deg] pointer-events-none" />
+            <Art name="receipts" className="absolute w-[120px] right-1 -bottom-6 rotate-[8deg] pointer-events-none" />
           </div>
           <Card className="mt-2 flex items-start gap-3 text-[15px] leading-snug">
             <CheckCircle2 className="w-5 h-5 flex-none" aria-hidden="true" />
