@@ -208,9 +208,10 @@ test('«Изменить условия» после отказа открыва
 
 /** Прокрутка до конца: последний элемент ленты целиком выше закреплённой зоны; у зоны и навигации непрозрачный фон. */
 async function expectLastAboveDock(page: Page, dockId: string) {
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await page.waitForTimeout(200);
-  const r = await page.evaluate((id) => {
+  const measure = () => page.evaluate((id) => {
+    // Прокрутка в каждом замере: распорка V1Screen догоняет высоту зоны через ResizeObserver (кадр после показа),
+    // и страница дорастает уже после первой прокрутки (perf/REPORT.md, круг 4).
+    window.scrollTo(0, document.documentElement.scrollHeight);
     const dock = document.querySelector(`[data-testid="${id}"]`)!;
     // У V1Screen перед зоной — распорка (aria-hidden), у главной — нет.
     let last = dock.previousElementSibling!;
@@ -225,6 +226,10 @@ async function expectLastAboveDock(page: Page, dockId: string) {
       opaque: opaque(dock) && opaque(nav),
     };
   }, dockId);
+  // Ждём условие, а не время: если отступ неверен в устойчивом состоянии, poll упадёт по таймауту.
+  // Значение — на сколько px последний элемент заходит под зону или навигацию.
+  await expect.poll(async () => { const m = await measure(); return m.lastBottom - Math.min(m.dockTop, m.navTop); }).toBeLessThanOrEqual(0);
+  const r = await measure();
   expect(r.lastBottom).toBeLessThanOrEqual(r.dockTop);
   expect(r.lastBottom).toBeLessThanOrEqual(r.navTop);
   // Главная кнопка целиком над навигацией, не подрезана её фоном.
@@ -265,11 +270,10 @@ test('нижняя зона: последняя карточка целиком 
   // Закрытое событие: кнопки внизу нет, но навигация есть — последний блок всё равно над ней.
   await page.getByTestId('settle-lock').click();
   await expect(page.getByTestId('v1-nav-spacer')).toBeAttached();
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await page.waitForTimeout(200);
-  const closed = await page.evaluate(() => ({
-    lastBottom: document.querySelector('[data-testid="v1-nav-spacer"]')!.previousElementSibling!.getBoundingClientRect().bottom,
-    navTop: document.querySelector('[data-testid="bottom-nav"]')!.getBoundingClientRect().top,
-  }));
-  expect(closed.lastBottom).toBeLessThanOrEqual(closed.navTop);
+  // Закрытое событие рисуется до router.replace, а тот прокручивает вверх: прокрутка и замер — в каждом шаге poll.
+  await expect.poll(() => page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    return document.querySelector('[data-testid="v1-nav-spacer"]')!.previousElementSibling!.getBoundingClientRect().bottom
+      - document.querySelector('[data-testid="bottom-nav"]')!.getBoundingClientRect().top;
+  })).toBeLessThanOrEqual(0);
 });
