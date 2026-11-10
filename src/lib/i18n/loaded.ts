@@ -32,6 +32,27 @@ const LOADERS: Partial<Record<Locale, () => Promise<Record<string, string>>>> = 
 
 const pending: Partial<Record<Locale, Promise<void>>> = {};
 
+/**
+ * Переключатель языка: готовый словарь включается сразу, ленивый — после
+ * загрузки (до неё виден прежний язык). При гонке побеждает последний выбор:
+ * поздний ответ более раннего запроса не включается. Сбой загрузки — язык
+ * включается с запасным текстом, а не молча остаётся прежним.
+ */
+export function localeSwitcher(apply: (l: Locale) => void, load = loadLocale) {
+  let latest = 0;
+  return (locale: Locale) => {
+    const id = ++latest;
+    if (LOADED[locale]) return apply(locale);
+    load(locale).then(
+      () => id === latest && apply(locale),
+      (e) => {
+        console.warn('[SplitIT] словарь не загрузился', locale, e);
+        if (id === latest) apply(locale);
+      },
+    );
+  };
+}
+
 /** Догружает словарь языка; повторные вызовы ждут ту же загрузку. */
 export function loadLocale(locale: Locale): Promise<void> {
   if (LOADED[locale]) return Promise.resolve();
